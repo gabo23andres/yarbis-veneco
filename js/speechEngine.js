@@ -124,7 +124,15 @@ class YARBISSpeechEngine {
 
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         if (this.onPermissionError) {
-          this.onPermissionError('El micrófono está bloqueado. Permite el acceso al micrófono en los ajustes del navegador.');
+          this.onPermissionError('El micrófono está bloqueado. Toca el icono del candado 🔒 en la barra superior de tu navegador y selecciona "Permitir micrófono".');
+        }
+      } else if (event.error === 'no-speech') {
+        if (this.onPermissionError) {
+          this.onPermissionError('No detecté sonido de voz. Toca el micrófono de nuevo e intenta hablar fuerte y claro.');
+        }
+      } else if (event.error === 'network') {
+        if (this.onPermissionError) {
+          this.onPermissionError('Error de red al conectar con el servicio de reconocimiento de voz. Verifica tu conexión.');
         }
       }
 
@@ -156,20 +164,38 @@ class YARBISSpeechEngine {
     this.loadVoices();
   }
 
-  async startListening() {
+  startListening() {
     if (this.isSpeaking) {
       this.stopSpeaking();
     }
 
-    // Explicit mobile user permission warm-up
-    const ok = await this.requestMicrophonePermission();
-    if (!ok && !window.SpeechRecognition && !window.webkitSpeechRecognition) return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      if (this.onPermissionError) {
+        this.onPermissionError('El navegador de tu celular no soporta la API de micrófono directo. Te recomendamos abrir esta página en Google Chrome o Safari.');
+      }
+      return;
+    }
+
+    if (!this.recognition) {
+      this.initRecognition();
+    }
 
     if (this.recognition && !this.isListening) {
       try {
+        this.isListening = true;
+        this.requestWakeLock();
+        if (this.onStateChange) this.onStateChange('LISTENING');
+        if (window.audioSynth) window.audioSynth.playMicChime();
+
         this.recognition.start();
       } catch (e) {
         console.warn('Recognition start exception:', e);
+        // If already started exception occurs, stop and retry
+        try {
+          this.recognition.stop();
+          setTimeout(() => this.recognition.start(), 100);
+        } catch (err) {}
       }
     }
   }
@@ -186,11 +212,11 @@ class YARBISSpeechEngine {
     this.releaseWakeLock();
   }
 
-  async toggleListening() {
+  toggleListening() {
     if (this.isListening) {
       this.stopListening();
     } else {
-      await this.startListening();
+      this.startListening();
     }
   }
 
