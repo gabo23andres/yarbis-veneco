@@ -1,6 +1,6 @@
 /* ==========================================================================
-   YARBIS - SPEECH ENGINE (STT & TTS)
-   Speech Recognition (Escuchar) & Speech Synthesis (Hablar)
+   YARBIS - SPEECH ENGINE (STT & TTS) 3.5 - MOBILE OPTIMIZED
+   Mobile Mic Permission Warm-up, WakeLock & Cross-Browser Recognition
    ========================================================================== */
 
 class YARBISSpeechEngine {
@@ -13,15 +13,60 @@ class YARBISSpeechEngine {
     this.isListening = false;
     this.isSpeaking = false;
     this.continuousMode = false;
+    this.hasMicPermission = false;
+    this.wakeLock = null;
 
     // Event Callbacks
     this.onSpeechResult = null; // (text) => {}
     this.onInterimResult = null; // (interimText) => {}
     this.onStateChange = null; // (state) => {} 'STANDBY', 'LISTENING', 'PROCESSING', 'SPEAKING'
     this.onAudioLevel = null; // (level 0-1) => {}
+    this.onPermissionError = null; // (msg) => {}
 
     this.initRecognition();
     this.initSynthesis();
+  }
+
+  /* ==========================================
+     MOBILE PERMISSIONS & WAKELOCK
+     ========================================== */
+  async requestMicrophonePermission() {
+    if (this.hasMicPermission) return true;
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Stop dummy tracks once permission is granted
+        stream.getTracks().forEach(track => track.stop());
+        this.hasMicPermission = true;
+        return true;
+      } catch (e) {
+        console.warn('Microphone permission denied on mobile:', e);
+        if (this.onPermissionError) {
+          this.onPermissionError('Por favor permite el acceso al micrófono en tu celular para hablar con YARBIS Veneco.');
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try {
+        this.wakeLock = await navigator.wakeLock.request('screen');
+      } catch (err) {
+        console.warn('Wake Lock request error:', err);
+      }
+    }
+  }
+
+  releaseWakeLock() {
+    if (this.wakeLock) {
+      try {
+        this.wakeLock.release();
+      } catch (e) {}
+      this.wakeLock = null;
+    }
   }
 
   /* ==========================================
@@ -31,17 +76,19 @@ class YARBISSpeechEngine {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      console.warn('SpeechRecognition API not supported in this browser.');
+      console.warn('SpeechRecognition API no soportada en este navegador.');
       return;
     }
 
     this.recognition = new SpeechRecognition();
     this.recognition.continuous = false;
     this.recognition.interimResults = true;
+    this.recognition.maxAlternatives = 1;
     this.recognition.lang = this.language;
 
     this.recognition.onstart = () => {
       this.isListening = true;
+      this.requestWakeLock();
       if (this.onStateChange) this.onStateChange('LISTENING');
       if (window.audioSynth) window.audioSynth.playMicChime();
     };
@@ -61,7 +108,7 @@ class YARBISSpeechEngine {
 
       if (interim && this.onInterimResult) {
         this.onInterimResult(interim);
-        if (this.onAudioLevel) this.onAudioLevel(0.4 + Math.random() * 0.4);
+        if (this.onAudioLevel) this.onAudioLevel(0.4 + Math.random() * 0.5);
       }
 
       if (final) {
@@ -71,19 +118,32 @@ class YARBISSpeechEngine {
     };
 
     this.recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
+      console.warn('Speech recognition error:', event.error);
       this.isListening = false;
-      if (this.onStateChange) this.onStateChange('STANDBY');
+      this.releaseWakeLock();
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        if (this.onPermissionError) {
+          this.onPermissionError('El micrófono está bloqueado. Permite el acceso al micrófono en los ajustes del navegador.');
+        }
+      }
+
+      if (this.onStateChange && !this.isSpeaking) {
+        this.onStateChange('STANDBY');
+      }
     };
 
     this.recognition.onend = () => {
       this.isListening = false;
+      this.releaseWakeLock();
+
       if (!this.isSpeaking && this.onStateChange) {
         this.onStateChange('STANDBY');
       }
-      // Re-trigger if in continuous listening mode
+
+      // Continuous mode auto-restart for mobile
       if (this.continuousMode && !this.isSpeaking) {
-        setTimeout(() => this.startListening(), 300);
+        setTimeout(() => this.startListening(), 400);
       }
     };
   }
@@ -96,10 +156,15 @@ class YARBISSpeechEngine {
     this.loadVoices();
   }
 
-  startListening() {
+  async startListening() {
     if (this.isSpeaking) {
       this.stopSpeaking();
     }
+
+    // Explicit mobile user permission warm-up
+    const ok = await this.requestMicrophonePermission();
+    if (!ok && !window.SpeechRecognition && !window.webkitSpeechRecognition) return;
+
     if (this.recognition && !this.isListening) {
       try {
         this.recognition.start();
@@ -118,13 +183,14 @@ class YARBISSpeechEngine {
       }
     }
     this.isListening = false;
+    this.releaseWakeLock();
   }
 
-  toggleListening() {
+  async toggleListening() {
     if (this.isListening) {
       this.stopListening();
     } else {
-      this.startListening();
+      await this.startListening();
     }
   }
 
@@ -143,20 +209,21 @@ class YARBISSpeechEngine {
   loadVoices() {
     if (!this.synthesis) return;
     const voices = this.synthesis.getVoices();
+    if (!voices || voices.length === 0) return;
 
-    // Find best Spanish / J.A.R.V.I.S voice
     const langPrefix = this.language.substring(0, 2);
-    
-    // Priority: Spanish Male/Futuristic sounding voices -> Spanish general -> Default
-    const preferredVoice = voices.find(v => 
+
+    // Priority: Male / Natural sounding Spanish voices -> Any Spanish voice -> Default
+    const preferredVoice = voices.find(v =>
       v.lang.startsWith(langPrefix) && (
-        v.name.includes('Jorge') || 
-        v.name.includes('Pablo') || 
+        v.name.includes('Jorge') ||
+        v.name.includes('Pablo') ||
         v.name.includes('Diego') ||
         v.name.includes('Google español') ||
-        v.name.includes('Spanish')
+        v.name.includes('Spanish') ||
+        v.name.includes('Español')
       )
-    ) || voices.find(v => v.lang.startsWith(langPrefix)) || voices[0];
+    ) || voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) || voices[0];
 
     this.selectedVoice = preferredVoice;
   }
@@ -167,7 +234,7 @@ class YARBISSpeechEngine {
     // Cancel current speech if any
     this.synthesis.cancel();
 
-    // If microphone is currently listening, pause it
+    // If mic is currently listening, pause it
     if (this.isListening) {
       this.stopListening();
     }
@@ -178,18 +245,18 @@ class YARBISSpeechEngine {
     }
     utterance.lang = this.language;
 
-    // Pitch & Speed tuned for J.A.R.V.I.S. futuristic tone
-    utterance.pitch = 0.95;
-    utterance.rate = 1.05;
+    // Pitch & Speed tuned for futuristic tone
+    utterance.pitch = 0.98;
+    utterance.rate = 1.04;
 
     let audioPulseInterval = null;
 
     utterance.onstart = () => {
       this.isSpeaking = true;
+      this.requestWakeLock();
       if (this.onStateChange) this.onStateChange('SPEAKING');
       if (window.audioSynth) window.audioSynth.playVoiceBeep();
 
-      // Simulate voice audio waveform output
       audioPulseInterval = setInterval(() => {
         if (this.onAudioLevel) {
           this.onAudioLevel(0.3 + Math.random() * 0.6);
@@ -199,20 +266,21 @@ class YARBISSpeechEngine {
 
     utterance.onend = () => {
       this.isSpeaking = false;
+      this.releaseWakeLock();
       if (audioPulseInterval) clearInterval(audioPulseInterval);
       if (this.onAudioLevel) this.onAudioLevel(0);
 
       if (this.onStateChange) this.onStateChange('STANDBY');
 
-      // Resume continuous mode if active
       if (this.continuousMode) {
         setTimeout(() => this.startListening(), 500);
       }
     };
 
     utterance.onerror = (err) => {
-      console.error('TTS error:', err);
+      console.warn('TTS error:', err);
       this.isSpeaking = false;
+      this.releaseWakeLock();
       if (audioPulseInterval) clearInterval(audioPulseInterval);
       if (this.onAudioLevel) this.onAudioLevel(0);
       if (this.onStateChange) this.onStateChange('STANDBY');
@@ -226,6 +294,7 @@ class YARBISSpeechEngine {
       this.synthesis.cancel();
     }
     this.isSpeaking = false;
+    this.releaseWakeLock();
     if (this.onAudioLevel) this.onAudioLevel(0);
     if (this.onStateChange) this.onStateChange('STANDBY');
   }

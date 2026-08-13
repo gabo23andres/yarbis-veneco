@@ -103,6 +103,10 @@ document.addEventListener('DOMContentLoaded', () => {
     arcReactor.setAudioLevel(level);
   };
 
+  speechEngine.onPermissionError = (msg) => {
+    appendMessage(brain.assistantName, `⚠️ ${msg}`);
+  };
+
   // State Change Sync
   speechEngine.onStateChange = (state) => {
     arcReactor.setState(state);
