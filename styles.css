@@ -1068,67 +1068,102 @@ footer.hud-footer {
   cursor: pointer;
 }
 
-/* Mobile Navigation Tabs (Hidden on Desktop) */
+/* Floating Mobile Dock Navigation Bar */
 .mobile-nav-tabs {
   display: none;
-  background: var(--hud-glass);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--hud-glass-border);
-  border-radius: 10px;
-  padding: 4px;
-  gap: 4px;
-}
-
-.mobile-tab-btn {
-  flex: 1;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 8px 0;
-  color: var(--color-text-dim);
-  font-family: var(--font-hud);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.mobile-tab-btn.active {
-  background: rgba(var(--color-primary-rgb), 0.2);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  box-shadow: 0 0 10px var(--hud-glow);
 }
 
 /* Responsive Mobile Adjustments */
 @media (max-width: 1100px) {
   main.hud-main {
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 340px 1fr;
   }
 }
 
 @media (max-width: 850px) {
-  .mobile-nav-tabs {
-    display: flex;
+  html, body {
+    overscroll-behavior-y: none;
+    touch-action: manipulation;
   }
 
   #app-container {
-    grid-template-rows: auto 45px 1fr auto;
-    padding: 6px;
-    gap: 6px;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 8px 75px 8px;
     height: 100vh;
+    height: 100dvh;
+    gap: 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  /* Floating Bottom Dock */
+  .mobile-nav-tabs {
+    display: flex;
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 24px);
+    max-width: 440px;
+    z-index: 99;
+    background: rgba(8, 14, 26, 0.94);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--hud-glass-border);
+    border-radius: 30px;
+    padding: 6px 10px;
+    gap: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85), 0 0 20px var(--hud-glow);
+  }
+
+  .mobile-tab-btn {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 20px;
+    padding: 8px 0;
+    color: var(--color-text-dim);
+    font-family: var(--font-hud);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: all 0.25s ease;
+  }
+
+  .mobile-tab-btn.active {
+    background: radial-gradient(circle, rgba(var(--color-primary-rgb), 0.3) 0%, rgba(0, 0, 0, 0.6) 100%);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    box-shadow: 0 0 15px var(--hud-glow);
+    transform: translateY(-1px);
   }
 
   header.hud-header {
     padding: 8px 12px;
+    border-radius: 12px;
+    flex-shrink: 0;
+  }
+
+  .brand-title {
+    gap: 8px;
+  }
+
+  .brand-logo {
+    width: 26px;
+    height: 26px;
   }
 
   .brand-name {
-    font-size: 1.05rem;
+    font-size: 0.95rem;
+    letter-spacing: 2px;
   }
 
   .brand-sub {
-    font-size: 0.55rem;
+    display: none;
   }
 
   .hud-status-bar {
@@ -1136,61 +1171,158 @@ footer.hud-footer {
   }
 
   .status-badge {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     padding: 3px 8px;
   }
 
   .hud-clock {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
 
   main.hud-main {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     height: 100%;
     min-height: 0;
+    position: relative;
+    overflow: hidden;
   }
 
-  /* Mobile Panel Switcher */
+  /* Mobile Panel Views */
   main.hud-main > section {
     display: none !important;
+    flex: 1;
+    width: 100%;
     height: 100%;
+    min-height: 0;
     overflow-y: auto;
+    border-radius: 14px;
+    box-sizing: border-box;
   }
 
   main.hud-main > section.active-mobile-panel {
     display: flex !important;
+    animation: mobileSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes mobileSlideUp {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Voice Stage Mobile Layout */
+  .voice-stage {
+    padding: 16px 12px;
+    justify-content: space-evenly;
   }
 
   .arc-reactor-wrapper {
-    width: 180px;
-    height: 180px;
+    width: 210px;
+    height: 210px;
   }
 
   canvas#arcReactorCanvas {
-    width: 180px;
-    height: 180px;
+    width: 210px;
+    height: 210px;
+  }
+
+  .voice-state-display .state-label {
+    font-size: 0.6rem;
+    letter-spacing: 2.5px;
   }
 
   .voice-state-display .state-value {
-    font-size: 1.1rem;
+    font-size: 1.15rem;
+    letter-spacing: 2px;
+  }
+
+  .mic-controls {
+    gap: 16px;
+    margin: 8px 0;
   }
 
   .btn-mic-main {
-    width: 65px;
-    height: 65px;
-    font-size: 1.7rem;
+    width: 72px;
+    height: 72px;
+    font-size: 1.8rem;
+    box-shadow: 0 0 30px var(--hud-glow), inset 0 0 20px rgba(var(--color-primary-rgb), 0.4);
   }
 
-  footer.hud-footer {
-    flex-direction: column;
+  .btn-icon-secondary {
+    width: 44px;
+    height: 44px;
+    font-size: 1.1rem;
+  }
+
+  .app-launcher-grid {
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    padding: 6px 4px;
+    scrollbar-width: none;
+  }
+
+  .app-launcher-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-pill {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    border-radius: 16px;
+  }
+
+  /* Terminal Chat Mobile Layout */
+  .terminal-panel {
+    height: 100%;
+  }
+
+  .transcript-scroll {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .chat-msg {
+    max-width: 88%;
+  }
+
+  .msg-body {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    border-radius: 14px;
+  }
+
+  .input-bar {
+    padding: 8px 10px;
     gap: 6px;
-    padding: 8px;
-    text-align: center;
   }
 
-  .protocol-buttons {
-    flex-wrap: wrap;
-    justify-content: center;
+  .input-bar input {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    border-radius: 20px;
+  }
+
+  .input-bar button {
+    border-radius: 20px;
+    padding: 0 16px;
+    font-size: 0.8rem;
+  }
+
+  /* Hide Footer on Mobile to maximize screen space */
+  footer.hud-footer {
+    display: none !important;
+  }
+
+  /* Settings Modal Mobile Adjustments */
+  .modal-box {
+    width: 94%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 18px;
+    border-radius: 18px;
   }
 }
