@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Mi Asistente Personal AI</title>
+  <meta name="description" content="Asistente de inteligencia artificial por voz personal con bloc de notas, accesos rápidos a aplicaciones y respuestas inteligentes en tiempo real." />
+  
+  <!-- Mobile & PWA Support -->
+  <meta name="theme-color" content="#04070d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="YARBIS AI" />
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+  <!-- Core CSS -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Particle Mesh Background Canvas -->
+  <canvas id="bgParticlesCanvas"></canvas>
+
+  <div id="app-container">
+
+    <!-- MOBILE TABS BAR (Solamente visible en dispositivos móviles) -->
+    <nav class="mobile-nav-tabs" id="mobileNavTabs">
+      <button class="mobile-tab-btn active" data-tab="voice">🎙️ Voz</button>
+      <button class="mobile-tab-btn" data-tab="notes">📝 Notas</button>
+      <button class="mobile-tab-btn" data-tab="chat">💬 Chat</button>
+    </nav>
+    
+    <!-- HEADER BAR -->
+    <header class="hud-header">
+      <div class="brand-title">
+        <div class="brand-logo"></div>
+        <div class="brand-text">
+          <span class="brand-name" id="displayAssistantName">YARBIS VENECO</span>
+          <span class="brand-sub" id="displayUserGreeting">Tu Asistente Personal de Voz</span>
+        </div>
+      </div>
+
+      <div class="hud-status-bar">
+        <div class="status-badge" id="aiStatusBadge" title="Estado de conexión con la Inteligencia Artificial">
+          <div class="status-dot" id="aiStatusDot"></div>
+          <span id="aiStatusText">IA EN VIVO</span>
+        </div>
+        <div class="status-badge" id="statusBadge">
+          <div class="status-dot"></div>
+          <span id="statusText">SISTEMA ACTIVO</span>
+        </div>
+        <div class="hud-clock" id="hudClock">12:00:00</div>
+      </div>
+    </header>
+
+    <!-- MAIN APP CONTENT -->
+    <main class="hud-main">
+      
+      <!-- LEFT PANEL: VOICE ORB & QUICK APP LAUNCHER -->
+      <section class="voice-stage">
+        
+        <!-- Animated AI Voice Orb Canvas -->
+        <div class="arc-reactor-wrapper" title="Haz clic en el orbe para interactuar">
+          <canvas id="arcReactorCanvas"></canvas>
+        </div>
+
+        <!-- Voice State Display -->
+        <div class="voice-state-display">
+          <div class="state-label">ESTADO DE VOZ</div>
+          <div class="state-value" id="stateValue">EN ESPERA</div>
+        </div>
+
+        <!-- Audio Waveform Visualizer Canvas -->
+        <div class="waveform-box">
+          <canvas id="waveformCanvas"></canvas>
+        </div>
+
+        <!-- Mic & Main Controls -->
+        <div class="mic-controls">
+          <button class="btn-icon-secondary" id="btnMute" title="Silenciar audio de respuesta">🔊</button>
+          <button class="btn-mic-main" id="btnMic" title="Pulsar para hablar (Alt + M)">
+            🎙️
+          </button>
+          <button class="btn-icon-secondary" id="btnSettings" title="Configuración Personal">⚙️</button>
+        </div>
+
+        <!-- Quick Web App Launcher -->
+        <div class="app-launcher-grid">
+          <button class="app-pill" data-launch="whatsapp" title="Abrir WhatsApp Web">💬 WhatsApp</button>
+          <button class="app-pill" data-launch="youtube" title="Abrir YouTube">▶️ YouTube</button>
+          <button class="app-pill" data-launch="spotify" title="Abrir Spotify">🎵 Spotify</button>
+          <button class="app-pill" data-launch="gmail" title="Abrir Gmail">✉️ Gmail</button>
+          <button class="app-pill" data-launch="maps" title="Abrir Google Maps">📍 Maps</button>
+          <button class="app-pill" data-launch="chatgpt" title="Abrir ChatGPT">🤖 ChatGPT</button>
+          <button class="app-pill" data-launch="drive" title="Abrir Google Drive">📁 Drive</button>
+        </div>
+
+      </section>
+
+      <!-- MIDDLE PANEL: PERSONAL NOTES & REMINDERS WIDGET -->
+      <section class="telemetry-panel">
+        <!-- Active Timer Widget -->
+        <div class="timer-box" id="timerWidget" style="display: none;">
+          <div class="timer-header">
+            <span class="timer-title">⏱️ TEMPORIZADOR ACTIVO</span>
+            <button class="btn-cancel-timer" id="btnCancelTimer" title="Cancelar temporizador">✕</button>
+          </div>
+          <div class="timer-display" id="timerDisplay">00:00</div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="timerProgress" style="width: 100%;"></div>
+          </div>
+        </div>
+
+        <div class="panel-header">
+          <span class="panel-title">MIS NOTAS Y RECORDATORIOS</span>
+          <span class="hud-indicator" id="notesCount">0 NOTAS</span>
+        </div>
+
+        <!-- Create Note Input Bar -->
+        <div class="note-input-box">
+          <input type="text" id="inputNewNote" placeholder="Escribe una nota o recordatorio..." autocomplete="off" />
+          <button id="btnAddNote" title="Guardar nota">+</button>
+        </div>
+
+        <!-- Note Filters -->
+        <div class="note-filter-bar">
+          <button class="btn-filter-note active" data-filter="all">Todas</button>
+          <button class="btn-filter-note" data-filter="active">Pendientes</button>
+          <button class="btn-filter-note" data-filter="completed">Completadas</button>
+        </div>
+
+        <!-- Notes List Scroll Window -->
+        <div class="notes-scroll" id="notesScroll">
+          <!-- Notes are rendered dynamically -->
+        </div>
+      </section>
+
+      <!-- RIGHT PANEL: CHAT TRANSCRIPT & CONVERSATION -->
+      <section class="terminal-panel">
+        <div class="panel-header">
+          <span class="panel-title">REGISTRO DE CONVERSACIÓN</span>
+          <button class="btn-clear-chat" id="btnClearChat" title="Limpiar pantalla (Esc)">Limpiar</button>
+        </div>
+
+        <!-- Transcript Chat Window -->
+        <div class="transcript-scroll" id="transcriptScroll">
+          <!-- Chat messages are generated dynamically -->
+        </div>
+
+        <!-- Text Input Bar -->
+        <div class="input-bar">
+          <input type="text" id="textInput" placeholder="Escribe un mensaje o pregunta..." autocomplete="off" />
+          <button id="btnSend">ENVIAR</button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- FOOTER BAR -->
+    <footer class="hud-footer">
+      <div class="protocol-buttons">
+        <button class="btn-protocol" data-theme="default">🔵 Neón</button>
+        <button class="btn-protocol" data-theme="emerald">🟢 Esmeralda</button>
+        <button class="btn-protocol" data-theme="indigo">🟣 Índigo</button>
+        <button class="btn-protocol" data-theme="slate">⚪ Minimal Dark</button>
+      </div>
+
+      <div class="hud-copyright">
+        ASISTENTE PERSONAL AI v3.0 • CONTROL POR VOZ Y PRODUCTIVIDAD
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div class="modal-backdrop" id="modalSettings">
+    <div class="modal-box">
+      <h3 class="modal-title">CONFIGURACIÓN DEL ASISTENTE</h3>
+      
+      <div class="form-group">
+        <label for="inputAssistantName">Nombre de tu Asistente:</label>
+        <input type="text" id="inputAssistantName" placeholder="Ej: Aria, Jarvis, Asistente..." />
+      </div>
+
+      <div class="form-group">
+        <label for="inputUserName">Tu Nombre / Apodo:</label>
+        <input type="text" id="inputUserName" placeholder="Ej: Usuario, Alex, Carlos..." />
+      </div>
+
+      <div class="form-group">
+        <label for="selectLanguage">Idioma de Voz:</label>
+        <select id="selectLanguage">
+          <option value="es-ES" selected>Español (España / Latino)</option>
+          <option value="en-US">English (US)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="inputGeminiKey">Clave API de Google Gemini (Obtén la tuya gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--color-primary);">Google AI Studio</a>):</label>
+        <div style="display: flex; gap: 6px;">
+          <input type="password" id="inputGeminiKey" placeholder="Pega tu clave AI Studio (Ej: AIzaSy...)..." style="flex: 1;" />
+          <button type="button" id="btnTestKey" style="background: rgba(var(--color-primary-rgb), 0.2); border: 1px solid var(--color-primary); color: var(--color-primary); border-radius: 6px; padding: 0 12px; font-size: 0.72rem; cursor: pointer; font-family: var(--font-hud);">Probar API</button>
+        </div>
+        <span id="keyTestResult" style="font-size: 0.72rem; color: var(--color-text-dim); display: block; margin-top: 4px;">Si dejas el campo vacío, YARBIS utilizará el motor de Inteligencia Artificial Gratuito en vivo automáticamente.</span>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-modal-close" id="btnCloseSettings">Cancelar</button>
+        <button class="btn-modal-save" id="btnSaveSettings">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Scripts -->
+  <script src="js/audioEffects.js"></script>
+  <script src="js/arcReactor.js"></script>
+  <script src="js/speechEngine.js"></script>
+  <script src="js/yarbisBrain.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
+
