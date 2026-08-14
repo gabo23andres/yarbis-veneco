@@ -1,6 +1,6 @@
 /* ==========================================================================
-   YARBIS - CONVERSATIONAL BRAIN & INTENT PROCESSOR 5.0
-   Weather, Wikipedia, Crypto/Currency, Music, Torch & Contact Intelligence
+   YARBIS - ADVANCED CONVERSATIONAL BRAIN 7.0
+   Venezuelan Personality, Dólar BCV/VES, GPS Navigation, Battery, News & AI
    ========================================================================== */
 
 class YARBISBrain {
@@ -8,12 +8,7 @@ class YARBISBrain {
     this.geminiApiKey = localStorage.getItem('yarbis_gemini_api_key') || '';
     this.assistantName = localStorage.getItem('yarbis_assistant_name') || 'YARBIS Veneco';
     this.userName = localStorage.getItem('yarbis_user_name') || 'Señor';
-
-    // Clean up dummy sample contacts if present
-    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-    if (contacts['mamá'] === '04141234567' || contacts['pedro'] === '04121112233') {
-      localStorage.removeItem('yarbis_contacts');
-    }
+    this.approxUsdRate = 48.50; // Reference USD to Bolívares VES
   }
 
   setApiKey(key) {
@@ -30,6 +25,30 @@ class YARBISBrain {
     this.userName = (userName || 'Señor').trim();
     localStorage.setItem('yarbis_assistant_name', this.assistantName);
     localStorage.setItem('yarbis_user_name', this.userName);
+  }
+
+  /* ==========================================
+     VENEZUELAN PERSONALITY & SPEECH RESPONSES
+     ========================================== */
+  getVenezuelanGreeting() {
+    const greetings = [
+      `¡Épale, ${this.userName}! ¿Qué más pues? Sistemas de ${this.assistantName} 100% operativos.`,
+      `¡Háblame el mío! Aquí activo para lo que mandes, ${this.userName}.`,
+      `¡Buenas, ${this.userName}! Todo listo y sin novedad por acá. ¿Qué ejecutamos?`,
+      `¡Saludos mi pana! Listo para trabajar como un tiro, ${this.userName}.`
+    ];
+    return greetings[Math.floor(Math.random() * greetings.length)];
+  }
+
+  getVenezuelanAcknowledge() {
+    const acks = [
+      `¡Fino de pana!`,
+      `¡Tranquilo que eso va volando como tequeño en fiesta!`,
+      `¡De una, mi pana!`,
+      `¡A la orden, el mío!`,
+      `¡Listo el pollo!`
+    ];
+    return acks[Math.floor(Math.random() * acks.length)];
   }
 
   /* ==========================================
@@ -92,7 +111,7 @@ class YARBISBrain {
   }
 
   /* ==========================================
-     LIVE WEATHER, WIKIPEDIA & CRYPTO ENGINES
+     LIVE ENGINES: WEATHER, CRYPTO, DOLAR, WIKI
      ========================================== */
   getWeatherCodeDesc(code) {
     const map = {
@@ -217,12 +236,14 @@ class YARBISBrain {
     }
   }
 
-  /**
-   * Main Process Function
-   * Returns: { textResponse, action, themeChange, noteText, durationSeconds, url, deepLink, soundFx }
-   */
+  /* ==========================================
+     MAIN PROCESS COMMAND
+     ========================================== */
   async processCommand(userText) {
-    const text = userText.toLowerCase().trim();
+    let text = userText.toLowerCase().trim();
+
+    // Strip optional "Oye Yarbis" / "Hey Yarbis" prefix
+    text = text.replace(/^(?:oye|hey|ey|ok)\s+(?:yarbis|jarvis|asistente)\s*/i, '').trim();
 
     // 1. Direct Rule & Intent Matching
     const localMatch = await this.checkLocalIntents(text, userText);
@@ -258,9 +279,9 @@ class YARBISBrain {
       console.warn('Free AI query failed:', err);
     }
 
-    // 4. Fallback Smart Response
+    // 4. Fallback Smart Response with Venezuelan Flavor
     return {
-      textResponse: `He procesado su consulta: "${userText}". Todos los datos han sido archivados en el sistema central. ¿Desea ejecutar alguna otra orden o recordatorio, ${this.userName}?`,
+      textResponse: `Copiado mi pana. He procesado tu orden: "${userText}". Todo registrado en el sistema. ¿Qué más se te ofrece, ${this.userName}?`,
       action: 'NONE',
       themeChange: null
     };
@@ -273,22 +294,116 @@ class YARBISBrain {
     const clean = text.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '');
 
     // -------------------------------------------------------------
+    // INTENT: GREETINGS & VENEZUELAN JOKES / CHITCHAT
+    // -------------------------------------------------------------
+    if (clean === 'hola' || clean === 'epale' || clean === 'hablame' || clean === 'buenas' || clean.includes('como estas') || clean.includes('que tal') || clean.includes('que hubo')) {
+      return {
+        textResponse: this.getVenezuelanGreeting(),
+        action: 'NONE',
+        themeChange: null,
+        soundFx: 'scan'
+      };
+    }
+
+    if (clean.includes('cuentame un chiste') || clean.includes('un chiste') || clean.includes('echa un chiste') || clean.includes('dime un chiste')) {
+      const chistes = [
+        `¿Por qué los tequeños nunca van a la guerra? ¡Porque se les sale el queso en el primer tiro!`,
+        `Papá, ¿qué se siente tener un hijo tan inteligente y guapo? —No sé mijo, pregúntale a tu abuelo.`,
+        `¿Qué le dice una arepa a otra arepa? —¡Nos vemos en el budare, corazón!`,
+        `¿Cuál es el colmo de un electricista en Maracaibo? —Que su mujer se llame Luz y los hijos le salgan con corriente.`
+      ];
+      const chiste = chistes[Math.floor(Math.random() * chistes.length)];
+      return {
+        textResponse: `${chiste} 😂`,
+        action: 'NONE',
+        themeChange: null
+      };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: DÓLAR BCV / PARALELO & CONVERSIÓN DE DIVISAS
+    // -------------------------------------------------------------
+    if (clean.includes('dolar') || clean.includes('dólar') || clean.includes('tasa') || clean.includes('bolivares') || clean.includes('bolívares') || clean.includes('cambio')) {
+      const rate = this.approxUsdRate;
+      
+      // Check conversion calculation e.g. "Calcula 20 dolares a bolivares"
+      const convMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:dolares|dólares|usd|\$)\s*(?:a|en)?\s*(?:bolivares|bolívares|bs)?/i);
+      if (convMatch) {
+        const amount = parseFloat(convMatch[1]);
+        const totalBs = (amount * rate).toFixed(2);
+        return {
+          textResponse: `${amount} dólares equivalen a aproximadamente ${totalBs} Bolívares a tasa de referencia (${rate} Bs/USD), ${this.userName}.`,
+          action: 'MATH',
+          themeChange: null
+        };
+      }
+
+      const convBsMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:bolivares|bolívares|bs)\s*(?:a|en)?\s*(?:dolares|dólares|usd|\$)?/i);
+      if (convBsMatch) {
+        const amountBs = parseFloat(convBsMatch[1]);
+        const totalUsd = (amountBs / rate).toFixed(2);
+        return {
+          textResponse: `${amountBs} Bolívares equivalen a aproximadamente $${totalUsd} USD a tasa de referencia (${rate} Bs/USD), ${this.userName}.`,
+          action: 'MATH',
+          themeChange: null
+        };
+      }
+
+      return {
+        textResponse: `La tasa de referencia del dólar se ubica en aproximadamente ${rate} Bolívares por USD, ${this.userName}. Puedes pedirme: "Calcula [monto] dólares a bolívares".`,
+        action: 'NONE',
+        themeChange: null
+      };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: GPS NAVIGATION & ROUTES (GOOGLE MAPS & WAZE)
+    // -------------------------------------------------------------
+    if (clean.includes('como llegar') || clean.includes('ruta a') || clean.includes('ruta hacia') || clean.includes('llevame a') || clean.includes('llévame a') || clean.includes('navegar a') || clean.includes('direccion a')) {
+      const destMatch = text.match(/(?:como llegar a|ruta a|ruta hacia|llevame a|llévame a|navegar a|direccion a)\s+(.*)/i);
+      if (destMatch && destMatch[1]) {
+        const destination = destMatch[1].trim();
+        const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+        const wazeDeepLink = `waze://?q=${encodeURIComponent(destination)}&navigate=yes`;
+
+        return {
+          textResponse: `Calculando la mejor ruta hacia ${destination.toUpperCase()} en tu GPS, ${this.userName}.`,
+          action: 'OPEN_URL',
+          url: gmapsUrl,
+          deepLink: wazeDeepLink,
+          themeChange: null
+        };
+      }
+    }
+
+    // -------------------------------------------------------------
     // INTENT: FLASHLIGHT / TORCH CONTROL
     // -------------------------------------------------------------
     if (clean.includes('linterna') || clean.includes('luz del telefono') || clean.includes('luz de la camara')) {
       if (clean.includes('apagar') || clean.includes('desactivar') || clean.includes('apaga') || clean.includes('quita')) {
         return {
-          textResponse: `Apagando la linterna del dispositivo, ${this.userName}.`,
+          textResponse: `Apagando la linterna del teléfono de inmediato, ${this.userName}.`,
           action: 'TORCH_OFF',
           themeChange: null
         };
       } else {
         return {
-          textResponse: `Encendiendo la linterna del dispositivo, ${this.userName}.`,
+          textResponse: `Encendiendo la linterna de tu dispositivo, ${this.userName}.`,
           action: 'TORCH_ON',
           themeChange: null
         };
       }
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: BATTERY STATUS
+    // -------------------------------------------------------------
+    if (clean.includes('bateria') || clean.includes('batería') || clean.includes('cuanta carga') || clean.includes('nivel de carga')) {
+      return {
+        textResponse: `Consultando los sensores de energía de tu dispositivo...`,
+        action: 'CHECK_BATTERY',
+        themeChange: null
+      };
     }
 
     // -------------------------------------------------------------
@@ -313,7 +428,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: CRYPTO & DOLLAR PRICES
+    // INTENT: CRYPTO & BITCOIN
     // -------------------------------------------------------------
     if (clean.includes('bitcoin') || clean.includes('cripto') || clean.includes('ethereum') || clean.includes('solana') || clean.includes('btc') || clean.includes('eth')) {
       const cryptoMsg = await this.fetchCryptoPrice(clean);
@@ -352,7 +467,7 @@ class YARBISBrain {
         const spotifyDeepLink = `spotify:search:${encodeURIComponent(query)}`;
 
         return {
-          textResponse: `Reproduciendo "${query}" en Spotify, ${this.userName}.`,
+          textResponse: `Reproduciendo "${query}" en Spotify, ${this.userName}. ¡A gozar! 🎶`,
           action: 'OPEN_URL',
           url: spotifySearchUrl,
           deepLink: spotifyDeepLink,
@@ -362,7 +477,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 1: TIMERS & COUNTDOWNS
+    // INTENT: TIMERS & COUNTDOWNS
     // -------------------------------------------------------------
     if (clean.includes('temporizador') || clean.includes('cuenta regresiva') || clean.includes('alarma') || clean.includes('avísame en') || clean.includes('avisame en')) {
       if (clean.includes('cancelar') || clean.includes('detener') || clean.includes('quitar') || clean.includes('borrar')) {
@@ -388,7 +503,7 @@ class YARBISBrain {
         }
 
         return {
-          textResponse: `Temporizador iniciado por ${val} ${unitLabel}, ${this.userName}. Le notificaré cuando el tiempo expire.`,
+          textResponse: `Temporizador activo por ${val} ${unitLabel}, ${this.userName}. Te aviso en cuanto suene.`,
           action: 'SET_TIMER',
           durationSeconds: totalSeconds,
           themeChange: null,
@@ -398,7 +513,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: ADVANCED AUTOMATIC PHONE CALLS (POR NOMBRE O NÚMERO)
+    // INTENT: ADVANCED AUTOMATIC PHONE CALLS
     // -------------------------------------------------------------
     const saveContactMatch = text.match(/(?:guardar|agregar|nuevo)\s+(?:contacto\s+)?(.*?)\s+(?:numero|número|telefono|teléfono)?\s*(\+?[0-9\s]{3,15})/i);
     if (saveContactMatch) {
@@ -407,7 +522,7 @@ class YARBISBrain {
       if (cName && cPhone) {
         this.saveContact(cName, cPhone);
         return {
-          textResponse: `He guardado a "${cName}" en tu agenda telefónica con el número ${cPhone}, ${this.userName}.`,
+          textResponse: `Listo mi pana, guardé a "${cName}" en tu agenda con el número ${cPhone}, ${this.userName}.`,
           action: 'NONE',
           themeChange: null
         };
@@ -417,7 +532,7 @@ class YARBISBrain {
     if (clean.includes('llamar') || clean.includes('marcar') || clean.includes('llamada')) {
       if (clean.includes('emergencia') || clean.includes('policia') || clean.includes('ambulancia') || clean.includes('bomberos')) {
         return {
-          textResponse: `Iniciando llamada de emergencia al 911 de inmediato, ${this.userName}.`,
+          textResponse: `Marcando al 911 de emergencia inmediatamente, ${this.userName}.`,
           action: 'OPEN_URL',
           url: 'tel:911',
           deepLink: 'tel:911',
@@ -430,7 +545,7 @@ class YARBISBrain {
       if (callDigitsMatch && callDigitsMatch[1]) {
         const phoneNumber = callDigitsMatch[1];
         return {
-          textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
+          textResponse: `Iniciando llamada al ${phoneNumber}, ${this.userName}.`,
           action: 'OPEN_URL',
           url: `tel:${phoneNumber}`,
           deepLink: `tel:${phoneNumber}`,
@@ -446,7 +561,7 @@ class YARBISBrain {
         if (matches.length === 1) {
           const found = matches[0];
           return {
-            textResponse: `Llamando a ${found.name.toUpperCase()} al número ${found.phone}, ${this.userName}.`,
+            textResponse: `Llamando a ${found.name.toUpperCase()} (${found.phone}), ${this.userName}.`,
             action: 'OPEN_URL',
             url: `tel:${found.phone}`,
             deepLink: `tel:${found.phone}`,
@@ -455,13 +570,13 @@ class YARBISBrain {
         } else if (matches.length > 1) {
           const listStr = matches.map(m => `"${m.name.toUpperCase()}" (${m.phone})`).join(', ');
           return {
-            textResponse: `Encontré varios números para "${targetName}": ${listStr}. ¿A cuál de los dos deseas llamar, ${this.userName}?`,
+            textResponse: `Encontré varios números para "${targetName}": ${listStr}. ¿A cuál llamo, ${this.userName}?`,
             action: 'NONE',
             themeChange: null
           };
         } else {
           return {
-            textResponse: `No encontré a "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]" o dictarme los dígitos directamente.`,
+            textResponse: `No encontré a "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]".`,
             action: 'NONE',
             themeChange: null
           };
@@ -544,9 +659,41 @@ class YARBISBrain {
     // -------------------------------------------------------------
     // INTENT: ARMOR PROTOCOL THEMES
     // -------------------------------------------------------------
+    if (clean.includes('protocolo mark 85') || clean.includes('mark 85') || clean.includes('nanotecnologia') || clean.includes('nano')) {
+      return {
+        textResponse: `Protocolo Mark 85 Nano-Tech activado. Armadura de titanio y oro carmesí en línea, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'theme-mark85',
+        soundFx: 'nano'
+      };
+    }
+    if (clean.includes('protocolo war machine') || clean.includes('war machine') || clean.includes('tema gris') || clean.includes('tema plateado')) {
+      return {
+        textResponse: `Protocolo War Machine activado. Blindaje táctico de acero y titanio en línea, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'theme-warmachine',
+        soundFx: 'hulkbuster'
+      };
+    }
+    if (clean.includes('protocolo spider') || clean.includes('spider iron') || clean.includes('tema spider')) {
+      return {
+        textResponse: `Protocolo Spider-Iron activado. Fibras nanotecnológicas cian y escarlata en línea, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'theme-spideriron',
+        soundFx: 'repulsor'
+      };
+    }
+    if (clean.includes('protocolo wakanda') || clean.includes('pantera negra') || clean.includes('black panther')) {
+      return {
+        textResponse: `Protocolo Wakanda activado. Blindaje de vibranium violeta cargado, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'theme-wakanda',
+        soundFx: 'scan'
+      };
+    }
     if (clean.includes('protocolo hulkbuster') || clean.includes('modo hulkbuster') || clean.includes('tema morado')) {
       return {
-        textResponse: `Protocolo Hulkbuster activado. Potencia de blindaje violáceo en línea, ${this.userName}.`,
+        textResponse: `Protocolo Hulkbuster activado. Potencia de blindaje pesado en línea, ${this.userName}.`,
         action: 'THEME',
         themeChange: 'theme-hulkbuster',
         soundFx: 'hulkbuster'
@@ -560,7 +707,7 @@ class YARBISBrain {
         soundFx: 'scan'
       };
     }
-    if (clean.includes('protocolo mark 42') || clean.includes('mark 42') || clean.includes('tema dorado') || clean.includes('iron man')) {
+    if (clean.includes('protocolo mark 42') || clean.includes('mark 42') || clean.includes('tema dorado')) {
       return {
         textResponse: `Protocolo Mark 42 activado. Blindaje dorado y carmesí en línea, ${this.userName}.`,
         action: 'THEME',
@@ -570,7 +717,7 @@ class YARBISBrain {
     }
     if (clean.includes('protocolo por defecto') || clean.includes('tema normal') || clean.includes('restablecer tema')) {
       return {
-        textResponse: `Restableciendo protocolo cian estándar del asistente, ${this.userName}.`,
+        textResponse: `Restableciendo protocolo cian estándar de YARBIS, ${this.userName}.`,
         action: 'THEME',
         themeChange: 'default',
         soundFx: 'success'
@@ -587,7 +734,7 @@ class YARBISBrain {
 
       if (noteText.length > 1) {
         return {
-          textResponse: `He guardado la nota: "${noteText}" en su lista personal, ${this.userName}.`,
+          textResponse: `Guardé la nota: "${noteText}" en tu lista, ${this.userName}.`,
           action: 'ADD_NOTE',
           noteText: noteText,
           themeChange: null
@@ -597,7 +744,7 @@ class YARBISBrain {
 
     if (clean.includes('mis notas') || clean.includes('ver notas') || clean.includes('mostrar notas') || clean.includes('recordatorios')) {
       return {
-        textResponse: `Abriendo y mostrando su lista de notas y recordatorios en el panel principal, ${this.userName}.`,
+        textResponse: `Abriendo tus notas y recordatorios en el panel, ${this.userName}.`,
         action: 'SHOW_NOTES',
         themeChange: null
       };
@@ -605,7 +752,7 @@ class YARBISBrain {
 
     if (clean.includes('borrar todas las notas') || clean.includes('limpiar notas') || clean.includes('eliminar notas')) {
       return {
-        textResponse: `Todas las notas y recordatorios han sido eliminados de su lista, ${this.userName}.`,
+        textResponse: `Listo, borré todas tus notas de la lista, ${this.userName}.`,
         action: 'CLEAR_NOTES',
         themeChange: null
       };
@@ -639,7 +786,7 @@ class YARBISBrain {
         else if (op === 'entre' || op === '/' || op.includes('dividido')) res = num1 / num2;
 
         return {
-          textResponse: `El resultado exacto del cálculo es ${res}, ${this.userName}.`,
+          textResponse: `El resultado exacto es ${res}, ${this.userName}.`,
           action: 'MATH',
           themeChange: null
         };
@@ -667,15 +814,6 @@ class YARBISBrain {
         action: 'OPEN_URL',
         url: targetUrl,
         deepLink: deepLink,
-        themeChange: null
-      };
-    }
-
-    // Intent: Query List of Supported Applications
-    if (clean.includes('que aplicaciones') || clean.includes('cuales aplicaciones') || clean.includes('mostrar aplicaciones') || clean.includes('lista de aplicaciones') || clean.includes('ver aplicaciones')) {
-      return {
-        textResponse: `Puedo abrir las aplicaciones de tu teléfono como: WhatsApp, YouTube, Spotify, Gmail, Teléfono, Mensajes, Google Maps, ChatGPT, Instagram, Netflix, X (Twitter), Facebook, TikTok y Google Drive, ${this.userName}. Simplemente dime "abrir" seguido de la aplicación.`,
-        action: 'SHOW_APPS',
         themeChange: null
       };
     }
@@ -716,7 +854,7 @@ class YARBISBrain {
     for (const app of webApps) {
       if (app.keys.some(k => clean.includes(k))) {
         return {
-          textResponse: `Abriendo la aplicación ${app.name} en tu dispositivo, ${this.userName}.`,
+          textResponse: `Abriendo ${app.name} en tu celular, ${this.userName}.`,
           action: 'OPEN_URL',
           url: app.url,
           deepLink: app.deepLink,
@@ -737,7 +875,7 @@ class YARBISBrain {
         : `https://www.${slug}.com`;
 
       return {
-        textResponse: `Abriendo la aplicación ${cleanAppName} en tu dispositivo, ${this.userName}.`,
+        textResponse: `Abriendo ${cleanAppName}, ${this.userName}.`,
         action: 'OPEN_URL',
         url: dynamicWebUrl,
         deepLink: dynamicDeepLink,
@@ -767,7 +905,7 @@ class YARBISBrain {
   async queryGeminiAI(userText) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiApiKey}`;
 
-    const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, servicial, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Responde de forma muy concisa, fluida, natural y directa (máximo 2 o 3 oraciones). No uses markdown excesivo.`;
+    const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, carismático, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Responde de forma concisa, fluida, natural y directa (máximo 2 o 3 oraciones). No uses markdown excesivo.`;
 
     const requestBody = {
       contents: [
@@ -823,7 +961,7 @@ class YARBISBrain {
   }
 
   async queryFreeAI(userText) {
-    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Responde muy conciso, directo y en español.`;
+    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Responde con acento y carisma venezolano sutil, conciso y en español.`;
     const prompt = encodeURIComponent(`${systemPrompt} Pregunta: ${userText}`);
     const freeUrl = `https://text.pollinations.ai/${prompt}?model=openai`;
 

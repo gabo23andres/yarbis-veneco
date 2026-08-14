@@ -38,13 +38,44 @@ body.theme-combat {
   --hud-glow: rgba(255, 42, 75, 0.25);
 }
 
-/* Theme Variant: Stealth Mode (Purple/Dark Cyan) */
-body.theme-stealth {
+/* Theme Variant: Mark 85 Nano-Tech (Crimson & Titanium Gold) */
+body.theme-mark85 {
+  --color-primary: #ff0844;
+  --color-primary-rgb: 255, 8, 68;
+  --color-secondary: #ffb199;
+  --color-accent: #ffc837;
+  --hud-glass-border: rgba(255, 8, 68, 0.5);
+  --hud-glow: rgba(255, 8, 68, 0.35);
+}
+
+/* Theme Variant: War Machine (Steel Silver & Titanium) */
+body.theme-warmachine {
+  --color-primary: #f8fafc;
+  --color-primary-rgb: 248, 250, 252;
+  --color-secondary: #94a3b8;
+  --color-accent: #38bdf8;
+  --hud-glass-border: rgba(248, 250, 252, 0.45);
+  --hud-glow: rgba(248, 250, 252, 0.25);
+}
+
+/* Theme Variant: Spider-Iron (Cyber Blue & Scarlet) */
+body.theme-spideriron {
+  --color-primary: #00d2ff;
+  --color-primary-rgb: 0, 210, 255;
+  --color-secondary: #ff2a4b;
+  --color-accent: #3a7bd5;
+  --hud-glass-border: rgba(0, 210, 255, 0.45);
+  --hud-glow: rgba(0, 210, 255, 0.3);
+}
+
+/* Theme Variant: Wakanda Panther (Vibranium Violet) */
+body.theme-wakanda {
   --color-primary: #a855f7;
   --color-primary-rgb: 168, 85, 247;
-  --color-secondary: #3b82f6;
-  --hud-glass-border: rgba(168, 85, 247, 0.45);
-  --hud-glow: rgba(168, 85, 247, 0.25);
+  --color-secondary: #c084fc;
+  --color-accent: #e879f9;
+  --hud-glass-border: rgba(168, 85, 247, 0.5);
+  --hud-glow: rgba(168, 85, 247, 0.35);
 }
 
 /* Theme Variant: Mark 42 (Gold & Crimson Iron Man) */

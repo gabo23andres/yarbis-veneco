@@ -159,6 +159,8 @@ document.addEventListener('DOMContentLoaded', () => {
       audioSynth.playScanSound();
     } else if (response.soundFx === 'repulsor') {
       audioSynth.playRepulsorSound();
+    } else if (response.soundFx === 'nano') {
+      audioSynth.playNanoArmorSound();
     }
 
     // Apply UI Theme Changes if commanded
@@ -187,6 +189,22 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleTorch(true);
     } else if (response.action === 'TORCH_OFF') {
       toggleTorch(false);
+    } else if (response.action === 'CHECK_BATTERY') {
+      if ('getBattery' in navigator) {
+        try {
+          const battery = await navigator.getBattery();
+          const levelPct = Math.round(battery.level * 100);
+          const isCharging = battery.charging ? 'y se encuentra cargando ⚡' : 'desconectado del cargador 🔋';
+          const batteryMsg = `Tu teléfono tiene ${levelPct}% de batería ${isCharging}, ${brain.userName}.`;
+          appendMessage(brain.assistantName, batteryMsg, true);
+          speechEngine.speak(batteryMsg);
+          return;
+        } catch (e) {}
+      }
+      const genericMsg = `No tengo acceso al sensor de batería en este navegador, pero los sistemas de energía de YARBIS están al 100%, ${brain.userName}.`;
+      appendMessage(brain.assistantName, genericMsg, true);
+      speechEngine.speak(genericMsg);
+      return;
     }
 
     // Append Assistant Response
@@ -925,6 +943,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Startup Greeting
   setTimeout(() => {
     audioSynth.playStartupSound();
-    appendMessage(brain.assistantName, `Sistemas de ${brain.assistantName} en línea. Asistente personal listo para servirle, ${brain.userName}.`, true);
+    const greet = brain.getVenezuelanGreeting();
+    appendMessage(brain.assistantName, greet, true);
   }, 800);
 });
