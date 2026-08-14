@@ -865,7 +865,71 @@ document.addEventListener('DOMContentLoaded', () => {
   // Expose global methods for inline HTML onclick attributes
   window.openSettings = openSettingsModal;
   window.closeSettings = closeSettingsModal;
+  window.saveSettings = saveSettingsModal;
   window.switchTab = switchMobileTab;
+  window.toggleMic = () => {
+    audioSynth.initContext();
+    audioSynth.playClickSound();
+    speechEngine.primeSpeechSynthesis();
+    speechEngine.toggleListening();
+  };
+  window.toggleContinuous = () => {
+    audioSynth.initContext();
+    audioSynth.playClickSound();
+    speechEngine.continuousMode = !speechEngine.continuousMode;
+    if (btnContinuous) btnContinuous.classList.toggle('active', speechEngine.continuousMode);
+    const msg = speechEngine.continuousMode ? 'Modo Manos Libres Activado' : 'Modo Manos Libres Desactivado';
+    appendMessage(brain.assistantName, `🔄 ${msg}`);
+    speechEngine.speak(msg);
+    if (speechEngine.continuousMode && !speechEngine.isListening) {
+      speechEngine.startListening();
+    }
+  };
+  window.openCamera = openCameraModal;
+  window.closeCamera = closeCameraModal;
+  window.switchCamera = async () => {
+    audioSynth.playClickSound();
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    await startCameraStream();
+  };
+  window.captureScan = async () => {
+    audioSynth.playClickSound();
+    if (!videoCamera || !canvasCameraSnapshot) return;
+    canvasCameraSnapshot.width = videoCamera.videoWidth || 640;
+    canvasCameraSnapshot.height = videoCamera.videoHeight || 480;
+    const ctx = canvasCameraSnapshot.getContext('2d');
+    ctx.drawImage(videoCamera, 0, 0, canvasCameraSnapshot.width, canvasCameraSnapshot.height);
+    const base64Img = canvasCameraSnapshot.toDataURL('image/jpeg', 0.85);
+    closeCameraModal();
+    appendMessage('USER', '📸 [Foto enviada a Escáner]');
+    appendMessage(brain.assistantName, '⚡ Analizando imagen con visión artificial Stark...', true);
+    audioSynth.playScanSound();
+    const visionAnalysis = await brain.analyzeImage(base64Img);
+    appendMessage(brain.assistantName, visionAnalysis, true);
+    speechEngine.speak(visionAnalysis);
+  };
+  window.openInstallPwa = () => {
+    audioSynth.playClickSound();
+    if (modalInstallPwa) modalInstallPwa.classList.add('active');
+  };
+  window.closeInstallPwa = () => {
+    audioSynth.playClickSound();
+    if (modalInstallPwa) modalInstallPwa.classList.remove('active');
+  };
+  window.addNoteFromInput = () => {
+    if (inputNewNote && inputNewNote.value.trim()) {
+      audioSynth.playClickSound();
+      addNote(inputNewNote.value.trim());
+      inputNewNote.value = '';
+    }
+  };
+  window.clearAllNotes = clearAllNotes;
+  window.clearLogs = () => {
+    audioSynth.playClickSound();
+    if (transcriptScroll) transcriptScroll.innerHTML = '';
+  };
+  window.submitTextInput = submitTextInput;
+  window.cancelTimer = cancelTimer;
 
   // Set default active tab on mobile
   switchMobileTab('voice');

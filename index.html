@@ -19,7 +19,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=8.1" />
+  <link rel="stylesheet" href="styles.css?v=8.2" />
 </head>
 <body>
 
@@ -82,12 +82,12 @@
 
         <!-- Mic & Main Controls -->
         <div class="mic-controls">
-          <button type="button" class="btn-icon-secondary" id="btnContinuous" title="Modo Manos Libres (Escucha Continua)">🔄</button>
-          <button type="button" class="btn-icon-secondary" id="btnCamera" title="Visión y Escáner IA (Cámara)">📷</button>
-          <button type="button" class="btn-mic-main" id="btnMic" title="Pulsar para hablar (Alt + M)">
+          <button type="button" class="btn-icon-secondary" id="btnContinuous" onclick="if(window.toggleContinuous) window.toggleContinuous();" title="Modo Manos Libres (Escucha Continua)">🔄</button>
+          <button type="button" class="btn-icon-secondary" id="btnCamera" onclick="if(window.openCamera) window.openCamera();" title="Visión y Escáner IA (Cámara)">📷</button>
+          <button type="button" class="btn-mic-main" id="btnMic" onclick="if(window.toggleMic) window.toggleMic();" title="Pulsar para hablar (Alt + M)">
             🎙️
           </button>
-          <button type="button" class="btn-icon-secondary" id="btnInstallPwa" title="Instalar en Pantalla de Inicio">📲</button>
+          <button type="button" class="btn-icon-secondary" id="btnInstallPwa" onclick="if(window.openInstallPwa) window.openInstallPwa();" title="Instalar en Pantalla de Inicio">📲</button>
           <button type="button" class="btn-icon-secondary" id="btnSettings" onclick="if(window.openSettings) window.openSettings();" title="Configuración Personal">⚙️</button>
         </div>
 
@@ -113,7 +113,7 @@
         <div class="timer-box" id="timerWidget" style="display: none;">
           <div class="timer-header">
             <span class="timer-title">⏱️ TEMPORIZADOR ACTIVO</span>
-            <button class="btn-cancel-timer" id="btnCancelTimer" title="Cancelar temporizador">✕</button>
+            <button type="button" class="btn-cancel-timer" id="btnCancelTimer" onclick="if(window.cancelTimer) window.cancelTimer();" title="Cancelar temporizador">✕</button>
           </div>
           <div class="timer-display" id="timerDisplay">00:00</div>
           <div class="progress-bar-bg">
@@ -135,7 +135,7 @@
         <!-- Create Note Input Bar -->
         <div class="note-input-box">
           <input type="text" id="inputNewNote" placeholder="Escribe una nueva nota o recordatorio..." />
-          <button id="btnAddNote">＋ Guardar</button>
+          <button type="button" id="btnAddNote" onclick="if(window.addNoteFromInput) window.addNoteFromInput();">＋ Guardar</button>
         </div>
 
         <!-- Notes Filter Chips -->
@@ -143,7 +143,7 @@
           <button class="filter-chip active" data-filter="all">Todas</button>
           <button class="filter-chip" data-filter="pending">Pendientes</button>
           <button class="filter-chip" data-filter="completed">Completadas</button>
-          <button class="filter-chip btn-clear-all" id="btnClearNotes">🗑️ Limpiar</button>
+          <button type="button" class="filter-chip btn-clear-all" id="btnClearNotes" onclick="if(window.clearAllNotes) window.clearAllNotes();">🗑️ Limpiar</button>
         </div>
 
         <!-- Notes Scrollable List -->
@@ -154,14 +154,14 @@
       <section class="terminal-panel">
         <div class="panel-header">
           <span class="panel-title">TERMINAL DE RESPUESTAS & REGISTROS</span>
-          <button class="btn-clear-logs" id="btnClearLogs" title="Limpiar conversación">Limpiar</button>
+          <button type="button" class="btn-clear-logs" id="btnClearLogs" onclick="if(window.clearLogs) window.clearLogs();" title="Limpiar conversación">Limpiar</button>
         </div>
 
         <div class="transcript-scroll" id="transcriptScroll"></div>
 
         <div class="input-bar">
           <input type="text" id="textInput" placeholder="Escribe un comando o pregunta a YARBIS..." />
-          <button id="btnSend">Enviar</button>
+          <button type="button" id="btnSend" onclick="if(window.submitTextInput) window.submitTextInput();">Enviar</button>
         </div>
       </section>
 
@@ -214,9 +214,9 @@
       </div>
 
       <div class="camera-controls-bar">
-        <button type="button" class="btn-modal-close" id="btnCloseCamera" style="padding: 10px 18px;">Cancelar</button>
-        <button type="button" class="btn-icon-secondary" id="btnSwitchCamera" title="Cambiar Cámara">🔄</button>
-        <button type="button" class="btn-capture-scan" id="btnCaptureScan">📸 Escanear con IA</button>
+        <button type="button" class="btn-modal-close" id="btnCloseCamera" onclick="if(window.closeCamera) window.closeCamera();" style="padding: 10px 18px;">Cancelar</button>
+        <button type="button" class="btn-icon-secondary" id="btnSwitchCamera" onclick="if(window.switchCamera) window.switchCamera();" title="Cambiar Cámara">🔄</button>
+        <button type="button" class="btn-capture-scan" id="btnCaptureScan" onclick="if(window.captureScan) window.captureScan();">📸 Escanear con IA</button>
       </div>
     </div>
   </div>
@@ -242,7 +242,7 @@
       </div>
 
       <div class="modal-actions">
-        <button type="button" class="btn-modal-save" id="btnCloseInstallPwa" style="width: 100%;">¡Entendido!</button>
+        <button type="button" class="btn-modal-save" id="btnCloseInstallPwa" onclick="if(window.closeInstallPwa) window.closeInstallPwa();" style="width: 100%;">¡Entendido!</button>
       </div>
     </div>
   </div>
@@ -314,17 +314,17 @@
 
       <div class="modal-actions">
         <button type="button" class="btn-modal-close" id="btnCloseSettings" onclick="if(window.closeSettings) window.closeSettings();">Cancelar</button>
-        <button type="button" class="btn-modal-save" id="btnSaveSettings">Guardar Cambios</button>
+        <button type="button" class="btn-modal-save" id="btnSaveSettings" onclick="if(window.saveSettings) window.saveSettings();">Guardar Cambios</button>
       </div>
     </div>
   </div>
 
   <!-- App Scripts -->
-  <script src="js/audioEffects.js?v=8.1"></script>
-  <script src="js/arcReactor.js?v=8.1"></script>
-  <script src="js/speechEngine.js?v=8.1"></script>
-  <script src="js/yarbisBrain.js?v=8.1"></script>
-  <script src="js/app.js?v=8.1"></script>
+  <script src="js/audioEffects.js?v=8.2"></script>
+  <script src="js/arcReactor.js?v=8.2"></script>
+  <script src="js/speechEngine.js?v=8.2"></script>
+  <script src="js/yarbisBrain.js?v=8.2"></script>
+  <script src="js/app.js?v=8.2"></script>
 
 </body>
 </html>

@@ -2,7 +2,7 @@
    YARBIS - SERVICE WORKER (NETWORK-FIRST CACHE ACCELERATOR 6.0)
    ========================================================================== */
 
-const CACHE_NAME = 'yarbis-cache-v8.1';
+const CACHE_NAME = 'yarbis-cache-v8.2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
