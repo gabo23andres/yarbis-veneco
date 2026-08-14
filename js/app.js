@@ -673,7 +673,70 @@ document.addEventListener('DOMContentLoaded', () => {
         inputContactName.value = '';
         inputContactPhone.value = '';
         renderContactsUI();
+  const btnImportPhoneContacts = document.getElementById('btnImportPhoneContacts');
+  const inputVcfFile = document.getElementById('inputVcfFile');
+
+  // Native Web Contact Picker API (iOS Safari 14.5+ & Android Chrome)
+  if (btnImportPhoneContacts) {
+    btnImportPhoneContacts.addEventListener('click', async () => {
+      audioSynth.playClickSound();
+      if ('contacts' in navigator && 'select' in navigator.contacts) {
+        try {
+          const props = ['name', 'tel'];
+          const opts = { multiple: true };
+          const contacts = await navigator.contacts.select(props, opts);
+          if (contacts && contacts.length > 0) {
+            let count = 0;
+            contacts.forEach(c => {
+              const name = (c.name && c.name[0]) ? c.name[0] : '';
+              const tel = (c.tel && c.tel[0]) ? c.tel[0] : '';
+              if (name && tel) {
+                brain.saveContact(name, tel);
+                count++;
+              }
+            });
+            renderContactsUI();
+            audioSynth.playSuccessChime();
+            speechEngine.speak(`Se han importado ${count} contactos de tu teléfono a YARBIS, ${brain.userName}.`);
+          }
+        } catch (err) {
+          console.warn('Contact picker cancelled or failed:', err);
+        }
+      } else {
+        alert('Tu navegador no admite la selección directa de contactos. Puedes usar el botón "Cargar Archivo .VCF" para importar tu lista de contactos exportada.');
       }
+    });
+  }
+
+  // Parse .VCF Contact File
+  if (inputVcfFile) {
+    inputVcfFile.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const text = evt.target.result;
+        const vcardBlocks = text.split(/END:VCARD/i);
+        let count = 0;
+
+        vcardBlocks.forEach(block => {
+          const nameMatch = block.match(/FN:(.*)/i) || block.match(/N:(.*)/i);
+          const telMatch = block.match(/TEL.*:(.*)/i);
+          if (nameMatch && telMatch) {
+            let name = nameMatch[1].replace(/;/g, ' ').trim();
+            let tel = telMatch[1].trim();
+            if (name && tel) {
+              brain.saveContact(name, tel);
+              count++;
+            }
+          }
+        });
+
+        renderContactsUI();
+        audioSynth.playSuccessChime();
+        speechEngine.speak(`Se han importado ${count} contactos del archivo VCF a tu agenda, ${brain.userName}.`);
+      };
+      reader.readAsText(file);
     });
   }
 

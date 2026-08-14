@@ -201,7 +201,11 @@
       </div>
 
       <div class="form-group">
-        <label>Agenda Telefónica (Añadir Contacto por Nombre):</label>
+        <label>Agenda Telefónica & Contactos del Teléfono:</label>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;">
+          <button type="button" id="btnImportPhoneContacts" style="background: rgba(var(--color-primary-rgb), 0.25); border: 1px solid var(--color-primary); color: var(--color-primary); border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; cursor: pointer; font-family: var(--font-hud); display: flex; align-items: center; gap: 4px;">📲 Importar Contactos del Teléfono</button>
+          <label for="inputVcfFile" style="background: rgba(255, 255, 255, 0.1); border: 1px solid var(--hud-glass-border); color: #fff; border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; cursor: pointer; font-family: var(--font-hud); display: flex; align-items: center; gap: 4px; margin: 0;">📂 Cargar Archivo .VCF <input type="file" id="inputVcfFile" accept=".vcf" style="display: none;" /></label>
+        </div>
         <div style="display: flex; gap: 6px;">
           <input type="text" id="inputContactName" placeholder="Nombre (Ej: Mamá, Papá, Carlos)..." style="flex: 1;" />
           <input type="text" id="inputContactPhone" placeholder="Teléfono (Ej: 04141234567)..." style="flex: 1;" />
