@@ -9,16 +9,10 @@ class YARBISBrain {
     this.assistantName = localStorage.getItem('yarbis_assistant_name') || 'YARBIS Veneco';
     this.userName = localStorage.getItem('yarbis_user_name') || 'Señor';
 
-    // Seed default contacts agenda if empty
-    if (!localStorage.getItem('yarbis_contacts')) {
-      const defaultContacts = {
-        'mamá': '04141234567',
-        'papá': '04249876543',
-        'pedro': '04121112233',
-        'carlos': '04165554433',
-        'maría': '04149998877'
-      };
-      localStorage.setItem('yarbis_contacts', JSON.stringify(defaultContacts));
+    // Clean up dummy sample contacts if present so agenda is 100% clean for the user
+    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+    if (contacts['mamá'] === '04141234567' || contacts['pedro'] === '04121112233') {
+      localStorage.removeItem('yarbis_contacts');
     }
   }
 
