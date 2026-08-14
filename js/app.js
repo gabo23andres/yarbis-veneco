@@ -758,7 +758,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Settings Modal Controls
-  btnSettings.addEventListener('click', () => {
+  const openSettingsModal = (e) => {
+    if (e && e.type === 'touchend') e.preventDefault();
     audioSynth.playClickSound();
     if (inputAssistantName) inputAssistantName.value = brain.assistantName;
     if (inputUserName) inputUserName.value = brain.userName;
@@ -772,31 +773,45 @@ document.addEventListener('DOMContentLoaded', () => {
       keyTestResult.style.color = 'var(--color-text-dim)';
     }
     modalSettings.classList.add('active');
-  });
+  };
 
-  btnCloseSettings.addEventListener('click', () => {
+  if (btnSettings) {
+    btnSettings.addEventListener('click', openSettingsModal);
+    btnSettings.addEventListener('touchend', openSettingsModal);
+  }
+
+  const closeSettingsModal = (e) => {
+    if (e && e.type === 'touchend') e.preventDefault();
     audioSynth.playClickSound();
     modalSettings.classList.remove('active');
-  });
+  };
 
-  btnSaveSettings.addEventListener('click', () => {
-    const newAssistantName = inputAssistantName ? inputAssistantName.value : 'YARBIS';
-    const newUserName = inputUserName ? inputUserName.value : 'Señor';
-    const apiKey = inputGeminiKey ? inputGeminiKey.value : '';
-    const selectedLang = selectLanguage ? selectLanguage.value : 'es-ES';
+  if (btnCloseSettings) {
+    btnCloseSettings.addEventListener('click', closeSettingsModal);
+    btnCloseSettings.addEventListener('touchend', closeSettingsModal);
+  }
 
-    brain.setNames(newAssistantName, newUserName);
-    brain.setApiKey(apiKey);
-    speechEngine.setLanguage(selectedLang);
+  if (btnSaveSettings) {
+    btnSaveSettings.addEventListener('click', (e) => {
+      if (e && e.type === 'touchend') e.preventDefault();
+      const newAssistantName = inputAssistantName ? inputAssistantName.value : 'YARBIS';
+      const newUserName = inputUserName ? inputUserName.value : 'Señor';
+      const apiKey = inputGeminiKey ? inputGeminiKey.value : '';
+      const selectedLang = selectLanguage ? selectLanguage.value : 'es-ES';
 
-    updateBrandingUI();
-    updateAiStatusBadge();
-    renderNotes();
+      brain.setNames(newAssistantName, newUserName);
+      brain.setApiKey(apiKey);
+      speechEngine.setLanguage(selectedLang);
 
-    modalSettings.classList.remove('active');
-    audioSynth.playSuccessChime();
-    speechEngine.speak(`Configuración actualizada correctamente, ${brain.userName}.`);
-  });
+      updateBrandingUI();
+      updateAiStatusBadge();
+      renderNotes();
+
+      modalSettings.classList.remove('active');
+      audioSynth.playSuccessChime();
+      speechEngine.speak(`Configuración actualizada correctamente, ${brain.userName}.`);
+    });
+  }
 
   // Keyboard Shortcuts (Alt + M for Mic, Esc to close/clear)
   document.addEventListener('keydown', (e) => {
@@ -837,8 +852,10 @@ document.addEventListener('DOMContentLoaded', () => {
       voiceStage.classList.add('active-mobile-panel');
     } else if (tabName === 'notes' && telemetryPanel) {
       telemetryPanel.classList.add('active-mobile-panel');
+      renderNotes();
     } else if (tabName === 'chat' && terminalPanel) {
       terminalPanel.classList.add('active-mobile-panel');
+      if (transcriptScroll) transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
     }
   }
 
@@ -846,10 +863,13 @@ document.addEventListener('DOMContentLoaded', () => {
   switchMobileTab('voice');
 
   mobileTabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
+    const handleTabClick = (e) => {
+      if (e && e.type === 'touchend') e.preventDefault();
       audioSynth.playClickSound();
       switchMobileTab(btn.getAttribute('data-tab'));
-    });
+    };
+    btn.addEventListener('click', handleTabClick);
+    btn.addEventListener('touchend', handleTabClick);
   });
 
   // Device Torch / Flashlight Controller

@@ -990,7 +990,7 @@ footer.hud-footer {
   top: 0; left: 0; width: 100vw; height: 100vh;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(8px);
-  z-index: 100;
+  z-index: 99999;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1219,25 +1219,27 @@ footer.hud-footer {
   main.hud-main > section.active-mobile-panel {
     display: flex !important;
     flex-direction: column !important;
+    width: 100% !important;
+    height: 100% !important;
+    animation: mobileSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .voice-stage.active-mobile-panel {
     align-items: center !important;
     justify-content: space-evenly !important;
-    animation: mobileSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 12px 8px;
+  }
+
+  .telemetry-panel.active-mobile-panel,
+  .terminal-panel.active-mobile-panel {
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    padding: 10px;
   }
 
   @keyframes mobileSlideUp {
     from { opacity: 0; transform: translateY(12px) scale(0.98); }
     to { opacity: 1; transform: translateY(0) scale(1); }
-  }
-
-  /* Voice Stage Mobile Layout */
-  .voice-stage {
-    padding: 12px 8px;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: space-evenly !important;
-    width: 100% !important;
-    height: 100% !important;
   }
 
   .arc-reactor-wrapper {

@@ -2,7 +2,7 @@
    YARBIS - SERVICE WORKER (OFFLINE PWA & CACHE ACCELERATOR 5.0)
    ========================================================================== */
 
-const CACHE_NAME = 'yarbis-cache-v5.0';
+const CACHE_NAME = 'yarbis-cache-v5.1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
