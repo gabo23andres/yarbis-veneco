@@ -183,6 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
       startTimer(response.durationSeconds);
     } else if (response.action === 'CANCEL_TIMER') {
       cancelTimer();
+    } else if (response.action === 'TORCH_ON') {
+      toggleTorch(true);
+    } else if (response.action === 'TORCH_OFF') {
+      toggleTorch(false);
     }
 
     // Append Assistant Response
@@ -847,6 +851,42 @@ document.addEventListener('DOMContentLoaded', () => {
       switchMobileTab(btn.getAttribute('data-tab'));
     });
   });
+
+  // Device Torch / Flashlight Controller
+  let torchTrack = null;
+  async function toggleTorch(turnOn) {
+    try {
+      if (turnOn) {
+        if (!torchTrack) {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' }
+          });
+          torchTrack = stream.getVideoTracks()[0];
+        }
+        if (torchTrack && torchTrack.applyConstraints) {
+          await torchTrack.applyConstraints({
+            advanced: [{ torch: true }]
+          });
+        }
+      } else {
+        if (torchTrack) {
+          torchTrack.stop();
+          torchTrack = null;
+        }
+      }
+    } catch (e) {
+      console.warn('Torch not supported or permission denied:', e);
+    }
+  }
+
+  // PWA Service Worker Registration
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then((reg) => console.log('YARBIS PWA Service Worker registered:', reg.scope))
+        .catch((err) => console.warn('Service Worker registration failed:', err));
+    });
+  }
 
   // Initial Load Render
   renderNotes();

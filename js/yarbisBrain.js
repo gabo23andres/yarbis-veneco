@@ -1,6 +1,6 @@
 /* ==========================================================================
-   YARBIS - CONVERSATIONAL BRAIN & INTENT PROCESSOR 4.0 - ADVANCED VOICE CALLING
-   Personal Assistant AI Personality, Contact Agenda & Automatic WhatsApp Engine
+   YARBIS - CONVERSATIONAL BRAIN & INTENT PROCESSOR 5.0
+   Weather, Wikipedia, Crypto/Currency, Music, Torch & Contact Intelligence
    ========================================================================== */
 
 class YARBISBrain {
@@ -9,7 +9,7 @@ class YARBISBrain {
     this.assistantName = localStorage.getItem('yarbis_assistant_name') || 'YARBIS Veneco';
     this.userName = localStorage.getItem('yarbis_user_name') || 'Señor';
 
-    // Clean up dummy sample contacts if present so agenda is 100% clean for the user
+    // Clean up dummy sample contacts if present
     const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
     if (contacts['mamá'] === '04141234567' || contacts['pedro'] === '04121112233') {
       localStorage.removeItem('yarbis_contacts');
@@ -91,6 +91,132 @@ class YARBISBrain {
     localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
   }
 
+  /* ==========================================
+     LIVE WEATHER, WIKIPEDIA & CRYPTO ENGINES
+     ========================================== */
+  getWeatherCodeDesc(code) {
+    const map = {
+      0: 'Cielo totalmente despejado y soleado ☀️',
+      1: 'Mayormente despejado con pocas nubes 🌤️',
+      2: 'Parcialmente nublado ⛅',
+      3: 'Cielo nublado ☁️',
+      45: 'Neblina 🌫️',
+      48: 'Niebla densa 🌫️',
+      51: 'Llovizna ligera 🌦️',
+      53: 'Llovizna moderada 🌦️',
+      55: 'Llovizna densa 🌧️',
+      61: 'Lluvia ligera 🌧️',
+      63: 'Lluvia moderada 🌧️',
+      65: 'Lluvia fuerte 🌧️',
+      80: 'Chubascos leves 🌦️',
+      81: 'Chubascos moderados 🌧️',
+      82: 'Chubascos torrenciales ⛈️',
+      95: 'Tormenta eléctrica ⚡⛈️',
+      96: 'Tormenta con granizo ⛈️',
+      99: 'Tormenta severa con granizo ⛈️'
+    };
+    return map[code] || 'Condiciones estables';
+  }
+
+  async fetchWeather(cityName = 'Caracas') {
+    try {
+      const cityCoords = {
+        'caracas': { lat: 10.4880, lon: -66.8792, name: 'Caracas' },
+        'valencia': { lat: 10.1620, lon: -68.0077, name: 'Valencia' },
+        'maracaibo': { lat: 10.6427, lon: -71.6125, name: 'Maracaibo' },
+        'barquisimeto': { lat: 10.0678, lon: -69.3474, name: 'Barquisimeto' },
+        'maracay': { lat: 10.2469, lon: -67.5958, name: 'Maracay' },
+        'san cristobal': { lat: 7.7669, lon: -72.2250, name: 'San Cristóbal' },
+        'puerto la cruz': { lat: 10.2138, lon: -64.6328, name: 'Puerto La Cruz' },
+        'merida': { lat: 8.5983, lon: -71.1450, name: 'Mérida' },
+        'miami': { lat: 25.7617, lon: -80.1918, name: 'Miami' },
+        'madrid': { lat: 40.4168, lon: -3.7038, name: 'Madrid' },
+        'bogota': { lat: 4.7110, lon: -74.0721, name: 'Bogotá' },
+        'medellin': { lat: 6.2442, lon: -75.5812, name: 'Medellín' },
+        'buenos aires': { lat: -34.6037, lon: -58.3816, name: 'Buenos Aires' },
+        'santiago': { lat: -33.4489, lon: -70.6693, name: 'Santiago' },
+        'lima': { lat: -12.0464, lon: -77.0428, name: 'Lima' },
+        'mexico': { lat: 19.4326, lon: -99.1332, name: 'Ciudad de México' },
+        'cdmx': { lat: 19.4326, lon: -99.1332, name: 'Ciudad de México' }
+      };
+
+      const key = cityName.toLowerCase().trim();
+      let coords = cityCoords[key];
+      let displayName = coords ? coords.name : cityName;
+
+      if (!coords) {
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=es`);
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (geoData.results && geoData.results.length > 0) {
+            coords = {
+              lat: geoData.results[0].latitude,
+              lon: geoData.results[0].longitude
+            };
+            displayName = geoData.results[0].name;
+          }
+        }
+      }
+
+      if (!coords) {
+        coords = cityCoords['caracas'];
+        displayName = 'Caracas';
+      }
+
+      const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`);
+      if (!weatherRes.ok) throw new Error('Weather API error');
+      const wData = await weatherRes.json();
+      const current = wData.current;
+
+      const temp = Math.round(current.temperature_2m);
+      const humidity = current.relative_humidity_2m;
+      const wind = Math.round(current.wind_speed_10m);
+      const desc = this.getWeatherCodeDesc(current.weather_code);
+
+      return `En ${displayName} hay actualmente ${temp}°C con ${desc}. Humedad del ${humidity}% y viento de ${wind} km/h, ${this.userName}.`;
+    } catch (e) {
+      console.warn('Weather fetch error:', e);
+      return `No pude obtener el reporte meteorológico en vivo, ${this.userName}.`;
+    }
+  }
+
+  async fetchWikipediaSummary(query) {
+    try {
+      const cleanQ = query.trim();
+      const res = await fetch(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanQ)}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data && data.extract) {
+        return `${data.title}: ${data.extract}`;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async fetchCryptoPrice(coinName = 'bitcoin') {
+    try {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,solana&vs_currencies=usd');
+      if (!res.ok) throw new Error('Crypto API error');
+      const data = await res.json();
+      
+      const btc = data.bitcoin ? data.bitcoin.usd.toLocaleString() : 'N/A';
+      const eth = data.ethereum ? data.ethereum.usd.toLocaleString() : 'N/A';
+      const sol = data.solana ? data.solana.usd.toLocaleString() : 'N/A';
+
+      if (coinName.includes('eth')) {
+        return `El precio actual de Ethereum es de $${eth} USD, ${this.userName}.`;
+      } else if (coinName.includes('sol')) {
+        return `El precio actual de Solana es de $${sol} USD, ${this.userName}.`;
+      } else {
+        return `El precio de Bitcoin es de $${btc} USD, y Ethereum cotiza en $${eth} USD, ${this.userName}.`;
+      }
+    } catch (e) {
+      return `No pude conectar con el servidor de cotizaciones en tiempo real, ${this.userName}.`;
+    }
+  }
+
   /**
    * Main Process Function
    * Returns: { textResponse, action, themeChange, noteText, durationSeconds, url, deepLink, soundFx }
@@ -147,6 +273,95 @@ class YARBISBrain {
     const clean = text.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '');
 
     // -------------------------------------------------------------
+    // INTENT: FLASHLIGHT / TORCH CONTROL
+    // -------------------------------------------------------------
+    if (clean.includes('linterna') || clean.includes('luz del telefono') || clean.includes('luz de la camara')) {
+      if (clean.includes('apagar') || clean.includes('desactivar') || clean.includes('apaga') || clean.includes('quita')) {
+        return {
+          textResponse: `Apagando la linterna del dispositivo, ${this.userName}.`,
+          action: 'TORCH_OFF',
+          themeChange: null
+        };
+      } else {
+        return {
+          textResponse: `Encendiendo la linterna del dispositivo, ${this.userName}.`,
+          action: 'TORCH_ON',
+          themeChange: null
+        };
+      }
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: LIVE WEATHER (OPEN-METEO)
+    // -------------------------------------------------------------
+    if (clean.includes('clima') || clean.includes('temperatura') || clean.includes('va a llover') || clean.includes('pronostico') || clean.includes('el tiempo en')) {
+      const cityMatch = text.match(/(?:clima|temperatura|tiempo|llover|pronostico)\s+(?:en|de|para)?\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i);
+      let targetCity = 'Caracas';
+      if (cityMatch && cityMatch[1]) {
+        const extracted = cityMatch[1].replace(/^(?:en|de|para|hoy|el|la)\s+/i, '').trim();
+        if (extracted.length > 2 && !['hoy', 'mañana', 'ahora'].includes(extracted.toLowerCase())) {
+          targetCity = extracted;
+        }
+      }
+
+      const weatherMsg = await this.fetchWeather(targetCity);
+      return {
+        textResponse: weatherMsg,
+        action: 'NONE',
+        themeChange: null
+      };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: CRYPTO & DOLLAR PRICES
+    // -------------------------------------------------------------
+    if (clean.includes('bitcoin') || clean.includes('cripto') || clean.includes('ethereum') || clean.includes('solana') || clean.includes('btc') || clean.includes('eth')) {
+      const cryptoMsg = await this.fetchCryptoPrice(clean);
+      return {
+        textResponse: cryptoMsg,
+        action: 'NONE',
+        themeChange: null
+      };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: WIKIPEDIA / INSTANT KNOWLEDGE SEARCH
+    // -------------------------------------------------------------
+    const wikiMatch = text.match(/^(?:quién es|quien es|quién fue|quien fue|qué es|que es|qué significa|que significa|cuéntame de|cuentame de|explícame qué es|explicame que es|explícame|explicame)\s+(.*)/i);
+    if (wikiMatch && wikiMatch[1]) {
+      const topic = wikiMatch[1].replace(/^(?:el|la|los|las|un|una|sobre)\s+/i, '').trim();
+      if (topic.length > 2) {
+        const wikiExtract = await this.fetchWikipediaSummary(topic);
+        if (wikiExtract) {
+          return {
+            textResponse: `${wikiExtract}`,
+            action: 'NONE',
+            themeChange: null
+          };
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: MUSIC PLAYER & GENRES (SPOTIFY / YOUTUBE MUSIC)
+    // -------------------------------------------------------------
+    if (clean.startsWith('pon ') || clean.startsWith('poner ') || clean.startsWith('reproduce ') || clean.startsWith('reproducir ') || clean.includes('musica de ') || clean.includes('musica para ')) {
+      let query = text.replace(/^(?:pon|poner|reproduce|reproducir|busca|buscar|musica de|musica para)\s+/i, '').trim();
+      if (query.length > 1) {
+        const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(query)}`;
+        const spotifyDeepLink = `spotify:search:${encodeURIComponent(query)}`;
+
+        return {
+          textResponse: `Reproduciendo "${query}" en Spotify, ${this.userName}.`,
+          action: 'OPEN_URL',
+          url: spotifySearchUrl,
+          deepLink: spotifyDeepLink,
+          themeChange: null
+        };
+      }
+    }
+
+    // -------------------------------------------------------------
     // INTENT 1: TIMERS & COUNTDOWNS
     // -------------------------------------------------------------
     if (clean.includes('temporizador') || clean.includes('cuenta regresiva') || clean.includes('alarma') || clean.includes('avísame en') || clean.includes('avisame en')) {
@@ -185,7 +400,6 @@ class YARBISBrain {
     // -------------------------------------------------------------
     // INTENT: ADVANCED AUTOMATIC PHONE CALLS (POR NOMBRE O NÚMERO)
     // -------------------------------------------------------------
-    // Save Contact by Voice e.g. "guardar contacto Mamá numero 04141234567"
     const saveContactMatch = text.match(/(?:guardar|agregar|nuevo)\s+(?:contacto\s+)?(.*?)\s+(?:numero|número|telefono|teléfono)?\s*(\+?[0-9\s]{3,15})/i);
     if (saveContactMatch) {
       const cName = saveContactMatch[1].replace(/^(?:contacto|a|mi)\s+/i, '').trim();
@@ -201,7 +415,6 @@ class YARBISBrain {
     }
 
     if (clean.includes('llamar') || clean.includes('marcar') || clean.includes('llamada')) {
-      // Emergency Check
       if (clean.includes('emergencia') || clean.includes('policia') || clean.includes('ambulancia') || clean.includes('bomberos')) {
         return {
           textResponse: `Iniciando llamada de emergencia al 911 de inmediato, ${this.userName}.`,
@@ -212,10 +425,7 @@ class YARBISBrain {
         };
       }
 
-      // Convert spoken number words e.g. "cero cuatro catorce..." to digits
       const convertedText = this.parseSpokenNumbers(text);
-
-      // Check digits call first e.g. "Llamar al 04141234567"
       const callDigitsMatch = convertedText.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(\+?[0-9]{3,15})/i);
       if (callDigitsMatch && callDigitsMatch[1]) {
         const phoneNumber = callDigitsMatch[1];
@@ -228,7 +438,6 @@ class YARBISBrain {
         };
       }
 
-      // Check Contact Agenda Name Match e.g. "Llamar a Mamá", "Llamar a Pedro", "Llamar a Carlos"
       const nameMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al|a\s+mi)?\s*(.+)/i);
       if (nameMatch && nameMatch[1]) {
         const targetName = nameMatch[1].trim();
@@ -261,7 +470,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING (POR NOMBRE O NÚMERO, DUAL WHATSAPP)
+    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING
     // -------------------------------------------------------------
     if (clean.includes('whatsapp') || clean.includes('wasap') || clean.includes('guasap')) {
       const convertedText = this.parseSpokenNumbers(text);
@@ -273,7 +482,6 @@ class YARBISBrain {
       let targetPhone = '';
       let msgText = '';
 
-      // Pattern match e.g. "mandar whatsapp a Mamá que diga llego en 5 min"
       const fullWaMatch = convertedText.match(/(?:mandar|enviar|escribir|hacer)?\s*(?:un\s+)?(?:mensaje\s+de\s+|mensaje\s+por\s+)?(?:whatsapp\s*2|whatsapp\s*business|whatsapp|wasap\s*2|wasap|guasap)\s+(?:a|para|al)?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?:que\s+diga|diciendo|con\s+el\s+texto|mensaje)?\s*(.*)/i);
 
       if (fullWaMatch) {
@@ -299,7 +507,6 @@ class YARBISBrain {
         if (phoneMatch) targetPhone = phoneMatch[1];
       }
 
-      // Format WhatsApp Phone Number with Country Code (+58 for Venezuela 0414/0424/0412/0416/0426)
       let formattedPhone = targetPhone.replace(/[^0-9]/g, '');
       if (formattedPhone.startsWith('04')) {
         formattedPhone = '58' + formattedPhone.substring(1);
@@ -371,7 +578,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 2: PERSONAL NOTES & REMINDERS
+    // INTENT: PERSONAL NOTES & REMINDERS
     // -------------------------------------------------------------
     const addNoteMatch = text.match(/(?:agrega|agregar|nueva|crear|guarda|guardar|recuérdame|recordarme|recordar)\s+(?:nota|recordatorio)?\s*(.+)/i);
     if (addNoteMatch && addNoteMatch[1] && !clean.startsWith('mis notas') && !clean.startsWith('ver notas')) {
@@ -405,7 +612,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 3: MATHEMATICAL CALCULATIONS & PERCENTAGES
+    // INTENT: MATHEMATICAL CALCULATIONS & PERCENTAGES
     // -------------------------------------------------------------
     if (clean.includes('cuanto es') || clean.includes('calcula') || clean.includes('porcentaje') || clean.includes('%')) {
       const pctMatch = clean.match(/(?:calcula|cuanto es)?\s*(?:el)?\s*(\d+(?:\.\d+)?)\s*(?:%|por ciento)\s*de\s*(\d+(?:\.\d+)?)/i);
@@ -440,7 +647,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 4: OPEN YOUTUBE / SEARCH YOUTUBE
+    // INTENT: OPEN YOUTUBE / SEARCH YOUTUBE
     // -------------------------------------------------------------
     if (clean.includes('youtube') || clean.includes('abrir youtube') || clean.includes('abre youtube')) {
       const searchMatch = text.match(/(?:busca|buscar|poner|pon|reproducir|reproduce)\s+(.*?)(?:\s+en youtube|$)/i);
@@ -474,7 +681,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 5: UNIVERSAL MOBILE APP & WEB LAUNCHER
+    // INTENT: UNIVERSAL MOBILE APP & WEB LAUNCHER
     // -------------------------------------------------------------
     const webApps = [
       { keys: ['whatsapp', 'wasap', 'guasap'], name: 'WhatsApp', url: 'https://web.whatsapp.com', deepLink: 'whatsapp://' },
@@ -539,7 +746,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 6: GENERAL GOOGLE SEARCH
+    // INTENT: GENERAL GOOGLE SEARCH
     // -------------------------------------------------------------
     if (clean.startsWith('busca') || clean.startsWith('buscar') || clean.startsWith('googlea') || clean.startsWith('navega')) {
       const searchMatch = text.match(/(?:busca|buscar|googlea|navega)\s+(.*)/i);
