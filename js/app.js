@@ -635,6 +635,48 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Contacts Agenda UI Controller
+  const inputContactName = document.getElementById('inputContactName');
+  const inputContactPhone = document.getElementById('inputContactPhone');
+  const btnAddContact = document.getElementById('btnAddContact');
+  const contactsListDisplay = document.getElementById('contactsListDisplay');
+
+  function renderContactsUI() {
+    if (!contactsListDisplay) return;
+    const contacts = brain.getAllContacts();
+    const keys = Object.keys(contacts);
+    if (keys.length === 0) {
+      contactsListDisplay.textContent = 'No hay contactos guardados en tu agenda. Puedes añadir un contacto arriba o por voz.';
+      return;
+    }
+
+    contactsListDisplay.innerHTML = keys.map(k => 
+      `<span style="display:inline-block; background:rgba(255,255,255,0.1); border:1px solid var(--hud-glass-border); border-radius:10px; padding:2px 8px; margin:2px;">
+        👤 <strong>${k.toUpperCase()}</strong>: ${contacts[k]}
+        <button onclick="window.yarbisDeleteContact('${k}')" style="background:none; border:none; color:var(--color-danger); cursor:pointer; font-weight:bold; margin-left:4px;">✕</button>
+      </span>`
+    ).join('');
+  }
+
+  window.yarbisDeleteContact = (name) => {
+    brain.deleteContact(name);
+    renderContactsUI();
+  };
+
+  if (btnAddContact && inputContactName && inputContactPhone) {
+    btnAddContact.addEventListener('click', () => {
+      const name = inputContactName.value.trim();
+      const phone = inputContactPhone.value.trim();
+      if (name && phone) {
+        audioSynth.playClickSound();
+        brain.saveContact(name, phone);
+        inputContactName.value = '';
+        inputContactPhone.value = '';
+        renderContactsUI();
+      }
+    });
+  }
+
   // Settings Modal Controls
   btnSettings.addEventListener('click', () => {
     audioSynth.playClickSound();
@@ -642,6 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (inputUserName) inputUserName.value = brain.userName;
     if (inputGeminiKey) inputGeminiKey.value = brain.geminiApiKey;
     if (selectLanguage) selectLanguage.value = speechEngine.language || 'es-ES';
+    renderContactsUI();
     if (keyTestResult) {
       keyTestResult.textContent = brain.geminiApiKey
         ? '⚡ Clave Gemini configurada y activa.'

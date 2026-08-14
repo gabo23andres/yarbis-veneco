@@ -120,6 +120,51 @@ class YARBISBrain {
       }
     }
 
+  parseSpokenNumbers(text) {
+    if (!text) return '';
+    let str = text.toLowerCase();
+    const wordMap = {
+      'cero': '0', 'uno': '1', 'un': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
+      'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9', 'diez': '10',
+      'catorce': '14', 'quince': '15', 'veinte': '20', 'treinta': '30', 'cuarenta': '40', 'cincuenta': '50'
+    };
+
+    for (const [word, digit] of Object.entries(wordMap)) {
+      const reg = new RegExp(`\\b${word}\\b`, 'gi');
+      str = str.replace(reg, digit);
+    }
+    return str.replace(/(\d)\s+(?=\d)/g, '$1');
+  }
+
+  saveContact(name, phone) {
+    if (!name || !phone) return;
+    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+    contacts[name.toLowerCase().trim()] = phone.replace(/[^0-9\+]/g, '');
+    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
+  }
+
+  getContactPhone(name) {
+    if (!name) return null;
+    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+    const cleanName = name.toLowerCase().replace(/^(?:mi\s+)?/, '').trim();
+    if (contacts[cleanName]) return contacts[cleanName];
+
+    for (const [k, v] of Object.entries(contacts)) {
+      if (cleanName.includes(k) || k.includes(cleanName)) return v;
+    }
+    return null;
+  }
+
+  getAllContacts() {
+    return JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+  }
+
+  deleteContact(name) {
+    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+    delete contacts[name.toLowerCase().trim()];
+    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
+  }
+
     // -------------------------------------------------------------
     // INTENT: AUTOMATIC WHATSAPP MESSAGING & LAUNCH
     // -------------------------------------------------------------
@@ -144,7 +189,7 @@ class YARBISBrain {
       } else if (msgText) {
         waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msgText)}`;
         waDeepLink = `whatsapp://send?text=${encodeURIComponent(msgText)}`;
-        responseMsg = `Abriendo WhatsApp con su mensaje: "${msgText}", ${this.userName}.`;
+        responseMsg = `Abriendo WhatsApp con tu mensaje: "${msgText}", ${this.userName}.`;
       } else if (cleanPhone) {
         waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}`;
         waDeepLink = `whatsapp://send?phone=${cleanPhone}`;
@@ -161,18 +206,68 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: AUTOMATIC PHONE CALLS
+    // INTENT: ADVANCED AUTOMATIC PHONE CALLS & CONTACTS AGENDA
     // -------------------------------------------------------------
+    // Save Contact by Voice e.g. "guardar contacto Mamá numero 04141234567"
+    const saveContactMatch = text.match(/(?:guardar|agregar|nuevo)\s+contacto\s+(.*?)\s+(?:numero|número|telefono|teléfono)?\s*(\+?[0-9\s]{3,15})/i);
+    if (saveContactMatch) {
+      const cName = saveContactMatch[1].trim();
+      const cPhone = saveContactMatch[2].replace(/[^0-9\+]/g, '');
+      if (cName && cPhone) {
+        this.saveContact(cName, cPhone);
+        return {
+          textResponse: `He guardado a "${cName}" en tu agenda telefónica con el número ${cPhone}, ${this.userName}.`,
+          action: 'NONE',
+          themeChange: null
+        };
+      }
+    }
+
     if (clean.includes('llamar') || clean.includes('marcar') || clean.includes('llamada')) {
-      const callMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(\+?[0-9\s]{3,15})/i);
-      if (callMatch && callMatch[1]) {
-        const phoneNumber = callMatch[1].replace(/[^0-9\+]/g, '');
-        if (phoneNumber.length >= 3) {
+      // 1. Emergency Check
+      if (clean.includes('emergencia') || clean.includes('policia') || clean.includes('ambulancia') || clean.includes('bomberos')) {
+        return {
+          textResponse: `Iniciando llamada de emergencia al 911 de inmediato, ${this.userName}.`,
+          action: 'OPEN_URL',
+          url: 'tel:911',
+          deepLink: 'tel:911',
+          themeChange: null
+        };
+      }
+
+      // Convert spoken written number words (e.g., "cero cuatro catorce...") to digits
+      const convertedText = this.parseSpokenNumbers(text);
+
+      // 2. Direct Phone Digits Match
+      const callDigitsMatch = convertedText.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(\+?[0-9]{3,15})/i);
+      if (callDigitsMatch && callDigitsMatch[1]) {
+        const phoneNumber = callDigitsMatch[1];
+        return {
+          textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
+          action: 'OPEN_URL',
+          url: `tel:${phoneNumber}`,
+          deepLink: `tel:${phoneNumber}`,
+          themeChange: null
+        };
+      }
+
+      // 3. Contact Agenda Name Match e.g. "Llamar a Mamá"
+      const nameMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(.+)/i);
+      if (nameMatch && nameMatch[1]) {
+        const targetName = nameMatch[1].trim();
+        const foundPhone = this.getContactPhone(targetName);
+        if (foundPhone) {
           return {
-            textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
+            textResponse: `Llamando a ${targetName} al número ${foundPhone}, ${this.userName}.`,
             action: 'OPEN_URL',
-            url: `tel:${phoneNumber}`,
-            deepLink: `tel:${phoneNumber}`,
+            url: `tel:${foundPhone}`,
+            deepLink: `tel:${foundPhone}`,
+            themeChange: null
+          };
+        } else {
+          return {
+            textResponse: `No encontré el número de "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]" o dictarme los dígitos directamente.`,
+            action: 'NONE',
             themeChange: null
           };
         }
