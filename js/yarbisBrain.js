@@ -163,37 +163,66 @@ class YARBISBrain {
     const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
     delete contacts[name.toLowerCase().trim()];
     localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
-  }
-
     // -------------------------------------------------------------
-    // INTENT: AUTOMATIC WHATSAPP MESSAGING & LAUNCH
+    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING & LAUNCH
     // -------------------------------------------------------------
     if (clean.includes('whatsapp') || clean.includes('wasap') || clean.includes('guasap')) {
-      const phoneMatch = text.match(/(\+?[0-9]{7,15})/);
-      let cleanPhone = phoneMatch ? phoneMatch[1] : '';
+      const convertedText = this.parseSpokenNumbers(text);
+      let targetContactName = '';
+      let targetPhone = '';
+      let msgText = '';
 
-      let msgText = text
-        .replace(/.*(?:whatsapp|wasap|guasap)/i, '')
-        .replace(/^(?:a|al)?\s*\+?[0-9\s]{7,15}/i, '')
-        .replace(/^(?:que diga|diciendo|con el texto|mensaje|dile|para)\s+/i, '')
-        .trim();
+      // Pattern match e.g. "mandar whatsapp a Mamá que diga llego en 5 min"
+      const fullWaMatch = convertedText.match(/(?:mandar|enviar|escribir|hacer)?\s*(?:un\s+)?(?:mensaje\s+de\s+|mensaje\s+por\s+)?(?:whatsapp|wasap|guasap)\s+(?:a|para)?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?:que\s+diga|diciendo|con\s+el\s+texto|mensaje)?\s*(.*)/i);
+
+      if (fullWaMatch) {
+        const potentialTarget = fullWaMatch[1] ? fullWaMatch[1].trim() : '';
+        const potentialMsg = fullWaMatch[2] ? fullWaMatch[2].trim() : '';
+
+        const digitsOnly = potentialTarget.replace(/[^0-9\+]/g, '');
+        if (digitsOnly.length >= 7) {
+          targetPhone = digitsOnly;
+          msgText = potentialMsg;
+        } else if (potentialTarget && !['que', 'un', 'el', 'la', 'mi', 'mensaje'].includes(potentialTarget.toLowerCase())) {
+          targetContactName = potentialTarget;
+          const found = this.getContactPhone(targetContactName);
+          if (found) targetPhone = found;
+          msgText = potentialMsg;
+        } else {
+          msgText = (potentialTarget + ' ' + potentialMsg).trim();
+        }
+      }
+
+      // If no target phone found yet, check for raw numbers in text
+      if (!targetPhone) {
+        const phoneMatch = convertedText.match(/(\+?[0-9]{7,15})/);
+        if (phoneMatch) targetPhone = phoneMatch[1];
+      }
+
+      // Format WhatsApp Phone Number with Country Code (+58 for Venezuela 0414/0424/0412/0416/0426)
+      let formattedPhone = targetPhone.replace(/[^0-9]/g, '');
+      if (formattedPhone.startsWith('04')) {
+        formattedPhone = '58' + formattedPhone.substring(1);
+      }
 
       let waUrl = 'https://web.whatsapp.com';
       let waDeepLink = 'whatsapp://';
       let responseMsg = `Abriendo WhatsApp en tu celular, ${this.userName}.`;
 
-      if (cleanPhone && msgText) {
-        waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msgText)}`;
-        waDeepLink = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(msgText)}`;
-        responseMsg = `Abriendo WhatsApp con mensaje listo para ${cleanPhone}: "${msgText}", ${this.userName}.`;
+      const displayTarget = targetContactName ? targetContactName : (targetPhone ? targetPhone : '');
+
+      if (formattedPhone && msgText) {
+        waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(msgText)}`;
+        waDeepLink = `whatsapp://send?phone=${formattedPhone}&text=${encodeURIComponent(msgText)}`;
+        responseMsg = `Abriendo WhatsApp con mensaje listo para ${displayTarget || formattedPhone}: "${msgText}", ${this.userName}.`;
+      } else if (formattedPhone) {
+        waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}`;
+        waDeepLink = `whatsapp://send?phone=${formattedPhone}`;
+        responseMsg = `Abriendo chat de WhatsApp de ${displayTarget || formattedPhone}, ${this.userName}.`;
       } else if (msgText) {
         waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msgText)}`;
         waDeepLink = `whatsapp://send?text=${encodeURIComponent(msgText)}`;
         responseMsg = `Abriendo WhatsApp con tu mensaje: "${msgText}", ${this.userName}.`;
-      } else if (cleanPhone) {
-        waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}`;
-        waDeepLink = `whatsapp://send?phone=${cleanPhone}`;
-        responseMsg = `Abriendo WhatsApp para chatear con ${cleanPhone}, ${this.userName}.`;
       }
 
       return {
