@@ -582,10 +582,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  btnSend.addEventListener('click', submitTextInput);
-  textInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') submitTextInput();
-  });
+  if (btnSend) {
+    btnSend.addEventListener('click', submitTextInput);
+  }
+  if (textInput) {
+    textInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitTextInput();
+    });
+  }
 
   // Prompt Pills
   promptPills.forEach(pill => {
@@ -609,12 +613,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Mute Button
-  btnMute.addEventListener('click', () => {
-    isMuted = !isMuted;
-    audioSynth.setMuted(isMuted);
-    audioSynth.playClickSound();
-    btnMute.innerHTML = isMuted ? '🔇' : '🔊';
-  });
+  if (btnMute) {
+    btnMute.addEventListener('click', () => {
+      isMuted = !isMuted;
+      audioSynth.setMuted(isMuted);
+      audioSynth.playClickSound();
+      btnMute.innerHTML = isMuted ? '🔇' : '🔊';
+    });
+  }
 
   // AI Badge Status Updates
   const btnTestKey = document.getElementById('btnTestKey');
@@ -858,6 +864,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (transcriptScroll) transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
     }
   }
+
+  // Expose global methods for inline HTML onclick attributes
+  window.openSettings = openSettingsModal;
+  window.closeSettings = closeSettingsModal;
+  window.switchTab = switchMobileTab;
 
   // Set default active tab on mobile
   switchMobileTab('voice');

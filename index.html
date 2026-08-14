@@ -19,7 +19,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=5.1" />
+  <link rel="stylesheet" href="styles.css?v=6.0" />
 </head>
 <body>
 
@@ -30,9 +30,9 @@
 
     <!-- MOBILE TABS BAR (Solamente visible en dispositivos móviles) -->
     <nav class="mobile-nav-tabs" id="mobileNavTabs">
-      <button class="mobile-tab-btn active" data-tab="voice">🎙️ Voz</button>
-      <button class="mobile-tab-btn" data-tab="notes">📝 Notas</button>
-      <button class="mobile-tab-btn" data-tab="chat">💬 Chat</button>
+      <button type="button" class="mobile-tab-btn active" data-tab="voice" id="tabVoiceBtn" onclick="if(window.switchTab) window.switchTab('voice');">🎙️ Voz</button>
+      <button type="button" class="mobile-tab-btn" data-tab="notes" id="tabNotesBtn" onclick="if(window.switchTab) window.switchTab('notes');">📝 Notas</button>
+      <button type="button" class="mobile-tab-btn" data-tab="chat" id="tabChatBtn" onclick="if(window.switchTab) window.switchTab('chat');">💬 Chat</button>
     </nav>
     
     <!-- HEADER BAR -->
@@ -82,11 +82,11 @@
 
         <!-- Mic & Main Controls -->
         <div class="mic-controls">
-          <button class="btn-icon-secondary" id="btnContinuous" title="Modo Manos Libres (Escucha Continua)">🔄</button>
-          <button class="btn-mic-main" id="btnMic" title="Pulsar para hablar (Alt + M)">
+          <button type="button" class="btn-icon-secondary" id="btnContinuous" title="Modo Manos Libres (Escucha Continua)">🔄</button>
+          <button type="button" class="btn-mic-main" id="btnMic" title="Pulsar para hablar (Alt + M)">
             🎙️
           </button>
-          <button class="btn-icon-secondary" id="btnSettings" title="Configuración Personal">⚙️</button>
+          <button type="button" class="btn-icon-secondary" id="btnSettings" onclick="if(window.openSettings) window.openSettings();" title="Configuración Personal">⚙️</button>
         </div>
 
         <!-- Quick Web App Launcher -->
@@ -224,18 +224,18 @@
       </div>
 
       <div class="modal-actions">
-        <button class="btn-modal-close" id="btnCloseSettings">Cancelar</button>
-        <button class="btn-modal-save" id="btnSaveSettings">Guardar Cambios</button>
+        <button type="button" class="btn-modal-close" id="btnCloseSettings" onclick="if(window.closeSettings) window.closeSettings();">Cancelar</button>
+        <button type="button" class="btn-modal-save" id="btnSaveSettings">Guardar Cambios</button>
       </div>
     </div>
   </div>
 
   <!-- App Scripts -->
-  <script src="js/audioEffects.js?v=5.1"></script>
-  <script src="js/arcReactor.js?v=5.1"></script>
-  <script src="js/speechEngine.js?v=5.1"></script>
-  <script src="js/yarbisBrain.js?v=5.1"></script>
-  <script src="js/app.js?v=5.1"></script>
+  <script src="js/audioEffects.js?v=6.1"></script>
+  <script src="js/arcReactor.js?v=6.1"></script>
+  <script src="js/speechEngine.js?v=6.1"></script>
+  <script src="js/yarbisBrain.js?v=6.1"></script>
+  <script src="js/app.js?v=6.1"></script>
 
 </body>
 </html>
