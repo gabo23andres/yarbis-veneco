@@ -1279,11 +1279,13 @@ footer.hud-footer {
   }
 
   .app-launcher-grid {
+    width: 100%;
     max-width: 100%;
     overflow-x: auto;
     flex-wrap: nowrap;
-    justify-content: flex-start;
-    padding: 6px 4px;
+    justify-content: center;
+    padding: 6px 12px;
+    box-sizing: border-box;
     scrollbar-width: none;
   }
 
