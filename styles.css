@@ -352,7 +352,9 @@ canvas#waveformCanvas {
 .mic-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
 }
 
 .btn-mic-main {

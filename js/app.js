@@ -503,43 +503,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ==========================================
-     WEB APP QUICK LAUNCHER BINDINGS
-     ========================================== */
-  const webAppUrls = {
-    whatsapp: { name: 'WhatsApp Web', url: 'https://web.whatsapp.com' },
-    youtube: { name: 'YouTube', url: 'https://www.youtube.com' },
-    spotify: { name: 'Spotify', url: 'https://open.spotify.com' },
-    gmail: { name: 'Gmail', url: 'https://mail.google.com' },
-    maps: { name: 'Google Maps', url: 'https://maps.google.com' },
-    chatgpt: { name: 'ChatGPT', url: 'https://chatgpt.com' },
-    drive: { name: 'Google Drive', url: 'https://drive.google.com' }
-  };
-
-  appPills.forEach(pill => {
-    pill.addEventListener('click', () => {
-      audioSynth.playClickSound();
-      const appKey = pill.getAttribute('data-launch');
-      const appInfo = webAppUrls[appKey];
-      if (appInfo) {
-        window.open(appInfo.url, '_blank');
-        const msg = `Abriendo ${appInfo.name}, ${brain.userName}.`;
-        appendMessage(brain.assistantName, msg);
-        speechEngine.speak(msg);
-      }
-    });
-  });
-
-  /* ==========================================
      GENERAL EVENT LISTENERS & SHORTCUTS
      ========================================== */
 
   // Mic Button Click
-  btnMic.addEventListener('click', () => {
-    audioSynth.initContext();
-    audioSynth.playClickSound();
-    speechEngine.primeSpeechSynthesis();
-    speechEngine.toggleListening();
-  });
+  if (btnMic) {
+    btnMic.addEventListener('click', () => {
+      audioSynth.initContext();
+      audioSynth.playClickSound();
+      speechEngine.primeSpeechSynthesis();
+      speechEngine.toggleListening();
+    });
+  }
 
   // Continuous Hands-Free Listening Toggle
   const btnContinuous = document.getElementById('btnContinuous');
