@@ -1,6 +1,6 @@
 /* ==========================================================================
-   YARBIS - SPEECH ENGINE (STT & TTS) 3.5 - MOBILE OPTIMIZED
-   Mobile Mic Permission Warm-up, WakeLock & Cross-Browser Recognition
+   YARBIS - SPEECH ENGINE (STT & TTS) 4.0 - iOS & MOBILE OPTIMIZED
+   Instant iOS Safari & Android Webkit Speech Commitment & Prime Audio Engine
    ========================================================================== */
 
 class YARBISSpeechEngine {
@@ -8,13 +8,18 @@ class YARBISSpeechEngine {
     this.recognition = null;
     this.synthesis = window.speechSynthesis;
     this.selectedVoice = null;
-    this.language = 'es-ES'; // Default Spanish
+    this.language = 'es-ES';
 
     this.isListening = false;
     this.isSpeaking = false;
     this.continuousMode = false;
     this.hasMicPermission = false;
+    this.hasPrimedAudio = false;
     this.wakeLock = null;
+
+    this.lastRecognizedText = '';
+    this.silenceTimer = null;
+    this.hasCommitted = false;
 
     // Event Callbacks
     this.onSpeechResult = null; // (text) => {}
@@ -28,14 +33,13 @@ class YARBISSpeechEngine {
   }
 
   /* ==========================================
-     MOBILE PERMISSIONS & WAKELOCK
+     MOBILE PERMISSIONS & WAKELOCK & AUDIO UNLOCK
      ========================================== */
   async requestMicrophonePermission() {
     if (this.hasMicPermission) return true;
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Stop dummy tracks once permission is granted
         stream.getTracks().forEach(track => track.stop());
         this.hasMicPermission = true;
         return true;
@@ -48,6 +52,17 @@ class YARBISSpeechEngine {
       }
     }
     return true;
+  }
+
+  primeSpeechSynthesis() {
+    if (this.synthesis && !this.hasPrimedAudio) {
+      try {
+        const emptyUtterance = new SpeechSynthesisUtterance('');
+        emptyUtterance.volume = 0;
+        this.synthesis.speak(emptyUtterance);
+        this.hasPrimedAudio = true;
+      } catch (e) {}
+    }
   }
 
   async requestWakeLock() {
@@ -88,6 +103,8 @@ class YARBISSpeechEngine {
 
     this.recognition.onstart = () => {
       this.isListening = true;
+      this.hasCommitted = false;
+      this.lastRecognizedText = '';
       this.requestWakeLock();
       if (this.onStateChange) this.onStateChange('LISTENING');
       if (window.audioSynth) window.audioSynth.playMicChime();
@@ -106,14 +123,32 @@ class YARBISSpeechEngine {
         }
       }
 
-      if (interim && this.onInterimResult) {
-        this.onInterimResult(interim);
-        if (this.onAudioLevel) this.onAudioLevel(0.4 + Math.random() * 0.5);
+      const currentText = (final || interim || '').trim();
+
+      if (currentText) {
+        this.lastRecognizedText = currentText;
+        if (this.onInterimResult) {
+          this.onInterimResult(currentText);
+          if (this.onAudioLevel) this.onAudioLevel(0.4 + Math.random() * 0.5);
+        }
       }
 
-      if (final) {
-        if (this.onStateChange) this.onStateChange('PROCESSING');
-        if (this.onSpeechResult) this.onSpeechResult(final.trim());
+      // Clear existing silence commitment timer
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
+
+      // If explicit final flag received, commit immediately
+      if (final && final.trim()) {
+        this.commitSpeechResult(final.trim());
+      } else if (currentText) {
+        // Fallback silence timer for iOS Safari where isFinal is often delayed
+        this.silenceTimer = setTimeout(() => {
+          if (this.lastRecognizedText && !this.hasCommitted) {
+            this.commitSpeechResult(this.lastRecognizedText);
+          }
+        }, 1300);
       }
     };
 
@@ -122,17 +157,28 @@ class YARBISSpeechEngine {
       this.isListening = false;
       this.releaseWakeLock();
 
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
+
+      // If we accumulated speech text before error occurred, commit it anyway
+      if (this.lastRecognizedText && !this.hasCommitted) {
+        this.commitSpeechResult(this.lastRecognizedText);
+        return;
+      }
+
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         if (this.onPermissionError) {
           this.onPermissionError('El micrófono está bloqueado. Toca el icono del candado 🔒 en la barra superior de tu navegador y selecciona "Permitir micrófono".');
         }
       } else if (event.error === 'no-speech') {
         if (this.onPermissionError) {
-          this.onPermissionError('No detecté sonido de voz. Toca el micrófono de nuevo e intenta hablar fuerte y claro.');
+          this.onPermissionError('No detecté sonido de voz. Toca el micrófono e intenta hablar de nuevo.');
         }
       } else if (event.error === 'network') {
         if (this.onPermissionError) {
-          this.onPermissionError('Error de red al conectar con el servicio de reconocimiento de voz. Verifica tu conexión.');
+          this.onPermissionError('Error de red al conectar con el servicio de voz. Revisa tu conexión a internet.');
         }
       }
 
@@ -145,15 +191,42 @@ class YARBISSpeechEngine {
       this.isListening = false;
       this.releaseWakeLock();
 
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
+
+      // Commit any unhandled accumulated text on iOS Safari onend
+      if (this.lastRecognizedText && !this.hasCommitted) {
+        this.commitSpeechResult(this.lastRecognizedText);
+        return;
+      }
+
       if (!this.isSpeaking && this.onStateChange) {
         this.onStateChange('STANDBY');
       }
 
-      // Continuous mode auto-restart for mobile
       if (this.continuousMode && !this.isSpeaking) {
         setTimeout(() => this.startListening(), 400);
       }
     };
+  }
+
+  commitSpeechResult(text) {
+    if (this.hasCommitted || !text || !text.trim()) return;
+    this.hasCommitted = true;
+
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+
+    const cleanText = text.trim();
+    this.lastRecognizedText = '';
+    this.stopListening();
+
+    if (this.onStateChange) this.onStateChange('PROCESSING');
+    if (this.onSpeechResult) this.onSpeechResult(cleanText);
   }
 
   setLanguage(langCode) {
@@ -168,6 +241,9 @@ class YARBISSpeechEngine {
     if (this.isSpeaking) {
       this.stopSpeaking();
     }
+
+    // Unlock iOS Audio
+    this.primeSpeechSynthesis();
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -184,6 +260,8 @@ class YARBISSpeechEngine {
     if (this.recognition && !this.isListening) {
       try {
         this.isListening = true;
+        this.hasCommitted = false;
+        this.lastRecognizedText = '';
         this.requestWakeLock();
         if (this.onStateChange) this.onStateChange('LISTENING');
         if (window.audioSynth) window.audioSynth.playMicChime();
@@ -191,7 +269,6 @@ class YARBISSpeechEngine {
         this.recognition.start();
       } catch (e) {
         console.warn('Recognition start exception:', e);
-        // If already started exception occurs, stop and retry
         try {
           this.recognition.stop();
           setTimeout(() => this.recognition.start(), 100);
@@ -239,7 +316,6 @@ class YARBISSpeechEngine {
 
     const langPrefix = this.language.substring(0, 2);
 
-    // Priority: Male / Natural sounding Spanish voices -> Any Spanish voice -> Default
     const preferredVoice = voices.find(v =>
       v.lang.startsWith(langPrefix) && (
         v.name.includes('Jorge') ||
@@ -257,10 +333,8 @@ class YARBISSpeechEngine {
   speak(text) {
     if (!this.synthesis) return;
 
-    // Cancel current speech if any
     this.synthesis.cancel();
 
-    // If mic is currently listening, pause it
     if (this.isListening) {
       this.stopListening();
     }
@@ -271,7 +345,6 @@ class YARBISSpeechEngine {
     }
     utterance.lang = this.language;
 
-    // Pitch & Speed tuned for futuristic tone
     utterance.pitch = 0.98;
     utterance.rate = 1.04;
 

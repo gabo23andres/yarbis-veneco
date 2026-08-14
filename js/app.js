@@ -137,7 +137,10 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   speechEngine.onInterimResult = (interimText) => {
-    stateValue.textContent = `"${interimText.substring(0, 22)}..."`;
+    if (stateValue) {
+      stateValue.textContent = `🎙️ "${interimText.substring(0, 30)}"`;
+      stateValue.style.color = 'var(--color-danger)';
+    }
   };
 
   // Central User Command Handler
@@ -475,6 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnMic.addEventListener('click', () => {
     audioSynth.initContext();
     audioSynth.playClickSound();
+    speechEngine.primeSpeechSynthesis();
     speechEngine.toggleListening();
   });
 
