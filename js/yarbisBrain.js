@@ -201,11 +201,13 @@ class YARBISBrain {
     if (clean.includes('youtube') || clean.includes('abrir youtube') || clean.includes('abre youtube')) {
       const searchMatch = text.match(/(?:busca|buscar|poner|pon|reproducir|reproduce)\s+(.*?)(?:\s+en youtube|$)/i);
       let targetUrl = 'https://www.youtube.com';
-      let responseMsg = `Abriendo YouTube en una nueva pestaña, ${this.userName}.`;
+      let deepLink = 'youtube://';
+      let responseMsg = `Abriendo YouTube en tu teléfono, ${this.userName}.`;
 
       if (searchMatch && searchMatch[1] && searchMatch[1] !== 'youtube' && searchMatch[1] !== 'abrir youtube' && searchMatch[1] !== 'abre youtube') {
         const query = searchMatch[1].trim();
         targetUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+        deepLink = `youtube://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
         responseMsg = `Buscando "${query}" en YouTube, ${this.userName}.`;
       }
 
@@ -213,38 +215,48 @@ class YARBISBrain {
         textResponse: responseMsg,
         action: 'OPEN_URL',
         url: targetUrl,
+        deepLink: deepLink,
+        themeChange: null
+      };
+    }
+
+    // Intent: Query List of Supported Applications
+    if (clean.includes('que aplicaciones') || clean.includes('cuales aplicaciones') || clean.includes('mostrar aplicaciones') || clean.includes('lista de aplicaciones') || clean.includes('ver aplicaciones')) {
+      return {
+        textResponse: `Puedo abrir las aplicaciones de tu teléfono como: WhatsApp, YouTube, Spotify, Gmail, Teléfono, Mensajes, Google Maps, ChatGPT, Instagram, Netflix, X (Twitter), Facebook, TikTok y Google Drive, ${this.userName}. Simplemente dime "abrir" seguido de la aplicación.`,
+        action: 'SHOW_APPS',
         themeChange: null
       };
     }
 
     // -------------------------------------------------------------
-    // INTENT 5: WEB APPLICATIONS LAUNCHER
+    // INTENT 5: WEB APPLICATIONS & NATIVE MOBILE APP LAUNCHER
     // -------------------------------------------------------------
     const webApps = [
-      { keys: ['whatsapp', 'wasap', 'guasap'], name: 'WhatsApp Web', url: 'https://web.whatsapp.com' },
-      { keys: ['spotify', 'musica spotify'], name: 'Spotify', url: 'https://open.spotify.com' },
-      { keys: ['gmail', 'correo', 'mail'], name: 'Gmail', url: 'https://mail.google.com' },
-      { keys: ['netflix', 'peliculas'], name: 'Netflix', url: 'https://www.netflix.com' },
-      { keys: ['instagram', 'insta'], name: 'Instagram', url: 'https://www.instagram.com' },
-      { keys: ['twitter', 'x.com', 'x '], name: 'X (Twitter)', url: 'https://x.com' },
-      { keys: ['facebook', 'face'], name: 'Facebook', url: 'https://www.facebook.com' },
-      { keys: ['tiktok'], name: 'TikTok', url: 'https://www.tiktok.com' },
-      { keys: ['twitch'], name: 'Twitch', url: 'https://www.twitch.tv' },
-      { keys: ['github'], name: 'GitHub', url: 'https://github.com' },
-      { keys: ['chatgpt', 'chat gpt', 'openai'], name: 'ChatGPT', url: 'https://chatgpt.com' },
-      { keys: ['maps', 'google maps', 'mapa', 'mapas'], name: 'Google Maps', url: 'https://maps.google.com' },
-      { keys: ['drive', 'google drive'], name: 'Google Drive', url: 'https://drive.google.com' },
-      { keys: ['traductor', 'google translate'], name: 'Traductor de Google', url: 'https://translate.google.com' },
-      { keys: ['noticias', 'google news'], name: 'Google Noticias', url: 'https://news.google.com' },
-      { keys: ['linkedin'], name: 'LinkedIn', url: 'https://www.linkedin.com' }
+      { keys: ['whatsapp', 'wasap', 'guasap'], name: 'WhatsApp', url: 'https://web.whatsapp.com', deepLink: 'whatsapp://' },
+      { keys: ['spotify', 'musica spotify'], name: 'Spotify', url: 'https://open.spotify.com', deepLink: 'spotify://' },
+      { keys: ['gmail', 'correo', 'mail'], name: 'Gmail', url: 'https://mail.google.com', deepLink: 'googlegmail://' },
+      { keys: ['netflix', 'peliculas'], name: 'Netflix', url: 'https://www.netflix.com', deepLink: 'nflx://' },
+      { keys: ['instagram', 'insta'], name: 'Instagram', url: 'https://www.instagram.com', deepLink: 'instagram://' },
+      { keys: ['twitter', 'x.com', 'x '], name: 'X (Twitter)', url: 'https://x.com', deepLink: 'twitter://' },
+      { keys: ['facebook', 'face'], name: 'Facebook', url: 'https://www.facebook.com', deepLink: 'fb://' },
+      { keys: ['tiktok'], name: 'TikTok', url: 'https://www.tiktok.com', deepLink: 'snssdk1233://' },
+      { keys: ['twitch'], name: 'Twitch', url: 'https://www.twitch.tv', deepLink: 'twitch://' },
+      { keys: ['github'], name: 'GitHub', url: 'https://github.com', deepLink: 'https://github.com' },
+      { keys: ['chatgpt', 'chat gpt', 'openai'], name: 'ChatGPT', url: 'https://chatgpt.com', deepLink: 'chatgpt://' },
+      { keys: ['maps', 'google maps', 'mapa', 'mapas'], name: 'Google Maps', url: 'https://maps.google.com', deepLink: 'comgooglemaps://' },
+      { keys: ['drive', 'google drive'], name: 'Google Drive', url: 'https://drive.google.com', deepLink: 'googledrive://' },
+      { keys: ['telefono', 'llamada', 'llamar', 'marcar'], name: 'Teléfono', url: 'tel:', deepLink: 'tel:' },
+      { keys: ['mensajes', 'sms', 'mensaje de texto'], name: 'Mensajes SMS', url: 'sms:', deepLink: 'sms:' }
     ];
 
     for (const app of webApps) {
       if (app.keys.some(k => clean.includes(k))) {
         return {
-          textResponse: `Abriendo ${app.name} en una nueva pestaña, ${this.userName}.`,
+          textResponse: `Abriendo la aplicación ${app.name} en tu teléfono, ${this.userName}.`,
           action: 'OPEN_URL',
           url: app.url,
+          deepLink: app.deepLink,
           themeChange: null
         };
       }

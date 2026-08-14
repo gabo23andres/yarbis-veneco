@@ -171,8 +171,8 @@ document.addEventListener('DOMContentLoaded', () => {
       transcriptScroll.innerHTML = '';
     } else if (response.action === 'SCAN') {
       if (radarStatus) radarStatus.textContent = "AMENAZAS DETECTADAS: 0 • PERÍMETRO SEGURO";
-    } else if (response.action === 'OPEN_URL' && response.url) {
-      window.open(response.url, '_blank');
+    } else if (response.action === 'OPEN_URL') {
+      launchApp(response.url, response.deepLink);
     } else if (response.action === 'ADD_NOTE' && response.noteText) {
       addNote(response.noteText);
     } else if (response.action === 'SHOW_NOTES') {
@@ -223,6 +223,22 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       bodyDiv.textContent = messageText;
       transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
+    }
+  }
+
+  // Smart Application Launcher for Mobile Native Apps & Web
+  function launchApp(webUrl, deepLink) {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile && deepLink) {
+      // Direct Deep Link launch for native mobile apps
+      window.location.href = deepLink;
+      setTimeout(() => {
+        if (webUrl && !document.hidden) {
+          window.open(webUrl, '_blank');
+        }
+      }, 1200);
+    } else if (webUrl) {
+      window.open(webUrl, '_blank');
     }
   }
 
