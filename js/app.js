@@ -188,6 +188,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Append Assistant Response
     appendMessage(brain.assistantName, response.textResponse, true);
 
+    // If opening an app, call, or whatsapp, attach interactive launch button
+    if (response.action === 'OPEN_URL') {
+      const isCall = (response.deepLink && response.deepLink.startsWith('tel:')) || (response.url && response.url.startsWith('tel:'));
+      const isWa = (response.deepLink && response.deepLink.includes('whatsapp')) || (response.url && response.url.includes('whatsapp'));
+      
+      const btnLabel = isCall ? '📞 Tocar para Iniciar Llamada' : (isWa ? '💬 Tocar para Abrir WhatsApp' : '🚀 Abrir Aplicación');
+      const actionUrl = response.deepLink || response.url;
+
+      const launchCard = document.createElement('div');
+      launchCard.style.marginTop = '8px';
+      launchCard.innerHTML = `<a href="${actionUrl}" style="display:inline-block; background:var(--color-primary); color:#04070d; font-weight:700; font-size:0.78rem; padding:8px 16px; border-radius:20px; text-decoration:none; box-shadow:0 0 15px var(--hud-glow);">${btnLabel}</a>`;
+      transcriptScroll.appendChild(launchCard);
+      transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
+
+      launchApp(response.url, response.deepLink);
+    }
+
     // Speak Response
     speechEngine.speak(response.textResponse);
   }
@@ -233,18 +250,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!targetUrl) return;
 
-    if (isMobile) {
-      // Create a native anchor click event which allows iOS & Android OS to handle native app deep links directly
-      const a = document.createElement('a');
-      a.href = targetUrl;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
+    if (targetUrl.startsWith('tel:') || targetUrl.startsWith('whatsapp:') || targetUrl.startsWith('sms:') || targetUrl.startsWith('whatsapp-business:')) {
       setTimeout(() => {
-        if (document.body.contains(a)) {
-          document.body.removeChild(a);
-        }
-      }, 500);
+        window.location.href = targetUrl;
+      }, 600);
+    } else if (isMobile) {
+      setTimeout(() => {
+        window.location.href = targetUrl;
+      }, 600);
     } else {
       window.open(webUrl || targetUrl, '_blank');
     }
