@@ -1,6 +1,6 @@
 /* ==========================================================================
-   YARBIS - CONVERSATIONAL BRAIN & INTENT PROCESSOR 3.0
-   Personal Assistant AI Personality, Speech Intent Parser & Gemini Connector
+   YARBIS - CONVERSATIONAL BRAIN & INTENT PROCESSOR 4.0 - ADVANCED VOICE CALLING
+   Personal Assistant AI Personality, Contact Agenda & Automatic WhatsApp Engine
    ========================================================================== */
 
 class YARBISBrain {
@@ -8,6 +8,18 @@ class YARBISBrain {
     this.geminiApiKey = localStorage.getItem('yarbis_gemini_api_key') || '';
     this.assistantName = localStorage.getItem('yarbis_assistant_name') || 'YARBIS Veneco';
     this.userName = localStorage.getItem('yarbis_user_name') || 'Señor';
+
+    // Seed default contacts agenda if empty
+    if (!localStorage.getItem('yarbis_contacts')) {
+      const defaultContacts = {
+        'mamá': '04141234567',
+        'papá': '04249876543',
+        'pedro': '04121112233',
+        'carlos': '04165554433',
+        'maría': '04149998877'
+      };
+      localStorage.setItem('yarbis_contacts', JSON.stringify(defaultContacts));
+    }
   }
 
   setApiKey(key) {
@@ -26,9 +38,57 @@ class YARBISBrain {
     localStorage.setItem('yarbis_user_name', this.userName);
   }
 
+  /* ==========================================
+     CONTACTS AGENDA & HELPER UTILITIES
+     ========================================== */
+  parseSpokenNumbers(text) {
+    if (!text) return '';
+    let str = text.toLowerCase();
+    const wordMap = {
+      'cero': '0', 'uno': '1', 'un': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
+      'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9', 'diez': '10',
+      'catorce': '14', 'quince': '15', 'veinte': '20', 'treinta': '30', 'cuarenta': '40', 'cincuenta': '50'
+    };
+
+    for (const [word, digit] of Object.entries(wordMap)) {
+      const reg = new RegExp(`\\b${word}\\b`, 'gi');
+      str = str.replace(reg, digit);
+    }
+    return str.replace(/(\d)\s+(?=\d)/g, '$1');
+  }
+
+  saveContact(name, phone) {
+    if (!name || !phone) return;
+    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+    contacts[name.toLowerCase().trim()] = phone.replace(/[^0-9\+]/g, '');
+    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
+  }
+
+  getContactPhone(name) {
+    if (!name) return null;
+    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+    const cleanName = name.toLowerCase().replace(/^(?:a\s+|mi\s+|al\s+|contacto\s+)/g, '').trim();
+    if (contacts[cleanName]) return contacts[cleanName];
+
+    for (const [k, v] of Object.entries(contacts)) {
+      if (cleanName.includes(k) || k.includes(cleanName)) return v;
+    }
+    return null;
+  }
+
+  getAllContacts() {
+    return JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+  }
+
+  deleteContact(name) {
+    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
+    delete contacts[name.toLowerCase().trim()];
+    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
+  }
+
   /**
    * Main Process Function
-   * Returns: { textResponse, action, themeChange, noteText, durationSeconds, url, soundFx }
+   * Returns: { textResponse, action, themeChange, noteText, durationSeconds, url, deepLink, soundFx }
    */
   async processCommand(userText) {
     const text = userText.toLowerCase().trim();
@@ -64,7 +124,7 @@ class YARBISBrain {
         };
       }
     } catch (err) {
-        console.warn('Free AI query failed:', err);
+      console.warn('Free AI query failed:', err);
     }
 
     // 4. Fallback Smart Response
@@ -79,14 +139,12 @@ class YARBISBrain {
    * Check Built-in Intents & Voice Commands
    */
   async checkLocalIntents(text, originalUserText) {
-    // Clean text punctuation
     const clean = text.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '');
 
     // -------------------------------------------------------------
     // INTENT 1: TIMERS & COUNTDOWNS
     // -------------------------------------------------------------
     if (clean.includes('temporizador') || clean.includes('cuenta regresiva') || clean.includes('alarma') || clean.includes('avísame en') || clean.includes('avisame en')) {
-      // Cancel timer
       if (clean.includes('cancelar') || clean.includes('detener') || clean.includes('quitar') || clean.includes('borrar')) {
         return {
           textResponse: `Temporizador cancelado correctamente, ${this.userName}.`,
@@ -95,7 +153,6 @@ class YARBISBrain {
         };
       }
 
-      // Match minutes or seconds
       const timeMatch = clean.match(/(\d+)\s*(minuto|minutos|segundo|segundos|min|seg)/i);
       if (timeMatch) {
         const val = parseInt(timeMatch[1], 10);
@@ -120,51 +177,77 @@ class YARBISBrain {
       }
     }
 
-  parseSpokenNumbers(text) {
-    if (!text) return '';
-    let str = text.toLowerCase();
-    const wordMap = {
-      'cero': '0', 'uno': '1', 'un': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
-      'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9', 'diez': '10',
-      'catorce': '14', 'quince': '15', 'veinte': '20', 'treinta': '30', 'cuarenta': '40', 'cincuenta': '50'
-    };
-
-    for (const [word, digit] of Object.entries(wordMap)) {
-      const reg = new RegExp(`\\b${word}\\b`, 'gi');
-      str = str.replace(reg, digit);
-    }
-    return str.replace(/(\d)\s+(?=\d)/g, '$1');
-  }
-
-  saveContact(name, phone) {
-    if (!name || !phone) return;
-    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-    contacts[name.toLowerCase().trim()] = phone.replace(/[^0-9\+]/g, '');
-    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
-  }
-
-  getContactPhone(name) {
-    if (!name) return null;
-    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-    const cleanName = name.toLowerCase().replace(/^(?:mi\s+)?/, '').trim();
-    if (contacts[cleanName]) return contacts[cleanName];
-
-    for (const [k, v] of Object.entries(contacts)) {
-      if (cleanName.includes(k) || k.includes(cleanName)) return v;
-    }
-    return null;
-  }
-
-  getAllContacts() {
-    return JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-  }
-
-  deleteContact(name) {
-    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-    delete contacts[name.toLowerCase().trim()];
-    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
     // -------------------------------------------------------------
-    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING & LAUNCH
+    // INTENT: ADVANCED AUTOMATIC PHONE CALLS (POR NOMBRE O NÚMERO)
+    // -------------------------------------------------------------
+    // Save Contact by Voice e.g. "guardar contacto Mamá numero 04141234567"
+    const saveContactMatch = text.match(/(?:guardar|agregar|nuevo)\s+(?:contacto\s+)?(.*?)\s+(?:numero|número|telefono|teléfono)?\s*(\+?[0-9\s]{3,15})/i);
+    if (saveContactMatch) {
+      const cName = saveContactMatch[1].replace(/^(?:contacto|a|mi)\s+/i, '').trim();
+      const cPhone = saveContactMatch[2].replace(/[^0-9\+]/g, '');
+      if (cName && cPhone) {
+        this.saveContact(cName, cPhone);
+        return {
+          textResponse: `He guardado a "${cName}" en tu agenda telefónica con el número ${cPhone}, ${this.userName}.`,
+          action: 'NONE',
+          themeChange: null
+        };
+      }
+    }
+
+    if (clean.includes('llamar') || clean.includes('marcar') || clean.includes('llamada')) {
+      // Emergency Check
+      if (clean.includes('emergencia') || clean.includes('policia') || clean.includes('ambulancia') || clean.includes('bomberos')) {
+        return {
+          textResponse: `Iniciando llamada de emergencia al 911 de inmediato, ${this.userName}.`,
+          action: 'OPEN_URL',
+          url: 'tel:911',
+          deepLink: 'tel:911',
+          themeChange: null
+        };
+      }
+
+      // Convert spoken number words e.g. "cero cuatro catorce..." to digits
+      const convertedText = this.parseSpokenNumbers(text);
+
+      // Check digits call first e.g. "Llamar al 04141234567"
+      const callDigitsMatch = convertedText.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(\+?[0-9]{3,15})/i);
+      if (callDigitsMatch && callDigitsMatch[1]) {
+        const phoneNumber = callDigitsMatch[1];
+        return {
+          textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
+          action: 'OPEN_URL',
+          url: `tel:${phoneNumber}`,
+          deepLink: `tel:${phoneNumber}`,
+          themeChange: null
+        };
+      }
+
+      // Check Contact Agenda Name Match e.g. "Llamar a Mamá", "Llamar a Pedro", "Llamar a Carlos"
+      const nameMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al|a\s+mi)?\s*(.+)/i);
+      if (nameMatch && nameMatch[1]) {
+        const targetName = nameMatch[1].trim();
+        const foundPhone = this.getContactPhone(targetName);
+        if (foundPhone) {
+          return {
+            textResponse: `Llamando a ${targetName.toUpperCase()} al número ${foundPhone}, ${this.userName}.`,
+            action: 'OPEN_URL',
+            url: `tel:${foundPhone}`,
+            deepLink: `tel:${foundPhone}`,
+            themeChange: null
+          };
+        } else {
+          return {
+            textResponse: `No encontré a "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]" o dictarme los dígitos.`,
+            action: 'NONE',
+            themeChange: null
+          };
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING (POR NOMBRE O NÚMERO)
     // -------------------------------------------------------------
     if (clean.includes('whatsapp') || clean.includes('wasap') || clean.includes('guasap')) {
       const convertedText = this.parseSpokenNumbers(text);
@@ -173,7 +256,7 @@ class YARBISBrain {
       let msgText = '';
 
       // Pattern match e.g. "mandar whatsapp a Mamá que diga llego en 5 min"
-      const fullWaMatch = convertedText.match(/(?:mandar|enviar|escribir|hacer)?\s*(?:un\s+)?(?:mensaje\s+de\s+|mensaje\s+por\s+)?(?:whatsapp|wasap|guasap)\s+(?:a|para)?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?:que\s+diga|diciendo|con\s+el\s+texto|mensaje)?\s*(.*)/i);
+      const fullWaMatch = convertedText.match(/(?:mandar|enviar|escribir|hacer)?\s*(?:un\s+)?(?:mensaje\s+de\s+|mensaje\s+por\s+)?(?:whatsapp|wasap|guasap)\s+(?:a|para|al)?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?:que\s+diga|diciendo|con\s+el\s+texto|mensaje)?\s*(.*)/i);
 
       if (fullWaMatch) {
         const potentialTarget = fullWaMatch[1] ? fullWaMatch[1].trim() : '';
@@ -193,7 +276,6 @@ class YARBISBrain {
         }
       }
 
-      // If no target phone found yet, check for raw numbers in text
       if (!targetPhone) {
         const phoneMatch = convertedText.match(/(\+?[0-9]{7,15})/);
         if (phoneMatch) targetPhone = phoneMatch[1];
@@ -235,75 +317,6 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: ADVANCED AUTOMATIC PHONE CALLS & CONTACTS AGENDA
-    // -------------------------------------------------------------
-    // Save Contact by Voice e.g. "guardar contacto Mamá numero 04141234567"
-    const saveContactMatch = text.match(/(?:guardar|agregar|nuevo)\s+contacto\s+(.*?)\s+(?:numero|número|telefono|teléfono)?\s*(\+?[0-9\s]{3,15})/i);
-    if (saveContactMatch) {
-      const cName = saveContactMatch[1].trim();
-      const cPhone = saveContactMatch[2].replace(/[^0-9\+]/g, '');
-      if (cName && cPhone) {
-        this.saveContact(cName, cPhone);
-        return {
-          textResponse: `He guardado a "${cName}" en tu agenda telefónica con el número ${cPhone}, ${this.userName}.`,
-          action: 'NONE',
-          themeChange: null
-        };
-      }
-    }
-
-    if (clean.includes('llamar') || clean.includes('marcar') || clean.includes('llamada')) {
-      // 1. Emergency Check
-      if (clean.includes('emergencia') || clean.includes('policia') || clean.includes('ambulancia') || clean.includes('bomberos')) {
-        return {
-          textResponse: `Iniciando llamada de emergencia al 911 de inmediato, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: 'tel:911',
-          deepLink: 'tel:911',
-          themeChange: null
-        };
-      }
-
-      // Convert spoken written number words (e.g., "cero cuatro catorce...") to digits
-      const convertedText = this.parseSpokenNumbers(text);
-
-      // 2. Direct Phone Digits Match
-      const callDigitsMatch = convertedText.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(\+?[0-9]{3,15})/i);
-      if (callDigitsMatch && callDigitsMatch[1]) {
-        const phoneNumber = callDigitsMatch[1];
-        return {
-          textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: `tel:${phoneNumber}`,
-          deepLink: `tel:${phoneNumber}`,
-          themeChange: null
-        };
-      }
-
-      // 3. Contact Agenda Name Match e.g. "Llamar a Mamá"
-      const nameMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(.+)/i);
-      if (nameMatch && nameMatch[1]) {
-        const targetName = nameMatch[1].trim();
-        const foundPhone = this.getContactPhone(targetName);
-        if (foundPhone) {
-          return {
-            textResponse: `Llamando a ${targetName} al número ${foundPhone}, ${this.userName}.`,
-            action: 'OPEN_URL',
-            url: `tel:${foundPhone}`,
-            deepLink: `tel:${foundPhone}`,
-            themeChange: null
-          };
-        } else {
-          return {
-            textResponse: `No encontré el número de "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]" o dictarme los dígitos directamente.`,
-            action: 'NONE',
-            themeChange: null
-          };
-        }
-      }
-    }
-
-    // -------------------------------------------------------------
     // INTENT: ARMOR PROTOCOL THEMES
     // -------------------------------------------------------------
     if (clean.includes('protocolo hulkbuster') || clean.includes('modo hulkbuster') || clean.includes('tema morado')) {
@@ -342,11 +355,9 @@ class YARBISBrain {
     // -------------------------------------------------------------
     // INTENT 2: PERSONAL NOTES & REMINDERS
     // -------------------------------------------------------------
-    // Add Note
     const addNoteMatch = text.match(/(?:agrega|agregar|nueva|crear|guarda|guardar|recuérdame|recordarme|recordar)\s+(?:nota|recordatorio)?\s*(.+)/i);
     if (addNoteMatch && addNoteMatch[1] && !clean.startsWith('mis notas') && !clean.startsWith('ver notas')) {
       let noteText = addNoteMatch[1].trim();
-      // Cleanup leading trigger words if present in captured group
       noteText = noteText.replace(/^(que|de|para|nota|recordatorio)\s+/i, '');
 
       if (noteText.length > 1) {
@@ -359,7 +370,6 @@ class YARBISBrain {
       }
     }
 
-    // View Notes
     if (clean.includes('mis notas') || clean.includes('ver notas') || clean.includes('mostrar notas') || clean.includes('recordatorios')) {
       return {
         textResponse: `Abriendo y mostrando su lista de notas y recordatorios en el panel principal, ${this.userName}.`,
@@ -368,7 +378,6 @@ class YARBISBrain {
       };
     }
 
-    // Clear All Notes
     if (clean.includes('borrar todas las notas') || clean.includes('limpiar notas') || clean.includes('eliminar notas')) {
       return {
         textResponse: `Todas las notas y recordatorios han sido eliminados de su lista, ${this.userName}.`,
@@ -381,7 +390,6 @@ class YARBISBrain {
     // INTENT 3: MATHEMATICAL CALCULATIONS & PERCENTAGES
     // -------------------------------------------------------------
     if (clean.includes('cuanto es') || clean.includes('calcula') || clean.includes('porcentaje') || clean.includes('%')) {
-      // Percentage match e.g. 20% de 500
       const pctMatch = clean.match(/(?:calcula|cuanto es)?\s*(?:el)?\s*(\d+(?:\.\d+)?)\s*(?:%|por ciento)\s*de\s*(\d+(?:\.\d+)?)/i);
       if (pctMatch) {
         const pct = parseFloat(pctMatch[1]);
@@ -394,7 +402,6 @@ class YARBISBrain {
         };
       }
 
-      // Basic Arithmetic match
       const mathMatch = clean.match(/(\d+(?:\.\d+)?)\s*(mas|\+|\-|menos|por|\*|multiplicado por|entre|\/|dividido por)\s*(\d+(?:\.\d+)?)/i);
       if (mathMatch) {
         const num1 = parseFloat(mathMatch[1]);
@@ -449,7 +456,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 5: UNIVERSAL MOBILE APP & WEB LAUNCHER (Cualquier Aplicación)
+    // INTENT 5: UNIVERSAL MOBILE APP & WEB LAUNCHER
     // -------------------------------------------------------------
     const webApps = [
       { keys: ['whatsapp', 'wasap', 'guasap'], name: 'WhatsApp', url: 'https://web.whatsapp.com', deepLink: 'whatsapp://' },
@@ -481,7 +488,6 @@ class YARBISBrain {
       { keys: ['canva'], name: 'Canva', url: 'https://www.canva.com', deepLink: 'canva://' }
     ];
 
-    // Check specific known apps first
     for (const app of webApps) {
       if (app.keys.some(k => clean.includes(k))) {
         return {
@@ -494,7 +500,6 @@ class YARBISBrain {
       }
     }
 
-    // UNIVERSAL DYNAMIC LAUNCHER: Match ANY "abrir [nombre_app]" pattern
     const openMatch = clean.match(/^(?:abrir|abre|abreme|lanzar|lanza|iniciar|inicia)\s+(.*)/i);
     if (openMatch && openMatch[1]) {
       let rawAppName = openMatch[1].trim();
@@ -531,315 +536,76 @@ class YARBISBrain {
       }
     }
 
-    // -------------------------------------------------------------
-    // INTENT 7: GREETINGS & PERSONAL IDENTITY
-    // -------------------------------------------------------------
-    if (clean.includes('quien eres') || clean.includes('presentate') || clean.includes('hola') || clean.includes('tu nombre') || clean.includes('como te llamas')) {
-      return {
-        textResponse: `Saludos, ${this.userName}. Soy ${this.assistantName}, su asistente personal de inteligencia artificial. Estoy listo para ayudarle con sus notas, recordatorios, consultas y tareas diarias.`,
-        action: 'GREETING',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 8: SYSTEM DIAGNOSTICS
-    // -------------------------------------------------------------
-    if (clean.includes('estado') || clean.includes('sistema') || clean.includes('diagnostico') || clean.includes('bateria')) {
-      return {
-        textResponse: `Reporte de estado de ${this.assistantName}: Todos los subsistemas operan al 100% de eficiencia. Red neuronal conectada y memoria local sincronizada, ${this.userName}.`,
-        action: 'DIAGNOSTIC',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 9: THEMES & HUD PROTOCOLS
-    // -------------------------------------------------------------
-    if (clean.includes('combate') || clean.includes('modo combate') || clean.includes('alerta roja')) {
-      return {
-        textResponse: `Protocolo de combate activado, ${this.userName}. Interfaz HUD adaptada a alerta roja.`,
-        action: 'THEME',
-        themeChange: 'theme-combat'
-      };
-    }
-
-    if (clean.includes('sigilo') || clean.includes('modo sigilo')) {
-      return {
-        textResponse: `Modo sigilo activado. Visualización de pantalla adaptada.`,
-        action: 'THEME',
-        themeChange: 'theme-stealth'
-      };
-    }
-
-    if (clean.includes('sobrecarga') || clean.includes('modo sobrecarga')) {
-      return {
-        textResponse: `Modo sobrecarga iniciado al 150% de potencia.`,
-        action: 'THEME',
-        themeChange: 'theme-overload'
-      };
-    }
-
-    if (clean.includes('normal') || clean.includes('restaurar') || clean.includes('modo normal')) {
-      return {
-        textResponse: `Restaurando interfaz estándar de ${this.assistantName}, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'default'
-      };
-    }
-
-    if (clean.includes('limpiar pantalla') || clean.includes('borrar pantalla') || clean.includes('limpiar registro')) {
-      return {
-        textResponse: `Limpiando el registro de la conversación.`,
-        action: 'CLEAR_LOGS',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 10: TIME & DATE
-    // -------------------------------------------------------------
-    if (clean.includes('hora') || clean.includes('que hora es')) {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-      return {
-        textResponse: `La hora actual es ${timeStr}, ${this.userName}.`,
-        action: 'TIME',
-        themeChange: null
-      };
-    }
-
-    if (clean.includes('fecha') || clean.includes('que dia es')) {
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      return {
-        textResponse: `Hoy es ${dateStr}, ${this.userName}.`,
-        action: 'DATE',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 11: WEATHER API
-    // -------------------------------------------------------------
-    if (clean.includes('clima') || clean.includes('tiempo') || clean.includes('temperatura')) {
-      const weatherData = await this.fetchLiveWeather();
-      return {
-        textResponse: weatherData,
-        action: 'WEATHER',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 12: CRYPTO & MARKETS
-    // -------------------------------------------------------------
-    if (clean.includes('bitcoin') || clean.includes('ethereum') || clean.includes('cripto') || clean.includes('mercado')) {
-      const cryptoData = await this.fetchLiveCrypto();
-      return {
-        textResponse: cryptoData,
-        action: 'MARKET',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT 13: WIKIPEDIA KNOWLEDGE SEARCH
-    // -------------------------------------------------------------
-    if (clean.startsWith('que es') || clean.startsWith('quien es') || clean.startsWith('quien fue') || clean.startsWith('define') || clean.startsWith('que significa')) {
-      const queryStr = text.replace(/^(que es|quien es|quien fue|define|que significa)\s+/i, '').trim();
-      if (queryStr) {
-        const wikiInfo = await this.fetchWikipediaSummary(queryStr);
-        if (wikiInfo) {
-          return {
-            textResponse: wikiInfo,
-            action: 'KNOWLEDGE',
-            themeChange: null
-          };
-        }
-      }
-    }
-
     return null;
   }
 
-  /**
-   * Fetch Live Weather Telemetry from Open-Meteo API
-   */
-  async fetchLiveWeather() {
-    try {
-      const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=34.0522&longitude=-118.2437&current_weather=true');
-      if (res.ok) {
-        const data = await res.json();
-        const temp = data.current_weather?.temperature;
-        const wind = data.current_weather?.windspeed;
-        return `Reporte meteorológico en vivo: Temperatura de ${temp}°C con vientos a ${wind} km/h en sus coordenadas, ${this.userName}.`;
-      }
-    } catch (e) {
-      console.warn('Weather API failed, using fallback:', e);
-    }
-    return `Telemetría del tiempo: Cielos despejados y temperatura ambiente de 22°C, ${this.userName}.`;
-  }
+  async queryGeminiAI(userText) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiApiKey}`;
 
-  /**
-   * Fetch Live Crypto Market Rates from CoinGecko API
-   */
-  async fetchLiveCrypto() {
-    try {
-      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
-      if (res.ok) {
-        const data = await res.json();
-        const btc = data.bitcoin?.usd;
-        const eth = data.ethereum?.usd;
-        return `Mercado cripto en vivo: Bitcoin cotiza a \$${btc?.toLocaleString()} USD y Ethereum a \$${eth?.toLocaleString()} USD, ${this.userName}.`;
-      }
-    } catch (e) {
-      console.warn('Crypto API failed:', e);
-    }
-    return `Mercados estables. Monitoreo del sistema activo.`;
-  }
+    const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, servicial, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Responde de forma muy concisa, fluida, natural y directa (máximo 2 o 3 oraciones). No uses markdown excesivo.`;
 
-  /**
-   * Fetch Live Wikipedia Encyclopedic Knowledge
-   */
-  async fetchWikipediaSummary(query) {
-    try {
-      const url = `https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.extract) {
-          const sentences = data.extract.split('. ').slice(0, 2).join('. ') + '.';
-          return `Según los archivos sobre "${data.title}": ${sentences}`;
-        }
-      }
-    } catch (e) {
-      console.warn('Wikipedia API lookup error:', e);
-    }
-    return null;
-  }
-
-  /**
-   * Test Gemini API Key live
-   */
-  async testGeminiApiKey(key) {
-    if (!key || !key.trim()) {
-      return { success: false, message: 'Ingrese una clave API válida para probar.' };
-    }
-    const testKey = key.trim();
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${testKey}`;
-      const body = {
-        contents: [{ role: 'user', parts: [{ text: 'Responde OK' }] }]
-      };
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (res.ok) {
-        return { success: true, message: '⚡ ¡Conexión con Google Gemini API Verificada!' };
-      } else {
-        const errJson = await res.json().catch(() => ({}));
-        return { success: false, message: `❌ Error API (${res.status}): ${errJson.error?.message || 'Clave inválida'}` };
-      }
-    } catch (e) {
-      return { success: false, message: `❌ Error de red al probar API: ${e.message}` };
-    }
-  }
-
-  /**
-   * Free Zero-Config AI Provider (No API key required)
-   */
-  async queryFreeAI(promptText) {
-    const systemContext = `Eres ${this.assistantName}, la inteligencia artificial personal de ${this.userName}. Responde en español de forma educada, inteligente, servicial y concisa (2 a 3 frases) para ser leída por voz.`;
-
-    // Try Pollinations LLM API
-    try {
-      const prompt = encodeURIComponent(`${systemContext}\n\nPregunta: "${promptText}"`);
-      const res = await fetch(`https://text.pollinations.ai/${prompt}?model=openai`, {
-        headers: { 'Accept': 'text/plain' }
-      });
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().length > 4 && !text.includes('502 Bad Gateway') && !text.includes('Internal Server Error')) {
-          return text.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Free Pollinations AI attempt failed:', e);
-    }
-
-    // Fallback: Secondary Pollinations Q&A endpoint
-    try {
-      const promptSec = encodeURIComponent(`${promptText}. Responde brevemente en español como asistente personal.`);
-      const resSec = await fetch(`https://text.pollinations.ai/${promptSec}`);
-      if (resSec.ok) {
-        const textSec = await resSec.text();
-        if (textSec && textSec.trim().length > 4) {
-          return textSec.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Secondary AI attempt failed:', e);
-    }
-
-    // Fallback: Wikipedia Summary Lookup
-    const wikiRes = await this.fetchWikipediaSummary(promptText);
-    if (wikiRes) return wikiRes;
-
-    return null;
-  }
-
-  /**
-   * Gemini REST API Call for Universal AI Questions
-   */
-  async queryGeminiAI(promptText) {
-    const systemContext = `Eres ${this.assistantName}, la inteligencia artificial personal de ${this.userName}. Responde de forma culta, amable, inteligente y concisa en español (máximo 2 a 3 oraciones) para ser leída por sintetizador de voz.`;
-
-    const body = {
+    const requestBody = {
       contents: [
         {
           role: 'user',
           parts: [
-            { text: `${systemContext}\n\nUsuario pregunta: "${promptText}"` }
+            { text: `${systemPrompt}\n\nUsuario: ${userText}` }
           ]
         }
-      ]
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 150
+      }
     };
 
-    // Try Gemini 1.5 Flash first
-    try {
-      const endpoint15 = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiApiKey}`;
-      const response = await fetch(endpoint15, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (reply) return reply.trim();
-      }
-    } catch (err) {
-      console.warn('Gemini 1.5 Flash failed, trying 2.0 Flash...', err);
-    }
-
-    // Try Gemini 2.0 Flash as fallback
-    const endpoint20 = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.geminiApiKey}`;
-    const res20 = await fetch(endpoint20, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(requestBody)
     });
 
-    if (!res20.ok) {
-      throw new Error(`Gemini API Error status ${res20.status}`);
+    if (!response.ok) {
+      throw new Error(`Gemini API returned status ${response.status}`);
     }
 
-    const data20 = await res20.json();
-    const reply20 = data20.candidates?.[0]?.content?.parts?.[0]?.text;
-    return reply20 ? reply20.trim() : `No pude procesar la consulta en este momento, ${this.userName}.`;
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text.trim();
+  }
+
+  async testGeminiApiKey(apiKey) {
+    const key = apiKey.trim();
+    if (!key) return { success: false, message: 'La clave no puede estar vacía.' };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'Hola, prueba de conexión de YARBIS' }] }]
+        })
+      });
+
+      if (res.ok) {
+        return { success: true, message: '⚡ Conexión exitosa con Google Gemini API.' };
+      } else {
+        return { success: false, message: `Error (${res.status}): Clave no válida o sin permisos.` };
+      }
+    } catch (e) {
+      return { success: false, message: 'Error de red al conectar con Google Gemini.' };
+    }
+  }
+
+  async queryFreeAI(userText) {
+    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Responde muy conciso, directo y en español.`;
+    const prompt = encodeURIComponent(`${systemPrompt} Pregunta: ${userText}`);
+    const freeUrl = `https://text.pollinations.ai/${prompt}?model=openai`;
+
+    const res = await fetch(freeUrl);
+    if (!res.ok) throw new Error('Free AI request failed');
+    const text = await res.text();
+    return text.trim();
   }
 }
 
