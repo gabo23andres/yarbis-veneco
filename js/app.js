@@ -229,16 +229,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // Smart Application Launcher for Mobile Native Apps & Web
   function launchApp(webUrl, deepLink) {
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && deepLink) {
-      // Direct Deep Link launch for native mobile apps
-      window.location.href = deepLink;
+    const targetUrl = (isMobile && deepLink) ? deepLink : (webUrl || deepLink);
+
+    if (!targetUrl) return;
+
+    if (isMobile) {
+      // Create a native anchor click event which allows iOS & Android OS to handle native app deep links directly
+      const a = document.createElement('a');
+      a.href = targetUrl;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
       setTimeout(() => {
-        if (webUrl && !document.hidden) {
-          window.open(webUrl, '_blank');
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
         }
-      }, 1200);
-    } else if (webUrl) {
-      window.open(webUrl, '_blank');
+      }, 500);
+    } else {
+      window.open(webUrl || targetUrl, '_blank');
     }
   }
 
