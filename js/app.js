@@ -506,6 +506,28 @@ document.addEventListener('DOMContentLoaded', () => {
     speechEngine.toggleListening();
   });
 
+  // Continuous Hands-Free Listening Toggle
+  const btnContinuous = document.getElementById('btnContinuous');
+  if (btnContinuous) {
+    btnContinuous.addEventListener('click', () => {
+      audioSynth.initContext();
+      audioSynth.playClickSound();
+      speechEngine.continuousMode = !speechEngine.continuousMode;
+      btnContinuous.classList.toggle('active', speechEngine.continuousMode);
+      
+      const msg = speechEngine.continuousMode 
+        ? 'Modo Manos Libres (Escucha Continua) Activado' 
+        : 'Modo Manos Libres Desactivado';
+      
+      appendMessage(brain.assistantName, `🔄 ${msg}`);
+      speechEngine.speak(msg);
+
+      if (speechEngine.continuousMode && !speechEngine.isListening) {
+        speechEngine.startListening();
+      }
+    });
+  }
+
   // Scan Button Click
   if (btnScan) {
     btnScan.addEventListener('click', () => {

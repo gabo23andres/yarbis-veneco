@@ -121,6 +121,92 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
+    // INTENT: AUTOMATIC WHATSAPP MESSAGING
+    // -------------------------------------------------------------
+    if (clean.includes('whatsapp') && (clean.includes('mandar') || clean.includes('enviar') || clean.includes('escribir') || clean.includes('mensaje'))) {
+      const waMatch = text.match(/(?:mandar|enviar|escribir)\s+(?:un\s+)?(?:mensaje\s+by\s+|mensaje\s+de\s+|mensaje\s+por\s+)?whatsapp\s+(?:a\s+([0-9\+\s]+))?\s*(?:que\s+diga|diciendo|con\s+el\s+texto)?\s*(.*)/i);
+      
+      let targetPhone = waMatch ? (waMatch[1] || '') : '';
+      let messageContent = waMatch ? (waMatch[2] || '') : '';
+      let cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+
+      let waUrl = 'https://web.whatsapp.com';
+      let waDeepLink = 'whatsapp://';
+      let responseMsg = `Abriendo WhatsApp para redactar su mensaje, ${this.userName}.`;
+
+      if (cleanPhone && messageContent) {
+        waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(messageContent)}`;
+        waDeepLink = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(messageContent)}`;
+        responseMsg = `Abriendo WhatsApp con mensaje listo para ${cleanPhone}: "${messageContent}", ${this.userName}.`;
+      } else if (messageContent) {
+        waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(messageContent)}`;
+        waDeepLink = `whatsapp://send?text=${encodeURIComponent(messageContent)}`;
+        responseMsg = `Abriendo WhatsApp con su mensaje: "${messageContent}", ${this.userName}.`;
+      }
+
+      return {
+        textResponse: responseMsg,
+        action: 'OPEN_URL',
+        url: waUrl,
+        deepLink: waDeepLink,
+        themeChange: null
+      };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: AUTOMATIC PHONE CALLS
+    // -------------------------------------------------------------
+    const callMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*([0-9\+\s]+)/i);
+    if (callMatch && callMatch[1]) {
+      const phoneNumber = callMatch[1].replace(/[^0-9\+]/g, '');
+      if (phoneNumber.length >= 3) {
+        return {
+          textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
+          action: 'OPEN_URL',
+          url: `tel:${phoneNumber}`,
+          deepLink: `tel:${phoneNumber}`,
+          themeChange: null
+        };
+      }
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: ARMOR PROTOCOL THEMES
+    // -------------------------------------------------------------
+    if (clean.includes('protocolo hulkbuster') || clean.includes('modo hulkbuster') || clean.includes('tema morado')) {
+      return {
+        textResponse: `Protocolo Hulkbuster activado. Potencia de blindaje violáceo en línea, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'theme-hulkbuster',
+        soundFx: 'hulkbuster'
+      };
+    }
+    if (clean.includes('protocolo sigilo') || clean.includes('modo sigilo') || clean.includes('tema verde') || clean.includes('modo matrix')) {
+      return {
+        textResponse: `Protocolo Sigilo activado. Modo de baja visibilidad verde neón en línea, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'theme-stealth',
+        soundFx: 'scan'
+      };
+    }
+    if (clean.includes('protocolo mark 42') || clean.includes('mark 42') || clean.includes('tema dorado') || clean.includes('iron man')) {
+      return {
+        textResponse: `Protocolo Mark 42 activado. Blindaje dorado y carmesí en línea, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'theme-mark42',
+        soundFx: 'repulsor'
+      };
+    }
+    if (clean.includes('protocolo por defecto') || clean.includes('tema normal') || clean.includes('restablecer tema')) {
+      return {
+        textResponse: `Restableciendo protocolo cian estándar del asistente, ${this.userName}.`,
+        action: 'THEME',
+        themeChange: 'default',
+        soundFx: 'success'
+      };
+    }
+
+    // -------------------------------------------------------------
     // INTENT 2: PERSONAL NOTES & REMINDERS
     // -------------------------------------------------------------
     // Add Note

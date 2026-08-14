@@ -47,22 +47,31 @@ body.theme-stealth {
   --hud-glow: rgba(168, 85, 247, 0.25);
 }
 
-/* Theme Variant: Overload Mode (Gold/Amber) */
-body.theme-overload {
+/* Theme Variant: Mark 42 (Gold & Crimson Iron Man) */
+body.theme-mark42 {
   --color-primary: #ffb700;
   --color-primary-rgb: 255, 183, 0;
-  --color-secondary: #ff5500;
+  --color-secondary: #ff2a4b;
   --hud-glass-border: rgba(255, 183, 0, 0.45);
-  --hud-glow: rgba(255, 183, 0, 0.25);
+  --hud-glow: rgba(255, 183, 0, 0.3);
 }
 
-/* Theme Variant: Hulkbuster Mode (Heavy Armor Emerald & Gold) */
+/* Theme Variant: Stealth Cyberpunk (Neon Green) */
+body.theme-stealth {
+  --color-primary: #00ff66;
+  --color-primary-rgb: 0, 255, 102;
+  --color-secondary: #00e5ff;
+  --hud-glass-border: rgba(0, 255, 102, 0.45);
+  --hud-glow: rgba(0, 255, 102, 0.3);
+}
+
+/* Theme Variant: Hulkbuster Violet */
 body.theme-hulkbuster {
-  --color-primary: #10b981;
-  --color-primary-rgb: 16, 185, 129;
-  --color-secondary: #f59e0b;
-  --hud-glass-border: rgba(16, 185, 129, 0.45);
-  --hud-glow: rgba(16, 185, 129, 0.25);
+  --color-primary: #b339ef;
+  --color-primary-rgb: 179, 57, 239;
+  --color-secondary: #ff007f;
+  --hud-glass-border: rgba(179, 57, 239, 0.45);
+  --hud-glow: rgba(179, 57, 239, 0.3);
 }
 
 /* Base Styles */
