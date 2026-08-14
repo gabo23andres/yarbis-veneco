@@ -121,27 +121,34 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: AUTOMATIC WHATSAPP MESSAGING
+    // INTENT: AUTOMATIC WHATSAPP MESSAGING & LAUNCH
     // -------------------------------------------------------------
-    if (clean.includes('whatsapp') && (clean.includes('mandar') || clean.includes('enviar') || clean.includes('escribir') || clean.includes('mensaje'))) {
-      const waMatch = text.match(/(?:mandar|enviar|escribir)\s+(?:un\s+)?(?:mensaje\s+by\s+|mensaje\s+de\s+|mensaje\s+por\s+)?whatsapp\s+(?:a\s+([0-9\+\s]+))?\s*(?:que\s+diga|diciendo|con\s+el\s+texto)?\s*(.*)/i);
-      
-      let targetPhone = waMatch ? (waMatch[1] || '') : '';
-      let messageContent = waMatch ? (waMatch[2] || '') : '';
-      let cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+    if (clean.includes('whatsapp') || clean.includes('wasap') || clean.includes('guasap')) {
+      const phoneMatch = text.match(/(\+?[0-9]{7,15})/);
+      let cleanPhone = phoneMatch ? phoneMatch[1] : '';
+
+      let msgText = text
+        .replace(/.*(?:whatsapp|wasap|guasap)/i, '')
+        .replace(/^(?:a|al)?\s*\+?[0-9\s]{7,15}/i, '')
+        .replace(/^(?:que diga|diciendo|con el texto|mensaje|dile|para)\s+/i, '')
+        .trim();
 
       let waUrl = 'https://web.whatsapp.com';
       let waDeepLink = 'whatsapp://';
-      let responseMsg = `Abriendo WhatsApp para redactar su mensaje, ${this.userName}.`;
+      let responseMsg = `Abriendo WhatsApp en tu celular, ${this.userName}.`;
 
-      if (cleanPhone && messageContent) {
-        waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(messageContent)}`;
-        waDeepLink = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(messageContent)}`;
-        responseMsg = `Abriendo WhatsApp con mensaje listo para ${cleanPhone}: "${messageContent}", ${this.userName}.`;
-      } else if (messageContent) {
-        waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(messageContent)}`;
-        waDeepLink = `whatsapp://send?text=${encodeURIComponent(messageContent)}`;
-        responseMsg = `Abriendo WhatsApp con su mensaje: "${messageContent}", ${this.userName}.`;
+      if (cleanPhone && msgText) {
+        waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msgText)}`;
+        waDeepLink = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(msgText)}`;
+        responseMsg = `Abriendo WhatsApp con mensaje listo para ${cleanPhone}: "${msgText}", ${this.userName}.`;
+      } else if (msgText) {
+        waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msgText)}`;
+        waDeepLink = `whatsapp://send?text=${encodeURIComponent(msgText)}`;
+        responseMsg = `Abriendo WhatsApp con su mensaje: "${msgText}", ${this.userName}.`;
+      } else if (cleanPhone) {
+        waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}`;
+        waDeepLink = `whatsapp://send?phone=${cleanPhone}`;
+        responseMsg = `Abriendo WhatsApp para chatear con ${cleanPhone}, ${this.userName}.`;
       }
 
       return {
@@ -156,17 +163,19 @@ class YARBISBrain {
     // -------------------------------------------------------------
     // INTENT: AUTOMATIC PHONE CALLS
     // -------------------------------------------------------------
-    const callMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*([0-9\+\s]+)/i);
-    if (callMatch && callMatch[1]) {
-      const phoneNumber = callMatch[1].replace(/[^0-9\+]/g, '');
-      if (phoneNumber.length >= 3) {
-        return {
-          textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: `tel:${phoneNumber}`,
-          deepLink: `tel:${phoneNumber}`,
-          themeChange: null
-        };
+    if (clean.includes('llamar') || clean.includes('marcar') || clean.includes('llamada')) {
+      const callMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(\+?[0-9\s]{3,15})/i);
+      if (callMatch && callMatch[1]) {
+        const phoneNumber = callMatch[1].replace(/[^0-9\+]/g, '');
+        if (phoneNumber.length >= 3) {
+          return {
+            textResponse: `Iniciando llamada telefónica al número ${phoneNumber}, ${this.userName}.`,
+            action: 'OPEN_URL',
+            url: `tel:${phoneNumber}`,
+            deepLink: `tel:${phoneNumber}`,
+            themeChange: null
+          };
+        }
       }
     }
 
