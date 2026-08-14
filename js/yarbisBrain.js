@@ -1,6 +1,6 @@
 /* ==========================================================================
-   YARBIS - ADVANCED CONVERSATIONAL BRAIN 7.0
-   Venezuelan Personality, Dólar BCV/VES, GPS Navigation, Battery, News & AI
+   YARBIS - ADVANCED CONVERSATIONAL BRAIN 8.0 ULTIMATE
+   Vision IA, Trivia por Voz, Alarmas Exactas, Bancos, Delivery & Cerebro Criollo
    ========================================================================== */
 
 class YARBISBrain {
@@ -9,6 +9,48 @@ class YARBISBrain {
     this.assistantName = localStorage.getItem('yarbis_assistant_name') || 'YARBIS Veneco';
     this.userName = localStorage.getItem('yarbis_user_name') || 'Señor';
     this.approxUsdRate = 48.50; // Reference USD to Bolívares VES
+
+    // Trivia Game State
+    this.triviaActive = false;
+    this.triviaScore = 0;
+    this.triviaIndex = 0;
+    this.triviaQuestions = [
+      {
+        q: '¿Cuál es la caída de agua más alta del mundo ubicada en Venezuela?',
+        a: ['salto angel', 'el salto angel', 'kerekupai vena'],
+        explain: '¡Correcto! El Salto Ángel tiene una altura de 979 metros.'
+      },
+      {
+        q: '¿Cómo se le llama en Venezuela a una persona de mucha confianza o mejor amigo?',
+        a: ['pana', 'mi pana', 'el mio', 'hermano', 'compadre'],
+        explain: '¡Exacto! "Pana" o "el mío" es la palabra clave del venezolano.'
+      },
+      {
+        q: '¿Cuál es el plato típico nacional de Venezuela compuesto por arroz, caraotas, carne mechada y tajadas?',
+        a: ['pabellon criollo', 'pabellon', 'el pabellon'],
+        explain: '¡De una! El Pabellón Criollo es nuestro plato insigne.'
+      },
+      {
+        q: '¿En qué año nació el Libertador Simón Bolívar?',
+        a: ['1783', 'mil setecientos ochenta y tres'],
+        explain: '¡Brillante! Nació el 24 de julio de 1783 en Caracas.'
+      },
+      {
+        q: '¿Cómo se llama la inteligencia artificial creada por Tony Stark en Marvel antes de Friday?',
+        a: ['jarvis', 'j.a.r.v.i.s', 'yarbis'],
+        explain: '¡Claro que sí! J.A.R.V.I.S. (Just A Rather Very Intelligent System).'
+      },
+      {
+        q: '¿Qué fruta se usa tradicionalmente para hacer la chicha andina o el dulce de lechosa en Navidad?',
+        a: ['lechosa', 'papaya', 'la lechosa'],
+        explain: '¡Así mismo es! El dulce de lechosa verde con papelón y clavitos.'
+      },
+      {
+        q: '¿Cuál es el pico más alto de Venezuela ubicado en el estado Mérida?',
+        a: ['pico bolivar', 'el pico bolivar', 'bolivar'],
+        explain: '¡Correcto! El Pico Bolívar mide 4.978 metros sobre el nivel del mar.'
+      }
+    ];
   }
 
   setApiKey(key) {
@@ -49,6 +91,129 @@ class YARBISBrain {
       `¡Listo el pollo!`
     ];
     return acks[Math.floor(Math.random() * acks.length)];
+  }
+
+  /* ==========================================
+     TRIVIA & VOICE GAMES ENGINE
+     ========================================== */
+  startTrivia() {
+    this.triviaActive = true;
+    this.triviaScore = 0;
+    this.triviaIndex = 0;
+    const currentQ = this.triviaQuestions[0];
+    return {
+      textResponse: `¡Activando modo Trivia Venezolana & Cultura Pop! Pregunta 1: ${currentQ.q}`,
+      action: 'NONE',
+      themeChange: null,
+      soundFx: 'scan'
+    };
+  }
+
+  answerTrivia(spokenAnswer) {
+    const cleanSpoken = spokenAnswer.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '').trim();
+    const currentQ = this.triviaQuestions[this.triviaIndex];
+
+    const isCorrect = currentQ.a.some(ans => cleanSpoken.includes(ans) || ans.includes(cleanSpoken));
+
+    if (isCorrect) {
+      this.triviaScore++;
+    }
+
+    const resultMsg = isCorrect ? `🎉 ${currentQ.explain}` : `❌ No es correcto. La respuesta correcta era: "${currentQ.a[0]}".`;
+
+    this.triviaIndex++;
+
+    if (this.triviaIndex < this.triviaQuestions.length && this.triviaIndex < 5) {
+      const nextQ = this.triviaQuestions[this.triviaIndex];
+      return {
+        textResponse: `${resultMsg} Siguiente pregunta (${this.triviaIndex + 1}): ${nextQ.q}`,
+        action: 'NONE',
+        themeChange: null,
+        soundFx: isCorrect ? 'success' : 'repulsor'
+      };
+    } else {
+      const finalScore = this.triviaScore;
+      this.triviaActive = false;
+      this.triviaIndex = 0;
+      return {
+        textResponse: `${resultMsg} ¡Juego terminado! Obtuviste ${finalScore} puntos de 5. ${finalScore >= 4 ? '¡Eres un crack total mi pana!' : '¡Buen intento, la próxima arrasas!'}`,
+        action: 'NONE',
+        themeChange: null,
+        soundFx: 'success'
+      };
+    }
+  }
+
+  playRPS(userChoice) {
+    const options = ['piedra', 'papel', 'tijera'];
+    const botChoice = options[Math.floor(Math.random() * options.length)];
+    let outcome = '';
+
+    if (userChoice === botChoice) {
+      outcome = `Empate mi pana, ambos sacamos ${botChoice}. ¡Otra ronda! 🤝`;
+    } else if (
+      (userChoice === 'piedra' && botChoice === 'tijera') ||
+      (userChoice === 'papel' && botChoice === 'piedra') ||
+      (userChoice === 'tijera' && botChoice === 'papel')
+    ) {
+      outcome = `¡Me ganaste! Tú sacaste ${userChoice} y yo saqué ${botChoice}. ¡Buena jugada! 🏆`;
+    } else {
+      outcome = `¡Punto para YARBIS! Yo saqué ${botChoice} y le gana a tu ${userChoice}. 🤖`;
+    }
+
+    return {
+      textResponse: outcome,
+      action: 'NONE',
+      themeChange: null
+    };
+  }
+
+  /* ==========================================
+     IMAGE / VISION MULTIMODAL SCANNER
+     ========================================== */
+  async analyzeImage(base64Data, promptText = 'Describe lo que ves en esta imagen y si hay texto, léelo.') {
+    if (!this.geminiApiKey) {
+      return `He capturado la imagen con la cámara. Para análisis de visión artificial de alta precisión, añade tu Clave API de Google Gemini en Configuración (⚙️). Los sensores detectan encuadre nítido y buena iluminación, ${this.userName}.`;
+    }
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiApiKey}`;
+      const cleanBase64 = base64Data.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
+
+      const requestBody = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: `Eres YARBIS Veneco con visión artificial Stark. Analiza esta imagen de la cámara y responde de forma concisa (máximo 3 oraciones en español): ${promptText}` },
+              {
+                inline_data: {
+                  mime_type: 'image/jpeg',
+                  data: cleanBase64
+                }
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 200
+        }
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!res.ok) throw new Error(`Vision API error: ${res.status}`);
+      const data = await res.json();
+      return data.candidates[0].content.parts[0].text.trim();
+    } catch (e) {
+      console.warn('Vision analysis failed:', e);
+      return `No pude procesar la imagen con los sensores de visión en este momento, ${this.userName}.`;
+    }
   }
 
   /* ==========================================
@@ -245,6 +410,19 @@ class YARBISBrain {
     // Strip optional "Oye Yarbis" / "Hey Yarbis" prefix
     text = text.replace(/^(?:oye|hey|ey|ok)\s+(?:yarbis|jarvis|asistente)\s*/i, '').trim();
 
+    // Check if Trivia is active
+    if (this.triviaActive) {
+      if (text.includes('cancelar') || text.includes('salir') || text.includes('terminar juego') || text.includes('parar')) {
+        this.triviaActive = false;
+        return {
+          textResponse: `Juego de Trivia cancelado. De vuelta a los comandos principales, ${this.userName}.`,
+          action: 'NONE',
+          themeChange: null
+        };
+      }
+      return this.answerTrivia(userText);
+    }
+
     // 1. Direct Rule & Intent Matching
     const localMatch = await this.checkLocalIntents(text, userText);
     if (localMatch) {
@@ -294,6 +472,38 @@ class YARBISBrain {
     const clean = text.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '');
 
     // -------------------------------------------------------------
+    // INTENT: CAMERA VISION / SCANNER
+    // -------------------------------------------------------------
+    if (clean.includes('escanear objeto') || clean.includes('escanear') || clean.includes('activar vision') || clean.includes('abrir camara') || clean.includes('abre camara') || clean.includes('que es esto') || clean.includes('leer texto')) {
+      return {
+        textResponse: `Activando escáner de visión artificial Stark, ${this.userName}.`,
+        action: 'OPEN_CAMERA',
+        themeChange: null,
+        soundFx: 'scan'
+      };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: TRIVIA GAME & ROCK PAPER SCISSORS
+    // -------------------------------------------------------------
+    if (clean.includes('juguemos trivia') || clean.includes('trivia') || clean.includes('jugar trivia') || clean.includes('juego de preguntas')) {
+      return this.startTrivia();
+    }
+
+    if (clean.includes('piedra papel') || clean.includes('juguemos piedra') || clean.includes('piedra papel o tijera')) {
+      return {
+        textResponse: `¡Listo el juego! Dime: "¿Piedra, papel o tijera?", ${this.userName}.`,
+        action: 'NONE',
+        themeChange: null
+      };
+    }
+
+    if (clean === 'piedra' || clean === 'papel' || clean === 'tijera' || clean === 'tijeras') {
+      const choice = clean.startsWith('tijera') ? 'tijera' : clean;
+      return this.playRPS(choice);
+    }
+
+    // -------------------------------------------------------------
     // INTENT: GREETINGS & VENEZUELAN JOKES / CHITCHAT
     // -------------------------------------------------------------
     if (clean === 'hola' || clean === 'epale' || clean === 'hablame' || clean === 'buenas' || clean.includes('como estas') || clean.includes('que tal') || clean.includes('que hubo')) {
@@ -321,12 +531,51 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
+    // INTENT: SCHEDULED EXACT TIME ALARMS
+    // -------------------------------------------------------------
+    const alarmMatch = text.match(/(?:alarma|despiertame|avísame|avisame|recuérdame|recordar)\s+(?:a\s+las|para\s+las)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?\s*(?:para|de|que)?\s*(.*)/i);
+    if (alarmMatch && (alarmMatch[1] || text.includes('alarma a las') || text.includes('avísame a las'))) {
+      let hours = parseInt(alarmMatch[1], 10);
+      let minutes = alarmMatch[2] ? parseInt(alarmMatch[2], 10) : 0;
+      const period = alarmMatch[3] ? alarmMatch[3].toLowerCase() : '';
+      const noteMsg = alarmMatch[4] ? alarmMatch[4].trim() : 'Alarma programada';
+
+      if (period.includes('pm') || period.includes('tarde') || period.includes('noche')) {
+        if (hours < 12) hours += 12;
+      } else if (period.includes('am') || period.includes('mañana')) {
+        if (hours === 12) hours = 0;
+      }
+
+      const now = new Date();
+      const targetTime = new Date();
+      targetTime.setHours(hours, minutes, 0, 0);
+
+      // If time already passed today, schedule for tomorrow
+      if (targetTime.getTime() <= now.getTime()) {
+        targetTime.setDate(targetTime.getDate() + 1);
+      }
+
+      const formattedHour = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0');
+
+      return {
+        textResponse: `Alarma programada para las ${formattedHour} (${noteMsg || 'Aviso de YARBIS'}), ${this.userName}. Te avisaré con señal acústica.`,
+        action: 'SET_ALARM',
+        alarmData: {
+          timeStr: formattedHour,
+          timestamp: targetTime.getTime(),
+          note: noteMsg || 'Alarma YARBIS'
+        },
+        themeChange: null,
+        soundFx: 'success'
+      };
+    }
+
+    // -------------------------------------------------------------
     // INTENT: DÓLAR BCV / PARALELO & CONVERSIÓN DE DIVISAS
     // -------------------------------------------------------------
     if (clean.includes('dolar') || clean.includes('dólar') || clean.includes('tasa') || clean.includes('bolivares') || clean.includes('bolívares') || clean.includes('cambio')) {
       const rate = this.approxUsdRate;
       
-      // Check conversion calculation e.g. "Calcula 20 dolares a bolivares"
       const convMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:dolares|dólares|usd|\$)\s*(?:a|en)?\s*(?:bolivares|bolívares|bs)?/i);
       if (convMatch) {
         const amount = parseFloat(convMatch[1]);
@@ -407,6 +656,68 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
+    // INTENT: VENEZUELAN BANKS & DELIVERY SERVICES
+    // -------------------------------------------------------------
+    if (clean.includes('banco de venezuela') || clean.includes('bdv') || clean.includes('bdvenlinea')) {
+      return {
+        textResponse: `Abriendo BDV en línea del Banco de Venezuela, ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: 'https://bdvenlinea.banvenez.com/',
+        themeChange: null
+      };
+    }
+    if (clean.includes('banesco') || clean.includes('banesconline')) {
+      return {
+        textResponse: `Abriendo Banesco Online, ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: 'https://www.banesconline.com/',
+        themeChange: null
+      };
+    }
+    if (clean.includes('mercantil') || clean.includes('banco mercantil')) {
+      return {
+        textResponse: `Abriendo Mercantil en Línea, ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: 'https://www.mercantilbanco.com/',
+        themeChange: null
+      };
+    }
+    if (clean.includes('bnc') || clean.includes('banco nacional de credito')) {
+      return {
+        textResponse: `Abriendo Banco Nacional de Crédito (BNC), ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: 'https://www.bncenlinea.com/',
+        themeChange: null
+      };
+    }
+    if (clean.includes('pago movil') || clean.includes('pagomovil')) {
+      return {
+        textResponse: `Abriendo servicios de Pago Móvil, ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: 'https://bdvenlinea.banvenez.com/',
+        themeChange: null
+      };
+    }
+    if (clean.includes('pedidosya') || clean.includes('pedidos ya')) {
+      return {
+        textResponse: `Abriendo PedidosYa para ordenar delivery, ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: 'https://www.pedidosya.com.ve/',
+        deepLink: 'pedidosya://',
+        themeChange: null
+      };
+    }
+    if (clean.includes('yummy')) {
+      return {
+        textResponse: `Abriendo Yummy delivery, ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: 'https://www.yummy.com.ve/',
+        deepLink: 'yummy://',
+        themeChange: null
+      };
+    }
+
+    // -------------------------------------------------------------
     // INTENT: LIVE WEATHER (OPEN-METEO)
     // -------------------------------------------------------------
     if (clean.includes('clima') || clean.includes('temperatura') || clean.includes('va a llover') || clean.includes('pronostico') || clean.includes('el tiempo en')) {
@@ -479,7 +790,7 @@ class YARBISBrain {
     // -------------------------------------------------------------
     // INTENT: TIMERS & COUNTDOWNS
     // -------------------------------------------------------------
-    if (clean.includes('temporizador') || clean.includes('cuenta regresiva') || clean.includes('alarma') || clean.includes('avísame en') || clean.includes('avisame en')) {
+    if (clean.includes('temporizador') || clean.includes('cuenta regresiva') || clean.includes('avísame en') || clean.includes('avisame en')) {
       if (clean.includes('cancelar') || clean.includes('detener') || clean.includes('quitar') || clean.includes('borrar')) {
         return {
           textResponse: `Temporizador cancelado correctamente, ${this.userName}.`,

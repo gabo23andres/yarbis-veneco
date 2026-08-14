@@ -17,6 +17,9 @@ class YARBISSpeechEngine {
     this.hasPrimedAudio = false;
     this.wakeLock = null;
 
+    this.pitch = parseFloat(localStorage.getItem('yarbis_voice_pitch') || '1.0');
+    this.rate = parseFloat(localStorage.getItem('yarbis_voice_rate') || '1.05');
+
     this.lastRecognizedText = '';
     this.silenceTimer = null;
     this.hasCommitted = false;
@@ -345,8 +348,8 @@ class YARBISSpeechEngine {
     }
     utterance.lang = this.language;
 
-    utterance.pitch = 0.98;
-    utterance.rate = 1.04;
+    utterance.pitch = this.pitch;
+    utterance.rate = this.rate;
 
     let audioPulseInterval = null;
 
@@ -388,6 +391,16 @@ class YARBISSpeechEngine {
     this.synthesis.speak(utterance);
   }
 
+  setPitch(val) {
+    this.pitch = parseFloat(val);
+    localStorage.setItem('yarbis_voice_pitch', this.pitch.toString());
+  }
+
+  setRate(val) {
+    this.rate = parseFloat(val);
+    localStorage.setItem('yarbis_voice_rate', this.rate.toString());
+  }
+
   stopSpeaking() {
     if (this.synthesis) {
       this.synthesis.cancel();
@@ -399,4 +412,5 @@ class YARBISSpeechEngine {
   }
 }
 
-window.YARBISSpeechEngine = YARBISSpeechEngine;
+// Global Export Instance
+window.speechEngine = new YARBISSpeechEngine();

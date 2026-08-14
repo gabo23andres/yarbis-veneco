@@ -185,6 +185,10 @@ document.addEventListener('DOMContentLoaded', () => {
       startTimer(response.durationSeconds);
     } else if (response.action === 'CANCEL_TIMER') {
       cancelTimer();
+    } else if (response.action === 'SET_ALARM' && response.alarmData) {
+      addAlarm(response.alarmData);
+    } else if (response.action === 'OPEN_CAMERA') {
+      openCameraModal();
     } else if (response.action === 'TORCH_ON') {
       toggleTorch(true);
     } else if (response.action === 'TORCH_OFF') {
@@ -926,6 +930,223 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.warn('Torch not supported or permission denied:', e);
     }
+  }
+
+  // App Pills Quick Launcher
+  const appPills = document.querySelectorAll('.app-pill');
+  const appLinksMap = {
+    'whatsapp': { url: 'https://web.whatsapp.com', deep: 'whatsapp://' },
+    'youtube': { url: 'https://www.youtube.com', deep: 'youtube://' },
+    'spotify': { url: 'https://open.spotify.com', deep: 'spotify://' },
+    'bdv': { url: 'https://bdvenlinea.banvenez.com/' },
+    'banesco': { url: 'https://www.banesconline.com/' },
+    'pedidosya': { url: 'https://www.pedidosya.com.ve/', deep: 'pedidosya://' },
+    'yummy': { url: 'https://www.yummy.com.ve/', deep: 'yummy://' },
+    'mercadolibre': { url: 'https://www.mercadolibre.com.ve/', deep: 'mercadolibre://' },
+    'gmail': { url: 'https://mail.google.com', deep: 'googlegmail://' },
+    'maps': { url: 'https://maps.google.com', deep: 'comgooglemaps://' },
+    'chatgpt': { url: 'https://chatgpt.com', deep: 'chatgpt://' },
+    'drive': { url: 'https://drive.google.com', deep: 'googledrive://' }
+  };
+
+  appPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      audioSynth.playClickSound();
+      const appKey = pill.getAttribute('data-launch');
+      const target = appLinksMap[appKey];
+      if (target) {
+        launchApp(target.url, target.deep);
+      }
+    });
+  });
+
+  // Camera Vision Controller
+  const btnCamera = document.getElementById('btnCamera');
+  const modalCamera = document.getElementById('modalCamera');
+  const btnCloseCamera = document.getElementById('btnCloseCamera');
+  const btnSwitchCamera = document.getElementById('btnSwitchCamera');
+  const btnCaptureScan = document.getElementById('btnCaptureScan');
+  const videoCamera = document.getElementById('videoCamera');
+  const canvasCameraSnapshot = document.getElementById('canvasCameraSnapshot');
+
+  let cameraStream = null;
+  let currentFacingMode = 'environment';
+
+  async function openCameraModal() {
+    if (!modalCamera) return;
+    modalCamera.classList.add('active');
+    audioSynth.playScanSound();
+    await startCameraStream();
+  }
+
+  function closeCameraModal() {
+    if (!modalCamera) return;
+    modalCamera.classList.remove('active');
+    stopCameraStream();
+  }
+
+  async function startCameraStream() {
+    try {
+      stopCameraStream();
+      const constraints = {
+        video: {
+          facingMode: currentFacingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      };
+      cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (videoCamera) {
+        videoCamera.srcObject = cameraStream;
+        await videoCamera.play();
+      }
+    } catch (e) {
+      console.warn('Camera stream error:', e);
+      appendMessage(brain.assistantName, 'No pude acceder a la cámara. Por favor autoriza el permiso en tu navegador.', true);
+    }
+  }
+
+  function stopCameraStream() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    if (videoCamera) videoCamera.srcObject = null;
+  }
+
+  if (btnCamera) btnCamera.addEventListener('click', openCameraModal);
+  if (btnCloseCamera) btnCloseCamera.addEventListener('click', closeCameraModal);
+  if (btnSwitchCamera) {
+    btnSwitchCamera.addEventListener('click', async () => {
+      audioSynth.playClickSound();
+      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+      await startCameraStream();
+    });
+  }
+
+  if (btnCaptureScan) {
+    btnCaptureScan.addEventListener('click', async () => {
+      audioSynth.playClickSound();
+      if (!videoCamera || !canvasCameraSnapshot) return;
+
+      canvasCameraSnapshot.width = videoCamera.videoWidth || 640;
+      canvasCameraSnapshot.height = videoCamera.videoHeight || 480;
+      const ctx = canvasCameraSnapshot.getContext('2d');
+      ctx.drawImage(videoCamera, 0, 0, canvasCameraSnapshot.width, canvasCameraSnapshot.height);
+
+      const base64Img = canvasCameraSnapshot.toDataURL('image/jpeg', 0.85);
+      closeCameraModal();
+
+      appendMessage('USER', '📸 [Foto enviada a Escáner]');
+      appendMessage(brain.assistantName, '⚡ Analizando imagen con visión artificial Stark...', true);
+      audioSynth.playScanSound();
+
+      const visionAnalysis = await brain.analyzeImage(base64Img);
+      appendMessage(brain.assistantName, visionAnalysis, true);
+      speechEngine.speak(visionAnalysis);
+    });
+  }
+
+  // Alarms Scheduler Controller
+  let activeAlarms = JSON.parse(localStorage.getItem('yarbis_alarms') || '[]');
+  const alarmsContainer = document.getElementById('alarmsContainer');
+  const alarmsList = document.getElementById('alarmsList');
+
+  function saveAlarms() {
+    localStorage.setItem('yarbis_alarms', JSON.stringify(activeAlarms));
+    renderAlarms();
+  }
+
+  function addAlarm(alarmData) {
+    activeAlarms.push({
+      id: Date.now(),
+      timeStr: alarmData.timeStr,
+      timestamp: alarmData.timestamp,
+      note: alarmData.note || 'Alarma YARBIS'
+    });
+    saveAlarms();
+  }
+
+  function removeAlarm(id) {
+    activeAlarms = activeAlarms.filter(a => a.id !== id);
+    saveAlarms();
+  }
+
+  function renderAlarms() {
+    if (!alarmsContainer || !alarmsList) return;
+    if (activeAlarms.length === 0) {
+      alarmsContainer.style.display = 'none';
+      alarmsList.innerHTML = '';
+      return;
+    }
+    alarmsContainer.style.display = 'block';
+    alarmsList.innerHTML = activeAlarms.map(a => `
+      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(var(--color-primary-rgb),0.15); border:1px solid var(--hud-glass-border); padding:6px 10px; border-radius:8px; font-size:0.75rem;">
+        <span>⏰ <strong>${a.timeStr}</strong> — ${a.note}</span>
+        <button onclick="window.removeAlarm(${a.id})" style="background:transparent; border:none; color:var(--color-danger); cursor:pointer; font-size:0.8rem;">✕</button>
+      </div>
+    `).join('');
+  }
+
+  window.removeAlarm = removeAlarm;
+  renderAlarms();
+
+  // Check alarms interval
+  setInterval(() => {
+    const now = Date.now();
+    const triggered = activeAlarms.filter(a => now >= a.timestamp);
+    if (triggered.length > 0) {
+      triggered.forEach(a => {
+        audioSynth.playSuccessChime();
+        const alarmMsg = `⏰ ¡Alarma activa! Son las ${a.timeStr}: ${a.note}, ${brain.userName}.`;
+        appendMessage(brain.assistantName, alarmMsg, true);
+        speechEngine.speak(alarmMsg);
+        removeAlarm(a.id);
+      });
+    }
+  }, 5000);
+
+  // Voice Pitch and Rate Modulators
+  const sliderVoicePitch = document.getElementById('sliderVoicePitch');
+  const valVoicePitch = document.getElementById('valVoicePitch');
+  const sliderVoiceRate = document.getElementById('sliderVoiceRate');
+  const valVoiceRate = document.getElementById('valVoiceRate');
+
+  if (sliderVoicePitch && valVoicePitch) {
+    sliderVoicePitch.value = speechEngine.pitch;
+    valVoicePitch.textContent = speechEngine.pitch;
+    sliderVoicePitch.addEventListener('input', (e) => {
+      speechEngine.setPitch(e.target.value);
+      valVoicePitch.textContent = e.target.value;
+    });
+  }
+
+  if (sliderVoiceRate && valVoiceRate) {
+    sliderVoiceRate.value = speechEngine.rate;
+    valVoiceRate.textContent = speechEngine.rate + 'x';
+    sliderVoiceRate.addEventListener('input', (e) => {
+      speechEngine.setRate(e.target.value);
+      valVoiceRate.textContent = e.target.value + 'x';
+    });
+  }
+
+  // PWA Install Modal Controller
+  const btnInstallPwa = document.getElementById('btnInstallPwa');
+  const modalInstallPwa = document.getElementById('modalInstallPwa');
+  const btnCloseInstallPwa = document.getElementById('btnCloseInstallPwa');
+
+  if (btnInstallPwa && modalInstallPwa) {
+    btnInstallPwa.addEventListener('click', () => {
+      audioSynth.playClickSound();
+      modalInstallPwa.classList.add('active');
+    });
+  }
+  if (btnCloseInstallPwa && modalInstallPwa) {
+    btnCloseInstallPwa.addEventListener('click', () => {
+      audioSynth.playClickSound();
+      modalInstallPwa.classList.remove('active');
+    });
   }
 
   // PWA Service Worker Registration

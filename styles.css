@@ -1390,3 +1390,136 @@ footer.hud-footer {
     border-radius: 18px;
   }
 }
+
+/* ==========================================================================
+   CAMERA VISION HUD & SCANNER MODAL
+   ========================================================================== */
+.camera-modal-box {
+  width: 92%;
+  max-width: 520px;
+  background: rgba(10, 15, 25, 0.95);
+  border: 1px solid var(--color-primary);
+  box-shadow: 0 0 35px var(--hud-glow);
+  border-radius: 20px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.camera-preview-container {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--hud-glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#videoCamera {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-hud-reticle {
+  position: absolute;
+  inset: 15%;
+  border: 2px dashed rgba(var(--color-primary-rgb), 0.6);
+  border-radius: 12px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-laser-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--color-primary);
+  box-shadow: 0 0 12px var(--color-primary);
+  animation: laserScan 2.5s ease-in-out infinite;
+}
+
+@keyframes laserScan {
+  0% { top: 5%; opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { top: 95%; opacity: 0; }
+}
+
+.camera-controls-bar {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+}
+
+.btn-capture-scan {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: #000;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-weight: 700;
+  font-family: var(--font-hud);
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 0 15px var(--hud-glow);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Voice Pitch & Rate Sliders */
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.slider-group input[type="range"] {
+  flex: 1;
+  accent-color: var(--color-primary);
+}
+
+.slider-val-badge {
+  font-family: var(--font-hud);
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  min-width: 38px;
+}
+
+/* PWA Install Step Guide Card */
+.pwa-step-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--hud-glass-border);
+  padding: 12px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+.pwa-step-icon {
+  font-size: 1.5rem;
+}
+
+.pwa-step-text {
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  line-height: 1.4;
+}
