@@ -251,13 +251,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!targetUrl) return;
 
     if (targetUrl.startsWith('tel:') || targetUrl.startsWith('whatsapp:') || targetUrl.startsWith('sms:') || targetUrl.startsWith('whatsapp-business:')) {
-      setTimeout(() => {
-        window.location.href = targetUrl;
-      }, 600);
+      window.location.href = targetUrl;
     } else if (isMobile) {
-      setTimeout(() => {
-        window.location.href = targetUrl;
-      }, 600);
+      window.location.href = targetUrl;
     } else {
       window.open(webUrl || targetUrl, '_blank');
     }
