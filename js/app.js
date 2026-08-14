@@ -673,6 +673,10 @@ document.addEventListener('DOMContentLoaded', () => {
         inputContactName.value = '';
         inputContactPhone.value = '';
         renderContactsUI();
+      }
+    });
+  }
+
   const btnImportPhoneContacts = document.getElementById('btnImportPhoneContacts');
   const inputVcfFile = document.getElementById('inputVcfFile');
 
