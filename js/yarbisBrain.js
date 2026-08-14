@@ -230,7 +230,7 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT 5: WEB APPLICATIONS & NATIVE MOBILE APP LAUNCHER
+    // INTENT 5: UNIVERSAL MOBILE APP & WEB LAUNCHER (Cualquier Aplicación)
     // -------------------------------------------------------------
     const webApps = [
       { keys: ['whatsapp', 'wasap', 'guasap'], name: 'WhatsApp', url: 'https://web.whatsapp.com', deepLink: 'whatsapp://' },
@@ -241,25 +241,59 @@ class YARBISBrain {
       { keys: ['twitter', 'x.com', 'x '], name: 'X (Twitter)', url: 'https://x.com', deepLink: 'twitter://' },
       { keys: ['facebook', 'face'], name: 'Facebook', url: 'https://www.facebook.com', deepLink: 'fb://' },
       { keys: ['tiktok'], name: 'TikTok', url: 'https://www.tiktok.com', deepLink: 'snssdk1233://' },
+      { keys: ['telegram'], name: 'Telegram', url: 'https://web.telegram.org', deepLink: 'tg://' },
+      { keys: ['pinterest'], name: 'Pinterest', url: 'https://www.pinterest.com', deepLink: 'pinterest://' },
+      { keys: ['waze'], name: 'Waze', url: 'https://www.waze.com', deepLink: 'waze://' },
+      { keys: ['uber'], name: 'Uber', url: 'https://www.uber.com', deepLink: 'uber://' },
+      { keys: ['mercado libre', 'mercadolibre'], name: 'Mercado Libre', url: 'https://www.mercadolibre.com', deepLink: 'mercadolibre://' },
+      { keys: ['amazon'], name: 'Amazon', url: 'https://www.amazon.com', deepLink: 'amazon://' },
+      { keys: ['disney', 'disney plus', 'disney+'], name: 'Disney+', url: 'https://www.disneyplus.com', deepLink: 'disneyplus://' },
+      { keys: ['max', 'hbo', 'hbo max'], name: 'Max (HBO)', url: 'https://www.max.com', deepLink: 'max://' },
       { keys: ['twitch'], name: 'Twitch', url: 'https://www.twitch.tv', deepLink: 'twitch://' },
       { keys: ['github'], name: 'GitHub', url: 'https://github.com', deepLink: 'https://github.com' },
       { keys: ['chatgpt', 'chat gpt', 'openai'], name: 'ChatGPT', url: 'https://chatgpt.com', deepLink: 'chatgpt://' },
       { keys: ['maps', 'google maps', 'mapa', 'mapas'], name: 'Google Maps', url: 'https://maps.google.com', deepLink: 'comgooglemaps://' },
       { keys: ['drive', 'google drive'], name: 'Google Drive', url: 'https://drive.google.com', deepLink: 'googledrive://' },
       { keys: ['telefono', 'llamada', 'llamar', 'marcar'], name: 'Teléfono', url: 'tel:', deepLink: 'tel:' },
-      { keys: ['mensajes', 'sms', 'mensaje de texto'], name: 'Mensajes SMS', url: 'sms:', deepLink: 'sms:' }
+      { keys: ['mensajes', 'sms', 'mensaje de texto'], name: 'Mensajes SMS', url: 'sms:', deepLink: 'sms:' },
+      { keys: ['discord'], name: 'Discord', url: 'https://discord.com', deepLink: 'discord://' },
+      { keys: ['zoom'], name: 'Zoom', url: 'https://zoom.us', deepLink: 'zoomus://' },
+      { keys: ['roblox'], name: 'Roblox', url: 'https://www.roblox.com', deepLink: 'roblox://' },
+      { keys: ['canva'], name: 'Canva', url: 'https://www.canva.com', deepLink: 'canva://' }
     ];
 
+    // Check specific known apps first
     for (const app of webApps) {
       if (app.keys.some(k => clean.includes(k))) {
         return {
-          textResponse: `Abriendo la aplicación ${app.name} en tu teléfono, ${this.userName}.`,
+          textResponse: `Abriendo la aplicación ${app.name} en tu dispositivo, ${this.userName}.`,
           action: 'OPEN_URL',
           url: app.url,
           deepLink: app.deepLink,
           themeChange: null
         };
       }
+    }
+
+    // UNIVERSAL DYNAMIC LAUNCHER: Match ANY "abrir [nombre_app]" pattern
+    const openMatch = clean.match(/^(?:abrir|abre|abreme|lanzar|lanza|iniciar|inicia)\s+(.*)/i);
+    if (openMatch && openMatch[1]) {
+      let rawAppName = openMatch[1].trim();
+      let cleanAppName = rawAppName.replace(/^(?:la\s+aplicacion\s+de|la\s+app\s+de|el\s+juego\s+de|la\s+pagina\s+de|la\s+app|la\s+aplicacion|el\s+juego|la\s+pagina)\s+/i, '').trim();
+
+      const slug = cleanAppName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const dynamicDeepLink = `${slug}://`;
+      const dynamicWebUrl = cleanAppName.includes('.') 
+        ? (cleanAppName.startsWith('http') ? cleanAppName : `https://${cleanAppName}`)
+        : `https://www.${slug}.com`;
+
+      return {
+        textResponse: `Abriendo la aplicación ${cleanAppName} en tu dispositivo, ${this.userName}.`,
+        action: 'OPEN_URL',
+        url: dynamicWebUrl,
+        deepLink: dynamicDeepLink,
+        themeChange: null
+      };
     }
 
     // -------------------------------------------------------------
