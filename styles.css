@@ -1098,8 +1098,9 @@ footer.hud-footer {
   #app-container {
     display: flex;
     flex-direction: column;
-    padding: 8px 8px 75px 8px;
+    padding: calc(6px + env(safe-area-inset-top, 0px)) 8px calc(80px + env(safe-area-inset-bottom, 0px)) 8px;
     height: 100vh;
+    height: -webkit-fill-available;
     height: 100dvh;
     gap: 8px;
     box-sizing: border-box;
@@ -1110,7 +1111,7 @@ footer.hud-footer {
   .mobile-nav-tabs {
     display: flex;
     position: fixed;
-    bottom: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
     width: calc(100% - 24px);
@@ -1152,7 +1153,8 @@ footer.hud-footer {
   }
 
   header.hud-header {
-    padding: 8px 12px;
+    padding: 6px 10px;
+    margin-top: env(safe-area-inset-top, 0px);
     border-radius: 12px;
     flex-shrink: 0;
   }
@@ -1162,13 +1164,13 @@ footer.hud-footer {
   }
 
   .brand-logo {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
   }
 
   .brand-name {
-    font-size: 0.95rem;
-    letter-spacing: 2px;
+    font-size: 0.88rem;
+    letter-spacing: 1.5px;
   }
 
   .brand-sub {
@@ -1179,13 +1181,17 @@ footer.hud-footer {
     gap: 6px;
   }
 
+  .hud-status-bar .status-badge:nth-child(2) {
+    display: none; /* Hide redundant system status badge on mobile iPhone screens */
+  }
+
   .status-badge {
-    font-size: 0.6rem;
-    padding: 3px 8px;
+    font-size: 0.58rem;
+    padding: 3px 6px;
   }
 
   .hud-clock {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
 
   main.hud-main {
