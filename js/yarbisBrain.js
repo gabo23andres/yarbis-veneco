@@ -59,15 +59,26 @@ class YARBISBrain {
   }
 
   getContactPhone(name) {
-    if (!name) return null;
+    const matches = this.getContactMatches(name);
+    return matches.length > 0 ? matches[0].phone : null;
+  }
+
+  getContactMatches(name) {
+    if (!name) return [];
     const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
     const cleanName = name.toLowerCase().replace(/^(?:a\s+|mi\s+|al\s+|contacto\s+)/g, '').trim();
-    if (contacts[cleanName]) return contacts[cleanName];
 
-    for (const [k, v] of Object.entries(contacts)) {
-      if (cleanName.includes(k) || k.includes(cleanName)) return v;
+    if (contacts[cleanName]) {
+      return [{ name: cleanName, phone: contacts[cleanName] }];
     }
-    return null;
+
+    const matches = [];
+    for (const [k, v] of Object.entries(contacts)) {
+      if (k.includes(cleanName) || cleanName.includes(k)) {
+        matches.push({ name: k, phone: v });
+      }
+    }
+    return matches;
   }
 
   getAllContacts() {
@@ -221,18 +232,27 @@ class YARBISBrain {
       const nameMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al|a\s+mi)?\s*(.+)/i);
       if (nameMatch && nameMatch[1]) {
         const targetName = nameMatch[1].trim();
-        const foundPhone = this.getContactPhone(targetName);
-        if (foundPhone) {
+        const matches = this.getContactMatches(targetName);
+
+        if (matches.length === 1) {
+          const found = matches[0];
           return {
-            textResponse: `Llamando a ${targetName.toUpperCase()} al número ${foundPhone}, ${this.userName}.`,
+            textResponse: `Llamando a ${found.name.toUpperCase()} al número ${found.phone}, ${this.userName}.`,
             action: 'OPEN_URL',
-            url: `tel:${foundPhone}`,
-            deepLink: `tel:${foundPhone}`,
+            url: `tel:${found.phone}`,
+            deepLink: `tel:${found.phone}`,
+            themeChange: null
+          };
+        } else if (matches.length > 1) {
+          const listStr = matches.map(m => `"${m.name.toUpperCase()}" (${m.phone})`).join(', ');
+          return {
+            textResponse: `Encontré varios números para "${targetName}": ${listStr}. ¿A cuál de los dos deseas llamar, ${this.userName}?`,
+            action: 'NONE',
             themeChange: null
           };
         } else {
           return {
-            textResponse: `No encontré a "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]" o dictarme los dígitos.`,
+            textResponse: `No encontré a "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]" o dictarme los dígitos directamente.`,
             action: 'NONE',
             themeChange: null
           };
@@ -241,16 +261,20 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING (POR NOMBRE O NÚMERO)
+    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING (POR NOMBRE O NÚMERO, DUAL WHATSAPP)
     // -------------------------------------------------------------
     if (clean.includes('whatsapp') || clean.includes('wasap') || clean.includes('guasap')) {
       const convertedText = this.parseSpokenNumbers(text);
+      const isBusiness = clean.includes('business') || clean.includes('whatsapp 2') || clean.includes('wasap 2') || clean.includes('guasap 2');
+      const waAppName = isBusiness ? 'WhatsApp Business' : 'WhatsApp';
+      const waDeepScheme = isBusiness ? 'whatsapp-business://' : 'whatsapp://';
+
       let targetContactName = '';
       let targetPhone = '';
       let msgText = '';
 
       // Pattern match e.g. "mandar whatsapp a Mamá que diga llego en 5 min"
-      const fullWaMatch = convertedText.match(/(?:mandar|enviar|escribir|hacer)?\s*(?:un\s+)?(?:mensaje\s+de\s+|mensaje\s+por\s+)?(?:whatsapp|wasap|guasap)\s+(?:a|para|al)?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?:que\s+diga|diciendo|con\s+el\s+texto|mensaje)?\s*(.*)/i);
+      const fullWaMatch = convertedText.match(/(?:mandar|enviar|escribir|hacer)?\s*(?:un\s+)?(?:mensaje\s+de\s+|mensaje\s+por\s+)?(?:whatsapp\s*2|whatsapp\s*business|whatsapp|wasap\s*2|wasap|guasap)\s+(?:a|para|al)?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?:que\s+diga|diciendo|con\s+el\s+texto|mensaje)?\s*(.*)/i);
 
       if (fullWaMatch) {
         const potentialTarget = fullWaMatch[1] ? fullWaMatch[1].trim() : '';
@@ -282,23 +306,23 @@ class YARBISBrain {
       }
 
       let waUrl = 'https://web.whatsapp.com';
-      let waDeepLink = 'whatsapp://';
-      let responseMsg = `Abriendo WhatsApp en tu celular, ${this.userName}.`;
+      let waDeepLink = `${waDeepScheme}`;
+      let responseMsg = `Abriendo ${waAppName} en tu celular, ${this.userName}.`;
 
       const displayTarget = targetContactName ? targetContactName : (targetPhone ? targetPhone : '');
 
       if (formattedPhone && msgText) {
         waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(msgText)}`;
-        waDeepLink = `whatsapp://send?phone=${formattedPhone}&text=${encodeURIComponent(msgText)}`;
-        responseMsg = `Abriendo WhatsApp con mensaje listo para ${displayTarget || formattedPhone}: "${msgText}", ${this.userName}.`;
+        waDeepLink = `${waDeepScheme}send?phone=${formattedPhone}&text=${encodeURIComponent(msgText)}`;
+        responseMsg = `Abriendo ${waAppName} con mensaje listo para ${displayTarget || formattedPhone}: "${msgText}", ${this.userName}.`;
       } else if (formattedPhone) {
         waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}`;
-        waDeepLink = `whatsapp://send?phone=${formattedPhone}`;
-        responseMsg = `Abriendo chat de WhatsApp de ${displayTarget || formattedPhone}, ${this.userName}.`;
+        waDeepLink = `${waDeepScheme}send?phone=${formattedPhone}`;
+        responseMsg = `Abriendo chat de ${waAppName} de ${displayTarget || formattedPhone}, ${this.userName}.`;
       } else if (msgText) {
         waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msgText)}`;
-        waDeepLink = `whatsapp://send?text=${encodeURIComponent(msgText)}`;
-        responseMsg = `Abriendo WhatsApp con tu mensaje: "${msgText}", ${this.userName}.`;
+        waDeepLink = `${waDeepScheme}send?text=${encodeURIComponent(msgText)}`;
+        responseMsg = `Abriendo ${waAppName} con tu mensaje: "${msgText}", ${this.userName}.`;
       }
 
       return {
