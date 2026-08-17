@@ -62,6 +62,15 @@ function initYarbisApp() {
   const inputGeminiKey = document.getElementById('inputGeminiKey');
   const selectLanguage = document.getElementById('selectLanguage');
 
+  // Watermarks Cleaner Elements
+  const modalWatermarksCleaner = document.getElementById('modalWatermarksCleaner');
+  const txtWatermarkInput = document.getElementById('txtWatermarkInput');
+  const txtWatermarkOutput = document.getElementById('txtWatermarkOutput');
+  const valZeroWidthTokens = document.getElementById('valZeroWidthTokens');
+  const valAiPatterns = document.getElementById('valAiPatterns');
+  const valPurityScore = document.getElementById('valPurityScore');
+  const watermarkStatusBadge = document.getElementById('watermarkStatusBadge');
+
   let isMuted = false;
   let activeFilter = 'all';
   let notesList = JSON.parse(localStorage.getItem('yarbis_notes_list') || '[]');
@@ -192,6 +201,8 @@ function initYarbisApp() {
       addAlarm(response.alarmData);
     } else if (response.action === 'OPEN_CAMERA') {
       openCameraModal();
+    } else if (response.action === 'OPEN_WATERMARK_CLEANER') {
+      openWatermarkModal();
     } else if (response.action === 'TORCH_ON') {
       toggleTorch(true);
     } else if (response.action === 'TORCH_OFF') {
@@ -923,6 +934,134 @@ function initYarbisApp() {
     audioSynth.playClickSound();
     if (modalInstallPwa) modalInstallPwa.classList.remove('active');
   };
+
+  // Watermarks Cleaner Modal & Handlers
+  function openWatermarkModal() {
+    audioSynth.playScanSound();
+    if (modalWatermarksCleaner) {
+      modalWatermarksCleaner.classList.add('active');
+      if (txtWatermarkInput) {
+        txtWatermarkInput.focus();
+        updateWatermarkLiveScan();
+      }
+    }
+  }
+
+  function closeWatermarkModal() {
+    audioSynth.playClickSound();
+    if (modalWatermarksCleaner) modalWatermarksCleaner.classList.remove('active');
+  }
+
+  function updateWatermarkLiveScan() {
+    if (!txtWatermarkInput) return;
+    const text = txtWatermarkInput.value || '';
+    const zeroWidthRegex = /[\u200B-\u200D\u200E\u200F\uFEFF\u2060\u202A-\u202E\u2066-\u2069\u180E\u00AD]/g;
+    const matches = text.match(zeroWidthRegex) || [];
+    const count = matches.length;
+
+    const aiPhrases = /\b(en conclusión|a modo de conclusión|en resumen|es crucial|cabe destacar|en el panorama actual|juega un papel fundamental|es importante tener en cuenta)\b/gi;
+    const aiMatches = text.match(aiPhrases) || [];
+
+    if (valZeroWidthTokens) valZeroWidthTokens.textContent = count;
+    if (valAiPatterns) valAiPatterns.textContent = aiMatches.length;
+
+    if (valPurityScore) {
+      if (count === 0 && aiMatches.length === 0) {
+        valPurityScore.textContent = '100% LIMPIO';
+        valPurityScore.style.color = 'var(--color-success)';
+      } else {
+        const score = Math.max(0, 100 - (count * 10 + aiMatches.length * 15));
+        valPurityScore.textContent = `${score}% RASTROS`;
+        valPurityScore.style.color = score < 50 ? 'var(--color-danger)' : 'var(--color-accent)';
+      }
+    }
+
+    if (watermarkStatusBadge) {
+      if (count > 0 || aiMatches.length > 0) {
+        watermarkStatusBadge.textContent = 'RASTROS DETECTADOS';
+        watermarkStatusBadge.style.color = 'var(--color-danger)';
+      } else {
+        watermarkStatusBadge.textContent = 'LISTO';
+        watermarkStatusBadge.style.color = 'var(--color-primary)';
+      }
+    }
+  }
+
+  if (txtWatermarkInput) {
+    txtWatermarkInput.addEventListener('input', updateWatermarkLiveScan);
+    txtWatermarkInput.addEventListener('paste', () => setTimeout(updateWatermarkLiveScan, 50));
+  }
+
+  function sanitizeWatermarkText() {
+    if (!txtWatermarkInput || !txtWatermarkOutput) return;
+    const raw = txtWatermarkInput.value;
+    if (!raw.trim()) return;
+
+    audioSynth.playSuccessChime();
+    const result = brain.cleanAIWatermarks(raw, { humanize: false });
+    txtWatermarkOutput.value = result.cleanedText;
+    updateWatermarkLiveScan();
+
+    if (watermarkStatusBadge) {
+      watermarkStatusBadge.textContent = `SANITIZADO (-${result.zeroWidthCount} TOKENS)`;
+      watermarkStatusBadge.style.color = 'var(--color-success)';
+    }
+  }
+
+  function humanizeWatermarkText() {
+    if (!txtWatermarkInput || !txtWatermarkOutput) return;
+    const raw = txtWatermarkInput.value;
+    if (!raw.trim()) return;
+
+    audioSynth.playScanSound();
+    const result = brain.cleanAIWatermarks(raw, { humanize: true });
+    txtWatermarkOutput.value = result.cleanedText;
+    updateWatermarkLiveScan();
+
+    if (watermarkStatusBadge) {
+      watermarkStatusBadge.textContent = `HUMANIZADO Y SANITIZADO`;
+      watermarkStatusBadge.style.color = 'var(--color-success)';
+    }
+  }
+
+  function copyCleanedWatermarkText() {
+    if (!txtWatermarkOutput || !txtWatermarkOutput.value) return;
+    navigator.clipboard.writeText(txtWatermarkOutput.value).then(() => {
+      audioSynth.playSuccessChime();
+      speechEngine.speak('Texto sanitizado copiado al portapapeles.');
+      const copyBtn = document.getElementById('btnCopyCleanedText');
+      if (copyBtn) {
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = '✓ Copiado';
+        setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
+      }
+    }).catch(() => {
+      txtWatermarkOutput.select();
+      document.execCommand('copy');
+      audioSynth.playSuccessChime();
+    });
+  }
+
+  function saveCleanedAsNote() {
+    if (!txtWatermarkOutput || !txtWatermarkOutput.value) return;
+    audioSynth.playClickSound();
+    addNote(txtWatermarkOutput.value.trim());
+    speechEngine.speak('Texto sanitizado guardado en tus notas.');
+    const noteBtn = document.getElementById('btnSaveCleanedAsNote');
+    if (noteBtn) {
+      const orig = noteBtn.textContent;
+      noteBtn.textContent = '✓ Guardado';
+      setTimeout(() => { noteBtn.textContent = orig; }, 2000);
+    }
+  }
+
+  window.openWatermarkCleaner = openWatermarkModal;
+  window.closeWatermarkCleaner = closeWatermarkModal;
+  window.sanitizeWatermarkText = sanitizeWatermarkText;
+  window.humanizeWatermarkText = humanizeWatermarkText;
+  window.copyCleanedWatermarkText = copyCleanedWatermarkText;
+  window.saveCleanedAsNote = saveCleanedAsNote;
+
   window.addNoteFromInput = () => {
     if (inputNewNote && inputNewNote.value.trim()) {
       audioSynth.playClickSound();

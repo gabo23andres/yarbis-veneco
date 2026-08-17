@@ -107,6 +107,7 @@
           <button class="app-pill" data-launch="spotify" title="Abrir Spotify">🎵 Spotify</button>
           <button class="app-pill" data-launch="bdv" title="Banco de Venezuela (BDV)">🏦 BDV en Línea</button>
           <button class="app-pill" data-launch="banesco" title="Banesco Online">💳 Banesco</button>
+          <button class="app-pill" id="btnLaunchWatermark" onclick="if(window.openWatermarkCleaner) window.openWatermarkCleaner();" title="Limpiador Anti-Marcas de Agua IA" style="background: rgba(0, 255, 102, 0.15); border-color: var(--color-success); color: var(--color-success);">🧹 Anti-Marcas IA</button>
           <button class="app-pill" data-launch="pedidosya" title="PedidosYa Delivery">🍔 PedidosYa</button>
           <button class="app-pill" data-launch="yummy" title="Yummy Rides & Food">🛵 Yummy</button>
           <button class="app-pill" data-launch="mercadolibre" title="Mercado Libre">🛍️ MercadoLibre</button>
@@ -208,6 +209,67 @@
       </div>
     </footer>
 
+  </div>
+
+  <!-- WATERMARKS & AI PROVENANCE REMOVER MODAL -->
+  <div class="modal-backdrop" id="modalWatermarksCleaner">
+    <div class="modal-box watermark-modal-box">
+      <div class="watermark-modal-header">
+        <h3 class="modal-title">🛡️ PURIFICADOR ANTI-MARCAS IA</h3>
+        <span class="hud-indicator" id="watermarkStatusBadge">LISTO</span>
+      </div>
+
+      <p style="font-size: 0.76rem; color: var(--color-text-dim); margin: 4px 0 8px 0;">
+        Elimina tokens invisibles de ancho cero (ZWSP, ZWJ, BOM), espacios no estándar y metadatos de rastreo de ChatGPT, Claude o Gemini.
+      </p>
+
+      <!-- Input Text Area -->
+      <div class="watermark-input-container">
+        <textarea id="txtWatermarkInput" placeholder="Pega aquí el texto generado por IA para desinfectar..."></textarea>
+      </div>
+
+      <!-- Live Scan Telemetry HUD -->
+      <div class="watermark-hud-stats">
+        <div class="watermark-stat-card">
+          <span class="stat-label">TOKENS INVISIBLES</span>
+          <span class="stat-value" id="valZeroWidthTokens">0</span>
+        </div>
+        <div class="watermark-stat-card">
+          <span class="stat-label">PATRONES IA</span>
+          <span class="stat-value" id="valAiPatterns">0</span>
+        </div>
+        <div class="watermark-stat-card">
+          <span class="stat-label">ESTADO</span>
+          <span class="stat-value" id="valPurityScore" style="color: var(--color-success);">100% LIMPIO</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="watermark-actions-row">
+        <button type="button" class="btn-wm-action primary" id="btnSanitizeText" onclick="if(window.sanitizeWatermarkText) window.sanitizeWatermarkText();">
+          🧹 Limpiar y Desinfectar
+        </button>
+        <button type="button" class="btn-wm-action secondary" id="btnHumanizeText" onclick="if(window.humanizeWatermarkText) window.humanizeWatermarkText();">
+          ✨ Humanizar Redacción
+        </button>
+      </div>
+
+      <!-- Output Cleaned Text Area -->
+      <div class="watermark-output-container">
+        <div class="output-header-bar">
+          <span style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">RESULTADO SANITIZADO:</span>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn-wm-small" id="btnCopyCleanedText" onclick="if(window.copyCleanedWatermarkText) window.copyCleanedWatermarkText();">📋 Copiar</button>
+            <button type="button" class="btn-wm-small" id="btnSaveCleanedAsNote" onclick="if(window.saveCleanedAsNote) window.saveCleanedAsNote();">📝 Guardar Nota</button>
+          </div>
+        </div>
+        <textarea id="txtWatermarkOutput" readonly placeholder="El texto desinfectado y natural aparecerá aquí..."></textarea>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 10px;">
+        <button type="button" class="btn-modal-close" id="btnCloseWatermarkModal" onclick="if(window.closeWatermarkCleaner) window.closeWatermarkCleaner();" style="width: 100%;">Cerrar Purificador</button>
+      </div>
+    </div>
   </div>
 
   <!-- CAMERA VISION SCANNER MODAL -->

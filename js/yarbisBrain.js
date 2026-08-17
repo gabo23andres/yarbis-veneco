@@ -467,9 +467,97 @@ class YARBISBrain {
 
   /**
    * Check Built-in Intents & Voice Commands
+  /* ==========================================
+     WATERMARKS & AI PROVENANCE SANITIZER
+     ========================================== */
+  cleanAIWatermarks(text, options = {}) {
+    if (!text || typeof text !== 'string') {
+      return {
+        cleanedText: '',
+        zeroWidthCount: 0,
+        stats: { originalLength: 0, cleanedLength: 0, zeroWidthCount: 0, aiPatternsFound: 0 }
+      };
+    }
+
+    // 1. Zero-width and steganographic invisible characters
+    const zeroWidthRegex = /[\u200B-\u200D\u200E\u200F\uFEFF\u2060\u202A-\u202E\u2066-\u2069\u180E\u00AD]/g;
+    const matches = text.match(zeroWidthRegex) || [];
+    const zeroWidthCount = matches.length;
+
+    let cleaned = text.replace(zeroWidthRegex, '');
+
+    // 2. Normalize non-standard unicode whitespace
+    cleaned = cleaned.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+
+    // 3. Normalize quotes and dashes
+    cleaned = cleaned
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2013\u2014]/g, '-');
+
+    // 4. Clean multiple spaces and normalize newlines
+    cleaned = cleaned.replace(/[ \t]+/g, ' ').replace(/\n\s+\n/g, '\n\n').trim();
+
+    // 5. Optional humanization of typical AI transitions
+    let aiPatternsFound = 0;
+    if (options.humanize) {
+      const aiPhrases = [
+        { regex: /\b(en conclusión|a modo de conclusión|en resumen),?\s*/gi, rep: '' },
+        { regex: /\b(es crucial (destacar|entender|mencionar) que|cabe destacar que)\s*/gi, rep: '' },
+        { regex: /\b(en el panorama actual|en el mundo actual),?\s*/gi, rep: 'Actualmente, ' },
+        { regex: /\b(desempeña un papel crucial|juega un papel fundamental)\b/gi, rep: 'es muy importante' },
+        { regex: /\b(es importante tener en cuenta que)\s*/gi, rep: '' },
+        { regex: /\b(sin lugar a dudas|indudablemente),?\s*/gi, rep: 'claramente, ' }
+      ];
+
+      aiPhrases.forEach(p => {
+        if (p.regex.test(cleaned)) {
+          aiPatternsFound++;
+          cleaned = cleaned.replace(p.regex, p.rep);
+        }
+      });
+      cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+    }
+
+    return {
+      cleanedText: cleaned,
+      zeroWidthCount: zeroWidthCount,
+      stats: {
+        originalLength: text.length,
+        cleanedLength: cleaned.length,
+        zeroWidthCount: zeroWidthCount,
+        aiPatternsFound: aiPatternsFound
+      }
+    };
+  }
+
+  /**
+   * Main Intent Classifier & Parser
    */
   async checkLocalIntents(text, originalUserText) {
     const clean = text.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '');
+
+    // -------------------------------------------------------------
+    // INTENT: CLEAN AI WATERMARKS & PROVENANCE TOKENS
+    // -------------------------------------------------------------
+    if (clean.includes('limpiar marcas') || clean.includes('quitar marcas') || clean.includes('marcas de agua') || clean.includes('desinfectar texto') || clean.includes('anti marcas') || clean.includes('quitar rastros de ia') || clean.includes('purificar texto') || clean.includes('sanitizar')) {
+      const extractedText = (originalUserText || text).replace(/.*?(?:marcas de agua|marcas de ia|limpiar marcas|quitar marcas|desinfectar texto|limpia este texto|purificar texto|sanitizar texto):?\s*/i, '').trim();
+      
+      if (extractedText.length > 5) {
+        const res = this.cleanAIWatermarks(extractedText, { humanize: true });
+        return {
+          textResponse: `🛡️ Protocolo Anti-Marcas completado, ${this.userName}. Se eliminaron ${res.zeroWidthCount} caracteres invisibles/tokens de rastreo. Aquí tienes tu texto 100% limpio y natural:\n\n${res.cleanedText}`,
+          action: 'NONE',
+          soundFx: 'success'
+        };
+      }
+
+      return {
+        textResponse: `¡Abriendo el Escáner y Purificador Anti-Marcas de Agua IA, ${this.userName}! Pega el texto que deseas desinfectar.`,
+        action: 'OPEN_WATERMARK_CLEANER',
+        soundFx: 'scan'
+      };
+    }
 
     // -------------------------------------------------------------
     // INTENT: CAMERA VISION / SCANNER
