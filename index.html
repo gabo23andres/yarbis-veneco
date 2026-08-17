@@ -13,13 +13,27 @@
   <meta name="apple-mobile-web-app-title" content="YARBIS Veneco" />
   <link rel="manifest" href="manifest.json" />
 
+  <!-- Direct Fresh Cache Initializer -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var r of regs) r.unregister();
+      });
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var n of names) caches.delete(n);
+        });
+      }
+    }
+  </script>
+
   <!-- Modern Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=8.2" />
+  <link rel="stylesheet" href="styles.css?v=9.0" />
 </head>
 <body>
 
@@ -27,13 +41,6 @@
   <canvas id="bgParticlesCanvas"></canvas>
 
   <div id="app-container">
-
-    <!-- MOBILE TABS BAR (Solamente visible en dispositivos móviles) -->
-    <nav class="mobile-nav-tabs" id="mobileNavTabs">
-      <button type="button" class="mobile-tab-btn active" data-tab="voice" id="tabVoiceBtn" onclick="if(window.switchTab) window.switchTab('voice');">🎙️ Voz</button>
-      <button type="button" class="mobile-tab-btn" data-tab="notes" id="tabNotesBtn" onclick="if(window.switchTab) window.switchTab('notes');">📝 Notas</button>
-      <button type="button" class="mobile-tab-btn" data-tab="chat" id="tabChatBtn" onclick="if(window.switchTab) window.switchTab('chat');">💬 Chat</button>
-    </nav>
     
     <!-- HEADER BAR -->
     <header class="hud-header">
@@ -320,11 +327,11 @@
   </div>
 
   <!-- App Scripts -->
-  <script src="js/audioEffects.js?v=8.2"></script>
-  <script src="js/arcReactor.js?v=8.2"></script>
-  <script src="js/speechEngine.js?v=8.2"></script>
-  <script src="js/yarbisBrain.js?v=8.2"></script>
-  <script src="js/app.js?v=8.2"></script>
+  <script src="js/audioEffects.js?v=9.0"></script>
+  <script src="js/arcReactor.js?v=9.0"></script>
+  <script src="js/speechEngine.js?v=9.0"></script>
+  <script src="js/yarbisBrain.js?v=9.0"></script>
+  <script src="js/app.js?v=9.0"></script>
 
 </body>
 </html>
