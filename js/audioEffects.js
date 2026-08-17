@@ -334,6 +334,7 @@ class AudioSynthesizer {
   }
 }
 
-// Global Export Instance
+// Global Export Class & Instance
+window.AudioSynthesizer = AudioSynthesizer;
 window.audioSynth = new AudioSynthesizer();
 

@@ -36,7 +36,7 @@ function initYarbisApp() {
   // Notes & Reminders Elements
   const inputNewNote = document.getElementById('inputNewNote');
   const btnAddNote = document.getElementById('btnAddNote');
-  const notesScroll = document.getElementById('notesScroll');
+  const notesScroll = document.getElementById('notesScroll') || document.getElementById('notesList');
   const notesCount = document.getElementById('notesCount');
   const noteFilterBtns = document.querySelectorAll('.btn-filter-note');
 
@@ -797,25 +797,29 @@ function initYarbisApp() {
     btnCloseSettings.addEventListener('touchend', closeSettingsModal);
   }
 
+  function saveSettingsModal() {
+    const newAssistantName = inputAssistantName ? inputAssistantName.value : 'YARBIS';
+    const newUserName = inputUserName ? inputUserName.value : 'Señor';
+    const apiKey = inputGeminiKey ? inputGeminiKey.value : '';
+    const selectedLang = selectLanguage ? selectLanguage.value : 'es-ES';
+
+    brain.setNames(newAssistantName, newUserName);
+    brain.setApiKey(apiKey);
+    speechEngine.setLanguage(selectedLang);
+
+    updateBrandingUI();
+    updateAiStatusBadge();
+    renderNotes();
+
+    if (modalSettings) modalSettings.classList.remove('active');
+    audioSynth.playSuccessChime();
+    speechEngine.speak(`Configuración actualizada correctamente, ${brain.userName}.`);
+  }
+
   if (btnSaveSettings) {
     btnSaveSettings.addEventListener('click', (e) => {
       if (e && e.type === 'touchend') e.preventDefault();
-      const newAssistantName = inputAssistantName ? inputAssistantName.value : 'YARBIS';
-      const newUserName = inputUserName ? inputUserName.value : 'Señor';
-      const apiKey = inputGeminiKey ? inputGeminiKey.value : '';
-      const selectedLang = selectLanguage ? selectLanguage.value : 'es-ES';
-
-      brain.setNames(newAssistantName, newUserName);
-      brain.setApiKey(apiKey);
-      speechEngine.setLanguage(selectedLang);
-
-      updateBrandingUI();
-      updateAiStatusBadge();
-      renderNotes();
-
-      modalSettings.classList.remove('active');
-      audioSynth.playSuccessChime();
-      speechEngine.speak(`Configuración actualizada correctamente, ${brain.userName}.`);
+      saveSettingsModal();
     });
   }
 
@@ -974,8 +978,7 @@ function initYarbisApp() {
     }
   }
 
-  // App Pills Quick Launcher
-  const appPills = document.querySelectorAll('.app-pill');
+  // App Pills Quick Launcher (appPills queried above)
   const appLinksMap = {
     'whatsapp': { url: 'https://web.whatsapp.com', deep: 'whatsapp://' },
     'youtube': { url: 'https://www.youtube.com', deep: 'youtube://' },

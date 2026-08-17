@@ -15,16 +15,18 @@
 
   <!-- Direct Fresh Cache Initializer -->
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(regs) {
-        for (var r of regs) r.unregister();
-      });
-      if ('caches' in window) {
-        caches.keys().then(function(names) {
-          for (var n of names) caches.delete(n);
-        });
+    try {
+      if (window.location.protocol.startsWith('http') && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (var r of regs) r.unregister().catch(function(){});
+        }).catch(function(){});
       }
-    }
+      if (window.location.protocol.startsWith('http') && 'caches' in window) {
+        caches.keys().then(function(names) {
+          for (var n of names) caches.delete(n).catch(function(){});
+        }).catch(function(){});
+      }
+    } catch(e) {}
   </script>
 
   <!-- Modern Google Fonts -->
@@ -33,7 +35,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=9.1" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
@@ -154,7 +156,7 @@
         </div>
 
         <!-- Notes Scrollable List -->
-        <div class="notes-list" id="notesList"></div>
+        <div class="notes-scroll notes-list" id="notesScroll"></div>
       </section>
 
       <!-- RIGHT PANEL: CONVERSATION HUD TERMINAL -->
@@ -327,11 +329,11 @@
   </div>
 
   <!-- App Scripts -->
-  <script src="js/audioEffects.js?v=9.1"></script>
-  <script src="js/arcReactor.js?v=9.1"></script>
-  <script src="js/speechEngine.js?v=9.1"></script>
-  <script src="js/yarbisBrain.js?v=9.1"></script>
-  <script src="js/app.js?v=9.1"></script>
+  <script src="js/audioEffects.js"></script>
+  <script src="js/arcReactor.js"></script>
+  <script src="js/speechEngine.js"></script>
+  <script src="js/yarbisBrain.js"></script>
+  <script src="js/app.js"></script>
 
 </body>
 </html>

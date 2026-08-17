@@ -412,5 +412,6 @@ class YARBISSpeechEngine {
   }
 }
 
-// Global Export Instance
+// Global Export Class & Instance
+window.YARBISSpeechEngine = YARBISSpeechEngine;
 window.speechEngine = new YARBISSpeechEngine();
