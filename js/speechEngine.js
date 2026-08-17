@@ -240,7 +240,7 @@ class YARBISSpeechEngine {
     this.loadVoices();
   }
 
-  startListening() {
+  async startListening() {
     if (this.isSpeaking) {
       this.stopSpeaking();
     }
@@ -251,9 +251,24 @@ class YARBISSpeechEngine {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       if (this.onPermissionError) {
-        this.onPermissionError('El navegador de tu celular no soporta la API de micrófono directo. Te recomendamos abrir esta página en Google Chrome o Safari.');
+        this.onPermissionError('Tu navegador actual no soporta reconocimiento de voz nativo. Te recomendamos abrir en Safari (iOS) o Google Chrome (PC/Android), o escribir tus mensajes en el terminal de abajo.');
       }
       return;
+    }
+
+    // Explicitly prompt user for mic permission if not yet granted
+    if (!this.hasMicPermission && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        this.hasMicPermission = true;
+      } catch (err) {
+        console.warn('Mic permission error:', err);
+        if (this.onPermissionError) {
+          this.onPermissionError('Permiso de micrófono denegado. Toca el candado 🔒 en tu navegador o Ajustes > Safari > Micrófono y selecciona "Permitir".');
+        }
+        return;
+      }
     }
 
     if (!this.recognition) {
@@ -273,8 +288,10 @@ class YARBISSpeechEngine {
       } catch (e) {
         console.warn('Recognition start exception:', e);
         try {
-          this.recognition.stop();
-          setTimeout(() => this.recognition.start(), 100);
+          this.recognition.abort();
+          setTimeout(() => {
+            try { this.recognition.start(); } catch(err){}
+          }, 150);
         } catch (err) {}
       }
     }
@@ -292,11 +309,11 @@ class YARBISSpeechEngine {
     this.releaseWakeLock();
   }
 
-  toggleListening() {
+  async toggleListening() {
     if (this.isListening) {
       this.stopListening();
     } else {
-      this.startListening();
+      await this.startListening();
     }
   }
 

@@ -527,11 +527,11 @@ function initYarbisApp() {
 
   // Mic Button Click
   if (btnMic) {
-    btnMic.addEventListener('click', () => {
+    btnMic.addEventListener('click', async () => {
       audioSynth.initContext();
       audioSynth.playClickSound();
       speechEngine.primeSpeechSynthesis();
-      speechEngine.toggleListening();
+      await speechEngine.toggleListening();
     });
   }
 
@@ -890,11 +890,11 @@ function initYarbisApp() {
   window.closeSettings = closeSettingsModal;
   window.saveSettings = saveSettingsModal;
   window.switchTab = switchMobileTab;
-  window.toggleMic = () => {
+  window.toggleMic = async () => {
     audioSynth.initContext();
     audioSynth.playClickSound();
     speechEngine.primeSpeechSynthesis();
-    speechEngine.toggleListening();
+    await speechEngine.toggleListening();
   };
   window.toggleContinuous = () => {
     audioSynth.initContext();
