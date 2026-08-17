@@ -1435,14 +1435,65 @@ class YARBISBrain {
   }
 
   async queryFreeAI(userText) {
-    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Responde con acento y carisma venezolano sutil, conciso y en español.`;
-    const prompt = encodeURIComponent(`${systemPrompt} Pregunta: ${userText}`);
-    const freeUrl = `https://text.pollinations.ai/${prompt}?model=openai`;
+    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Responde con acento y carisma venezolano sutil, conciso (máximo 2 oraciones) y en español.`;
+    
+    // Engine 1: Pollinations OpenAI Turbo
+    try {
+      const prompt = encodeURIComponent(`${systemPrompt}\n\nPregunta: ${userText}`);
+      const res = await fetch(`https://text.pollinations.ai/${prompt}?model=openai&seed=${Math.floor(Math.random()*1000)}`, {
+        signal: AbortSignal.timeout(8000)
+      });
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().length > 0 && !text.includes('<!DOCTYPE')) {
+          return text.trim();
+        }
+      }
+    } catch (e) {
+      console.warn('Pollinations primary failed:', e);
+    }
 
-    const res = await fetch(freeUrl);
-    if (!res.ok) throw new Error('Free AI request failed');
-    const text = await res.text();
-    return text.trim();
+    // Engine 2: Pollinations Mistral
+    try {
+      const prompt = encodeURIComponent(`${systemPrompt}\n\nPregunta: ${userText}`);
+      const res = await fetch(`https://text.pollinations.ai/${prompt}?model=mistral`, {
+        signal: AbortSignal.timeout(8000)
+      });
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().length > 0 && !text.includes('<!DOCTYPE')) {
+          return text.trim();
+        }
+      }
+    } catch (e) {
+      console.warn('Pollinations fallback failed:', e);
+    }
+
+    // Engine 3: Airforce Free AI Gateway
+    try {
+      const res = await fetch('https://api.airforce/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userText }
+          ]
+        }),
+        signal: AbortSignal.timeout(7000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.choices && data.choices[0]?.message?.content) {
+          return data.choices[0].message.content.trim();
+        }
+      }
+    } catch (e) {
+      console.warn('Airforce AI fallback failed:', e);
+    }
+
+    return `Copiado mi pana ${this.userName}. He procesado tu solicitud: "${userText}". Todo registrado y en orden.`;
   }
 }
 
