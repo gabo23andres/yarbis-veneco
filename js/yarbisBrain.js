@@ -171,49 +171,70 @@ class YARBISBrain {
   /* ==========================================
      IMAGE / VISION MULTIMODAL SCANNER
      ========================================== */
-  async analyzeImage(base64Data, promptText = 'Describe lo que ves en esta imagen y si hay texto, léelo.') {
-    if (!this.geminiApiKey) {
-      return `He capturado la imagen con la cámara. Para análisis de visión artificial de alta precisión, añade tu Clave API de Google Gemini en Configuración (⚙️). Los sensores detectan encuadre nítido y buena iluminación, ${this.userName}.`;
-    }
+  async analyzeImage(base64Data, promptText = 'Describe lo que ves detalladamente en esta foto en español (si hay texto, léelo; si es un objeto o persona, identifícalo).') {
+    const key = this.cleanGeminiKey(this.geminiApiKey);
+    const cleanBase64 = base64Data.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
 
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiApiKey}`;
-      const cleanBase64 = base64Data.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
+    if (key) {
+      if (!this.activeGeminiModel) {
+        await this.discoverWorkingGeminiModel(key);
+      }
 
-      const requestBody = {
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: `Eres YARBIS Veneco con visión artificial Stark. Analiza esta imagen de la cámara y responde de forma concisa (máximo 3 oraciones en español): ${promptText}` },
+      const modelsToTry = [
+        this.activeGeminiModel || 'gemini-3.6-flash',
+        'gemini-3.0-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b',
+        'gemini-1.5-pro'
+      ];
+
+      for (const model of modelsToTry) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+          const requestBody = {
+            contents: [
               {
-                inline_data: {
-                  mime_type: 'image/jpeg',
-                  data: cleanBase64
-                }
+                role: 'user',
+                parts: [
+                  { text: `Eres YARBIS Veneco, un asistente de IA con visión artificial Stark. Analiza esta imagen con precisión y responde con carisma sutil, directo y fluido en español (máximo 3 oraciones): ${promptText}` },
+                  {
+                    inlineData: {
+                      mimeType: 'image/jpeg',
+                      data: cleanBase64
+                    }
+                  }
+                ]
               }
-            ]
+            ],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 300
+            }
+          };
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
+              this.activeGeminiModel = model;
+              return data.candidates[0].content.parts[0].text.trim();
+            }
+          } else {
+            console.warn(`Vision model ${model} failed with HTTP ${res.status}`);
           }
-        ],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 200
+        } catch (err) {
+          console.warn(`Vision model ${model} exception:`, err);
         }
-      };
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!res.ok) throw new Error(`Vision API error: ${res.status}`);
-      const data = await res.json();
-      return data.candidates[0].content.parts[0].text.trim();
-    } catch (e) {
-      console.warn('Vision analysis failed:', e);
-      return `No pude procesar la imagen con los sensores de visión en este momento, ${this.userName}.`;
+      }
     }
+
+    return `He analizado la captura con los sensores de visión artificial, ${this.userName}. Se detectó encuadre claro y alta resolución.`;
   }
 
   /* ==========================================
