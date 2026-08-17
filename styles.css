@@ -110,7 +110,7 @@ body.theme-hulkbuster {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
@@ -120,6 +120,19 @@ html, body {
   background-color: var(--bg-primary);
   color: var(--color-text);
   font-family: var(--font-hud);
+  touch-action: manipulation;
+}
+
+button, input, select, textarea, .app-pill, .btn-icon-secondary, .btn-mic-main, .mobile-tab-btn, .btn-protocol, .filter-chip {
+  touch-action: manipulation;
+  pointer-events: auto !important;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+}
+
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Background Particle Mesh Canvas */

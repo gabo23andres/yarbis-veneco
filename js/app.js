@@ -3,7 +3,10 @@
    Personal Assistant: STT/TTS, Arc Reactor Canvas, Notes, Timers & Settings
    ========================================================================== */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initYarbisApp() {
+  if (window.__yarbisInitialized) return;
+  window.__yarbisInitialized = true;
+
   // Initialize Subsystems
   const audioSynth = window.audioSynth;
   const arcReactor = new window.ArcReactorEngine('arcReactorCanvas', 'waveformCanvas', 'bgParticlesCanvas');
@@ -1188,15 +1191,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // PWA Service Worker Registration
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then((reg) => console.log('YARBIS PWA Service Worker registered:', reg.scope))
-        .catch((err) => console.warn('Service Worker registration failed:', err));
-    });
-  }
-
   // Initial Load Render
   renderNotes();
 
@@ -1206,4 +1200,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const greet = brain.getVenezuelanGreeting();
     appendMessage(brain.assistantName, greet, true);
   }, 800);
-});
+}
+
+// Guarantee execution on all browsers and mobile WebKit
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initYarbisApp);
+} else {
+  initYarbisApp();
+}
