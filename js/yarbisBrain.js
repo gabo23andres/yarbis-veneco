@@ -1301,62 +1301,114 @@ class YARBISBrain {
     return null;
   }
 
+  cleanGeminiKey(rawKey) {
+    if (!rawKey) return '';
+    return rawKey.trim()
+      .replace(/^['"`]+|['"`]+$/g, '')
+      .replace(/^Bearer\s+/i, '')
+      .replace(/^key=/i, '')
+      .trim();
+  }
+
+  setApiKey(key) {
+    this.geminiApiKey = this.cleanGeminiKey(key);
+    localStorage.setItem('yarbis_gemini_api_key', this.geminiApiKey);
+  }
+
   async queryGeminiAI(userText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiApiKey}`;
+    const key = this.cleanGeminiKey(this.geminiApiKey);
+    if (!key) throw new Error('API Key no configurada');
+
+    const modelsToTry = [
+      this.activeGeminiModel || 'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-8b',
+      'gemini-1.5-pro',
+      'gemini-pro'
+    ];
 
     const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, carismático, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Responde de forma concisa, fluida, natural y directa (máximo 2 o 3 oraciones). No uses markdown excesivo.`;
 
-    const requestBody = {
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: `${systemPrompt}\n\nUsuario: ${userText}` }
-          ]
+    let lastError = null;
+    for (const model of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+        const requestBody = {
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: `${systemPrompt}\n\nUsuario: ${userText}` }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 150
+          }
+        };
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          this.activeGeminiModel = model;
+          return data.candidates[0].content.parts[0].text.trim();
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          lastError = new Error(errData.error?.message || `HTTP ${response.status}`);
         }
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 150
+      } catch (err) {
+        lastError = err;
       }
-    };
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Gemini API returned status ${response.status}`);
     }
 
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text.trim();
+    throw lastError || new Error('No se pudo conectar con los modelos de Google Gemini.');
   }
 
   async testGeminiApiKey(apiKey) {
-    const key = apiKey.trim();
+    const key = this.cleanGeminiKey(apiKey);
     if (!key) return { success: false, message: 'La clave no puede estar vacía.' };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: 'Hola, prueba de conexión de YARBIS' }] }]
-        })
-      });
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b', 'gemini-pro'];
+    let lastStatus = 404;
+    let lastErrorMsg = '';
 
-      if (res.ok) {
-        return { success: true, message: '⚡ Conexión exitosa con Google Gemini API.' };
-      } else {
-        return { success: false, message: `Error (${res.status}): Clave no válida o sin permisos.` };
+    for (const model of modelsToTry) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'Hola, prueba de conexión de YARBIS' }] }]
+          })
+        });
+
+        if (res.ok) {
+          this.activeGeminiModel = model;
+          return { success: true, message: `⚡ Conexión exitosa con Google Gemini (${model}).` };
+        } else {
+          lastStatus = res.status;
+          const errData = await res.json().catch(() => ({}));
+          lastErrorMsg = errData.error?.message || '';
+        }
+      } catch (e) {
+        return { success: false, message: 'Error de red al conectar con Google Gemini.' };
       }
-    } catch (e) {
-      return { success: false, message: 'Error de red al conectar con Google Gemini.' };
     }
+
+    let detail = lastErrorMsg ? `: ${lastErrorMsg}` : '.';
+    if (lastStatus === 400 || lastStatus === 403 || lastStatus === 404) {
+      return { 
+        success: false, 
+        message: `Error (${lastStatus})${detail} Asegúrate de haber copiado la clave desde Google AI Studio (comienza con "AIzaSy...").` 
+      };
+    }
+
+    return { success: false, message: `Error (${lastStatus})${detail}` };
   }
 
   async queryFreeAI(userText) {
