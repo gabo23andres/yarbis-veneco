@@ -1415,17 +1415,71 @@ footer.hud-footer {
    ========================================================================== */
 .camera-modal-box {
   width: 92%;
-  max-width: 520px;
-  background: rgba(10, 15, 25, 0.95);
+  max-width: 540px;
+  background: rgba(10, 15, 25, 0.96);
   border: 1px solid var(--color-primary);
   box-shadow: 0 0 35px var(--hud-glow);
   border-radius: 20px;
-  padding: 18px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
   overflow: hidden;
+}
+
+.btn-camera-tool {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--hud-glass-border);
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.btn-camera-tool:hover, .btn-camera-tool.active {
+  border-color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.2);
+  box-shadow: 0 0 10px var(--hud-glow);
+}
+
+.camera-mode-selector {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  overflow-x: auto;
+  padding: 4px 0 10px 0;
+  scrollbar-width: none;
+}
+
+.camera-mode-selector::-webkit-scrollbar {
+  display: none;
+}
+
+.btn-camera-mode {
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--hud-glass-border);
+  color: var(--color-text-dim);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  font-family: var(--font-hud);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-camera-mode.active {
+  background: rgba(var(--color-primary-rgb), 0.25);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  box-shadow: 0 0 10px var(--hud-glow);
+  font-weight: 700;
 }
 
 .camera-preview-container {
@@ -1449,13 +1503,46 @@ footer.hud-footer {
 
 .camera-hud-reticle {
   position: absolute;
-  inset: 15%;
-  border: 2px dashed rgba(var(--color-primary-rgb), 0.6);
+  inset: 12%;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.25);
   border-radius: 12px;
   pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.camera-reticle-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--color-primary);
+  border-style: solid;
+  pointer-events: none;
+}
+
+.camera-reticle-corner.top-left {
+  top: -1px; left: -1px;
+  border-width: 3px 0 0 3px;
+  border-top-left-radius: 8px;
+}
+
+.camera-reticle-corner.top-right {
+  top: -1px; right: -1px;
+  border-width: 3px 3px 0 0;
+  border-top-right-radius: 8px;
+}
+
+.camera-reticle-corner.bottom-left {
+  bottom: -1px; left: -1px;
+  border-width: 0 0 3px 3px;
+  border-bottom-left-radius: 8px;
+}
+
+.camera-reticle-corner.bottom-right {
+  bottom: -1px; right: -1px;
+  border-width: 0 3px 3px 0;
+  border-bottom-right-radius: 8px;
 }
 
 .camera-laser-scan {

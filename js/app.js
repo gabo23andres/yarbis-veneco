@@ -908,6 +908,64 @@ function initYarbisApp() {
       speechEngine.startListening();
     }
   };
+  // Camera Vision Controllers
+  let currentScanMode = 'general';
+  let isFlashOn = false;
+
+  window.setScanMode = (mode) => {
+    currentScanMode = mode;
+    audioSynth.playClickSound();
+    document.querySelectorAll('.btn-camera-mode').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-mode') === mode);
+    });
+    const txtCapture = document.getElementById('txtCaptureBtn');
+    if (txtCapture) {
+      if (mode === 'document') txtCapture.textContent = '📄 Escanear Documento';
+      else if (mode === 'translate') txtCapture.textContent = '🌐 Traducir Texto';
+      else if (mode === 'qr') txtCapture.textContent = '📱 Leer Código QR';
+      else txtCapture.textContent = '📸 Escanear con IA';
+    }
+  };
+
+  window.toggleCameraFlash = async () => {
+    audioSynth.playClickSound();
+    if (!cameraStream) return;
+    const track = cameraStream.getVideoTracks()[0];
+    if (track) {
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (capabilities.torch) {
+        try {
+          isFlashOn = !isFlashOn;
+          await track.applyConstraints({ advanced: [{ torch: isFlashOn }] });
+          const btnFlash = document.getElementById('btnToggleFlash');
+          if (btnFlash) btnFlash.classList.toggle('active', isFlashOn);
+        } catch (e) {
+          console.warn('Torch constraint error:', e);
+        }
+      } else {
+        alert('La linterna no está disponible en este dispositivo/navegador.');
+      }
+    }
+  };
+
+  window.handleGalleryUpload = (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    audioSynth.playClickSound();
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64Img = e.target.result;
+      closeCameraModal();
+      appendMessage('USER', '📂 [Imagen subida desde Galería]');
+      appendMessage(brain.assistantName, '⚡ Analizando imagen con visión artificial Stark...', true);
+      audioSynth.playScanSound();
+      const visionAnalysis = await brain.analyzeImage(base64Img, currentScanMode);
+      appendMessage(brain.assistantName, visionAnalysis, true);
+      speechEngine.speak(visionAnalysis);
+    };
+    reader.readAsDataURL(file);
+  };
+
   window.openCamera = openCameraModal;
   window.closeCamera = closeCameraModal;
   window.switchCamera = async () => {
@@ -924,12 +982,16 @@ function initYarbisApp() {
     ctx.drawImage(videoCamera, 0, 0, canvasCameraSnapshot.width, canvasCameraSnapshot.height);
     const base64Img = canvasCameraSnapshot.toDataURL('image/jpeg', 0.85);
     closeCameraModal();
-    appendMessage('USER', '📸 [Foto enviada a Escáner]');
+    appendMessage('USER', `📸 [Foto enviada a Escáner (${currentScanMode.toUpperCase()})]`);
     appendMessage(brain.assistantName, '⚡ Analizando imagen con visión artificial Stark...', true);
     audioSynth.playScanSound();
-    const visionAnalysis = await brain.analyzeImage(base64Img);
+    const visionAnalysis = await brain.analyzeImage(base64Img, currentScanMode);
     appendMessage(brain.assistantName, visionAnalysis, true);
     speechEngine.speak(visionAnalysis);
+
+    if (currentScanMode === 'document' && visionAnalysis.length > 20) {
+      appendMessage(brain.assistantName, `💡 Puedes copiar este texto o guardarlo tocando [📝 Notas]`, false);
+    }
   };
   window.openInstallPwa = () => {
     audioSynth.playClickSound();

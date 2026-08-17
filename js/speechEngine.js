@@ -334,20 +334,18 @@ class YARBISSpeechEngine {
     const voices = this.synthesis.getVoices();
     if (!voices || voices.length === 0) return;
 
-    const langPrefix = this.language.substring(0, 2);
+    const langPrefix = (this.language || 'es').substring(0, 2);
+    const spanishVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(langPrefix));
 
-    const preferredVoice = voices.find(v =>
-      v.lang.startsWith(langPrefix) && (
-        v.name.includes('Jorge') ||
-        v.name.includes('Pablo') ||
-        v.name.includes('Diego') ||
-        v.name.includes('Google español') ||
-        v.name.includes('Spanish') ||
-        v.name.includes('Español')
-      )
-    ) || voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) || voices[0];
+    // Priority: High Quality Natural / Neural Voices in Spanish
+    const priorityNames = ['Google español', 'Microsoft Sabina', 'Microsoft Alvaro', 'Jorge', 'Mónica', 'Paulina', 'Diego', 'Lucía', 'Carlos', 'Pablo'];
+    let best = null;
+    for (const name of priorityNames) {
+      best = spanishVoices.find(v => v.name.toLowerCase().includes(name.toLowerCase()));
+      if (best) break;
+    }
 
-    this.selectedVoice = preferredVoice;
+    this.selectedVoice = best || spanishVoices[0] || voices[0];
   }
 
   speak(text) {
@@ -359,14 +357,24 @@ class YARBISSpeechEngine {
       this.stopListening();
     }
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Clean markdown and non-spoken symbols for crystal-clear natural speech
+    const cleanSpeech = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/https?:\/\/\S+/gi, 'enlace web')
+      .replace(/[`_~>]/g, '')
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(cleanSpeech);
+    if (!this.selectedVoice) this.loadVoices();
     if (this.selectedVoice) {
       utterance.voice = this.selectedVoice;
     }
-    utterance.lang = this.language;
+    utterance.lang = this.language || 'es-ES';
 
-    utterance.pitch = this.pitch;
-    utterance.rate = this.rate;
+    utterance.pitch = this.pitch || 0.9;
+    utterance.rate = this.rate || 1.0;
 
     let audioPulseInterval = null;
 

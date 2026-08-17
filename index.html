@@ -40,7 +40,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=8.9.0" />
+  <link rel="stylesheet" href="styles.css?v=9.0.0" />
 </head>
 <body>
 
@@ -207,6 +207,7 @@
         <button class="btn-protocol" data-theme="theme-spideriron">🕷️ Spider-Iron</button>
         <button class="btn-protocol" data-theme="theme-wakanda">🟣 Wakanda</button>
         <button class="btn-protocol" data-theme="theme-stealth">🟢 Sigilo</button>
+        <button class="btn-protocol" data-theme="theme-hulkbuster">🟡 Hulkbuster</button>
       </div>
 
       <div class="hud-copyright">
@@ -280,19 +281,40 @@
   <!-- CAMERA VISION SCANNER MODAL -->
   <div class="modal-backdrop" id="modalCamera">
     <div class="camera-modal-box">
-      <h3 class="modal-title" style="margin-bottom: 12px;">VISIÓN ARTIFICIAL STARK</h3>
+      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 8px;">
+        <h3 class="modal-title" style="margin: 0; font-size: 1rem;">📷 VISIÓN ARTIFICIAL STARK</h3>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" class="btn-camera-tool" id="btnToggleFlash" onclick="if(window.toggleCameraFlash) window.toggleCameraFlash();" title="Encender Linterna/Flash">🔦</button>
+          <button type="button" class="btn-camera-tool" id="btnSwitchCamera" onclick="if(window.switchCamera) window.switchCamera();" title="Cambiar Cámara (Frontal/Trasera)">🔄</button>
+          <label for="inputUploadGallery" class="btn-camera-tool" style="cursor: pointer; margin: 0;" title="Subir foto desde la galería">📂<input type="file" id="inputUploadGallery" accept="image/*" style="display: none;" onchange="if(window.handleGalleryUpload) window.handleGalleryUpload(event);" /></label>
+        </div>
+      </div>
+
+      <!-- Scan Mode Selector -->
+      <div class="camera-mode-selector">
+        <button type="button" class="btn-camera-mode active" data-mode="general" onclick="if(window.setScanMode) window.setScanMode('general');">🔍 Objeto</button>
+        <button type="button" class="btn-camera-mode" data-mode="document" onclick="if(window.setScanMode) window.setScanMode('document');">📄 Documento / OCR</button>
+        <button type="button" class="btn-camera-mode" data-mode="translate" onclick="if(window.setScanMode) window.setScanMode('translate');">🌐 Traducir</button>
+        <button type="button" class="btn-camera-mode" data-mode="qr" onclick="if(window.setScanMode) window.setScanMode('qr');">📱 QR / Código</button>
+      </div>
       
       <div class="camera-preview-container">
         <video id="videoCamera" autoplay playsinline muted></video>
-        <div class="camera-hud-reticle"></div>
+        <div class="camera-hud-reticle">
+          <span class="camera-reticle-corner top-left"></span>
+          <span class="camera-reticle-corner top-right"></span>
+          <span class="camera-reticle-corner bottom-left"></span>
+          <span class="camera-reticle-corner bottom-right"></span>
+        </div>
         <div class="camera-laser-scan"></div>
         <canvas id="canvasCameraSnapshot" style="display: none;"></canvas>
       </div>
 
       <div class="camera-controls-bar">
-        <button type="button" class="btn-modal-close" id="btnCloseCamera" onclick="if(window.closeCamera) window.closeCamera();" style="padding: 10px 18px;">Cancelar</button>
-        <button type="button" class="btn-icon-secondary" id="btnSwitchCamera" onclick="if(window.switchCamera) window.switchCamera();" title="Cambiar Cámara">🔄</button>
-        <button type="button" class="btn-capture-scan" id="btnCaptureScan" onclick="if(window.captureScan) window.captureScan();">📸 Escanear con IA</button>
+        <button type="button" class="btn-modal-close" id="btnCloseCamera" onclick="if(window.closeCamera) window.closeCamera();" style="padding: 10px 18px;">Cerrar</button>
+        <button type="button" class="btn-capture-scan" id="btnCaptureScan" onclick="if(window.captureScan) window.captureScan();">
+          <span id="txtCaptureBtn">📸 Escanear con IA</span>
+        </button>
       </div>
     </div>
   </div>
@@ -404,11 +426,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=8.9.0"></script>
-  <script src="js/arcReactor.js?v=8.9.0"></script>
-  <script src="js/speechEngine.js?v=8.9.0"></script>
-  <script src="js/yarbisBrain.js?v=8.9.0"></script>
-  <script src="js/app.js?v=8.9.0"></script>
+  <script src="js/audioEffects.js?v=9.0.0"></script>
+  <script src="js/arcReactor.js?v=9.0.0"></script>
+  <script src="js/speechEngine.js?v=9.0.0"></script>
+  <script src="js/yarbisBrain.js?v=9.0.0"></script>
+  <script src="js/app.js?v=9.0.0"></script>
 
 </body>
 </html>

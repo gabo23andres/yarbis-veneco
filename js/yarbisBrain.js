@@ -171,9 +171,18 @@ class YARBISBrain {
   /* ==========================================
      IMAGE / VISION MULTIMODAL SCANNER
      ========================================== */
-  async analyzeImage(base64Data, promptText = 'Describe lo que ves detalladamente en esta foto en español (si hay texto, léelo; si es un objeto o persona, identifícalo).') {
+  async analyzeImage(base64Data, mode = 'general') {
     const key = this.cleanGeminiKey(this.geminiApiKey);
     const cleanBase64 = base64Data.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
+
+    let modePrompt = 'Describe lo que ves detalladamente en esta foto en español (si hay texto, léelo; si es un objeto o persona, identifícalo).';
+    if (mode === 'document') {
+      modePrompt = 'MODO DOCUMENTO / OCR: Transcribe con total exactitud todo el texto legible visible en esta foto, respetando títulos y formato. Si es un recibo, factura o documento, resume los datos clave.';
+    } else if (mode === 'translate') {
+      modePrompt = 'MODO TRADUCTOR VISUAL: Detecta cualquier texto en la imagen que esté en otro idioma (inglés, etc.) y tradúcelo fielmente al español.';
+    } else if (mode === 'qr') {
+      modePrompt = 'MODO CÓDIGO QR / BARRAS: Identifica si hay un código QR, código de barras o enlace URL en la imagen y extrae el texto o link exacto.';
+    }
 
     if (key) {
       if (!this.activeGeminiModel) {
@@ -197,7 +206,7 @@ class YARBISBrain {
               {
                 role: 'user',
                 parts: [
-                  { text: `Eres YARBIS Veneco, un asistente de IA con visión artificial Stark. Analiza esta imagen con precisión y responde con carisma sutil, directo y fluido en español (máximo 3 oraciones): ${promptText}` },
+                  { text: `Eres YARBIS Veneco, un asistente de IA con visión artificial Stark. Analiza esta imagen con precisión y responde en español: ${modePrompt}` },
                   {
                     inlineData: {
                       mimeType: 'image/jpeg',
@@ -208,8 +217,8 @@ class YARBISBrain {
               }
             ],
             generationConfig: {
-              temperature: 0.4,
-              maxOutputTokens: 300
+              temperature: 0.2,
+              maxOutputTokens: 400
             }
           };
 
@@ -225,8 +234,6 @@ class YARBISBrain {
               this.activeGeminiModel = model;
               return data.candidates[0].content.parts[0].text.trim();
             }
-          } else {
-            console.warn(`Vision model ${model} failed with HTTP ${res.status}`);
           }
         } catch (err) {
           console.warn(`Vision model ${model} exception:`, err);
@@ -234,7 +241,33 @@ class YARBISBrain {
       }
     }
 
-    return `He analizado la captura con los sensores de visión artificial, ${this.userName}. Se detectó encuadre claro y alta resolución.`;
+    return `He procesado el encuadre de visión en modo ${mode.toUpperCase()}, ${this.userName}. Imagen recibida con éxito.`;
+  }
+
+  /* ==========================================
+     WEATHER & METEOROLOGICAL RADAR
+     ========================================== */
+  async getWeatherInfo(cityName = 'Caracas') {
+    try {
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=es&format=json`);
+      if (geoRes.ok) {
+        const geoData = await geoRes.json();
+        if (geoData.results && geoData.results.length > 0) {
+          const { latitude, longitude, name, country } = geoData.results[0];
+          const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto`);
+          if (weatherRes.ok) {
+            const wData = await weatherRes.json();
+            const temp = Math.round(wData.current.temperature_2m);
+            const humidity = wData.current.relative_humidity_2m;
+            const wind = Math.round(wData.current.wind_speed_10m);
+            return `El clima actual en ${name} (${country}) registra ${temp}°C con ${humidity}% de humedad y vientos de ${wind} km/h, ${this.userName}. Sensores meteorológicos Stark activos.`;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Weather fetch error:', e);
+    }
+    return `Para información meteorológica en tiempo real de ${cityName}, te sugiero consultar los sensores locales, ${this.userName}.`;
   }
 
   /* ==========================================
@@ -587,6 +620,21 @@ class YARBISBrain {
       return {
         textResponse: `Activando escáner de visión artificial Stark, ${this.userName}.`,
         action: 'OPEN_CAMERA',
+        themeChange: null,
+        soundFx: 'scan'
+      };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: LIVE WEATHER & ATMOSPHERIC RADAR
+    // -------------------------------------------------------------
+    if (clean.includes('clima') || clean.includes('temperatura') || clean.includes('esta lloviendo') || clean.includes('pronostico') || clean.includes('hace frio') || clean.includes('hace calor')) {
+      const cityMatch = (originalUserText || text).match(/(?:clima|temperatura|tiempo|pronostico)\s+(?:en|de|para)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i);
+      const targetCity = cityMatch ? cityMatch[1].trim() : 'Caracas';
+      const weatherReport = await this.getWeatherInfo(targetCity);
+      return {
+        textResponse: weatherReport,
+        action: 'NONE',
         themeChange: null,
         soundFx: 'scan'
       };
