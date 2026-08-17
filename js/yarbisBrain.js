@@ -1327,7 +1327,7 @@ class YARBISBrain {
             .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
             .map(m => m.name.replace(/^models\//, ''));
 
-          const preferred = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+          const preferred = ['gemini-3.6-flash', 'gemini-3.0-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
           for (const pref of preferred) {
             if (validModels.includes(pref)) {
               this.activeGeminiModel = pref;
@@ -1343,7 +1343,7 @@ class YARBISBrain {
     } catch (e) {
       console.warn('Model list discovery error:', e);
     }
-    return this.activeGeminiModel || 'gemini-1.5-flash';
+    return this.activeGeminiModel || 'gemini-3.6-flash';
   }
 
   async queryGeminiAI(userText) {
@@ -1354,7 +1354,7 @@ class YARBISBrain {
       await this.discoverWorkingGeminiModel(key);
     }
 
-    const model = this.activeGeminiModel || 'gemini-1.5-flash';
+    const model = this.activeGeminiModel || 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
     const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, carismático, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Responde de forma concisa, fluida, natural y directa (máximo 2 o 3 oraciones). No uses markdown excesivo.`;
 
@@ -1409,26 +1409,46 @@ class YARBISBrain {
         .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
         .map(m => m.name.replace(/^models\//, ''));
 
-      const preferred = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
-      let selectedModel = preferred.find(p => validModels.includes(p)) || validModels[0] || 'gemini-1.5-flash';
-      this.activeGeminiModel = selectedModel;
-
-      // Step 2: Do a live verification prompt with the discovered model
-      const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${key}`;
-      const testRes = await fetch(testUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: 'Hola, prueba de conexión' }] }]
-        })
-      });
-
-      if (testRes.ok) {
-        return { success: true, message: `⚡ Conexión exitosa con Google Gemini (${selectedModel}).` };
-      } else {
-        const errData = await testRes.json().catch(() => ({}));
-        return { success: false, message: `Error (${testRes.status}): ${errData.error?.message || 'Error al generar respuesta'}` };
+      // Preferred order: latest models first (gemini-3.6-flash, gemini-2.0-flash, gemini-1.5-flash)
+      const preferred = ['gemini-3.6-flash', 'gemini-3.0-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+      const candidateModels = [];
+      for (const pref of preferred) {
+        if (validModels.includes(pref)) candidateModels.push(pref);
       }
+      for (const m of validModels) {
+        if (!candidateModels.includes(m)) candidateModels.push(m);
+      }
+      if (candidateModels.length === 0) candidateModels.push('gemini-3.6-flash', 'gemini-2.0-flash', 'gemini-1.5-flash');
+
+      // Step 2: Try models in sequence until one succeeds
+      let lastErrMsg = '';
+      let lastErrStatus = 404;
+
+      for (const modelToTest of candidateModels) {
+        const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTest}:generateContent?key=${key}`;
+        try {
+          const testRes = await fetch(testUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: 'Hola, prueba de conexión' }] }]
+            })
+          });
+
+          if (testRes.ok) {
+            this.activeGeminiModel = modelToTest;
+            return { success: true, message: `⚡ Conexión exitosa con Google Gemini (${modelToTest}).` };
+          } else {
+            lastErrStatus = testRes.status;
+            const errData = await testRes.json().catch(() => ({}));
+            lastErrMsg = errData.error?.message || '';
+          }
+        } catch (e) {
+          lastErrMsg = e.message;
+        }
+      }
+
+      return { success: false, message: `Error (${lastErrStatus}): ${lastErrMsg}` };
     } catch (e) {
       return { success: false, message: 'Error de red al conectar con Google Gemini.' };
     }
