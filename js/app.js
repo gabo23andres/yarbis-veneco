@@ -13,6 +13,11 @@ function initYarbisApp() {
   const speechEngine = new window.YARBISSpeechEngine();
   const brain = new window.YARBISBrain();
 
+  window.audioSynth = audioSynth;
+  window.arcReactor = arcReactor;
+  window.speechEngine = speechEngine;
+  window.brain = brain;
+
   // UI Element References
   const btnMic = document.getElementById('btnMic');
   const btnSettings = document.getElementById('btnSettings');

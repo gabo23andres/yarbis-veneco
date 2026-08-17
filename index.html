@@ -34,8 +34,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
+  <!-- Cache Control for Immediate Updates -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=8.2.0" />
 </head>
 <body>
 
@@ -390,12 +395,12 @@
     </div>
   </div>
 
-  <!-- App Scripts -->
-  <script src="js/audioEffects.js"></script>
-  <script src="js/arcReactor.js"></script>
-  <script src="js/speechEngine.js"></script>
-  <script src="js/yarbisBrain.js"></script>
-  <script src="js/app.js"></script>
+  <!-- App Scripts (Bypass cache) -->
+  <script src="js/audioEffects.js?v=8.2.0"></script>
+  <script src="js/arcReactor.js?v=8.2.0"></script>
+  <script src="js/speechEngine.js?v=8.2.0"></script>
+  <script src="js/yarbisBrain.js?v=8.2.0"></script>
+  <script src="js/app.js?v=8.2.0"></script>
 
 </body>
 </html>
