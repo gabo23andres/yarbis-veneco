@@ -139,7 +139,7 @@ input, textarea {
 #bgParticlesCanvas {
   position: absolute;
   top: 0; left: 0; width: 100vw; height: 100vh;
-  pointer-events: none;
+  pointer-events: none !important;
   z-index: 0;
 }
 
@@ -154,7 +154,7 @@ body::before {
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
     linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 100% 100%, 100% 4px, 40px 40px, 40px 40px;
-  pointer-events: none;
+  pointer-events: none !important;
   z-index: 0;
 }
 
@@ -1036,18 +1036,22 @@ footer.hud-footer {
   top: 0; left: 0; width: 100vw; height: 100vh;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 99999;
-  display: flex;
+  display: none !important;
   align-items: center;
   justify-content: center;
   opacity: 0;
   pointer-events: none;
+  visibility: hidden;
   transition: opacity 0.3s ease;
 }
 
 .modal-backdrop.active {
+  display: flex !important;
   opacity: 1;
-  pointer-events: all;
+  visibility: visible;
+  pointer-events: auto !important;
 }
 
 .modal-box {
