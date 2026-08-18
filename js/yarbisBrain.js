@@ -271,7 +271,7 @@ class YARBISBrain {
   }
 
   /* ==========================================
-     QUANTITATIVE FINANCE & CRYPTOCURRENCY RADAR
+     QUANTITATIVE FINANCE, BURSÁTIL & BVC/FX RADAR
      ========================================== */
   async fetchLiveCryptoPrices() {
     try {
@@ -321,15 +321,110 @@ class YARBISBrain {
     return null;
   }
 
-  calculateCryptoROI(initialUsd, buyPrice, sellPrice) {
+  getBVCSampleData() {
+    return {
+      stocks: [
+        { ticker: 'MVZ.A', name: 'Mercantil Servicios Fin. A', priceVes: 185.50, change: 1.64, volume: '14,200', sector: 'Banca' },
+        { ticker: 'MVZ.B', name: 'Mercantil Servicios Fin. B', priceVes: 172.00, change: -0.58, volume: '8,450', sector: 'Banca' },
+        { ticker: 'RST', name: 'Ron Santa Teresa', priceVes: 42.80, change: 2.15, volume: '32,100', sector: 'Industrial' },
+        { ticker: 'BNC', name: 'Banco Nacional de Crédito', priceVes: 2.45, change: 0.00, volume: '125,000', sector: 'Banca' },
+        { ticker: 'TDV.D', name: 'CANTV Clase D', priceVes: 16.90, change: -1.17, volume: '45,800', sector: 'Telecom' },
+        { ticker: 'FVI.B', name: 'Fondo Valores Inmobiliarios B', priceVes: 31.00, change: 0.85, volume: '11,300', sector: 'Inmobiliario' }
+      ],
+      ibcIndex: { points: '89,450.20', change: 0.94 }
+    };
+  }
+
+  getGlobalEquitiesSampleData() {
+    return [
+      { ticker: 'SPX', name: 'S&P 500', price: '5,980.50', change: 0.45, type: 'INDEX' },
+      { ticker: 'NDX', name: 'Nasdaq 100', price: '21,120.30', change: 0.82, type: 'INDEX' },
+      { ticker: 'DJI', name: 'Dow Jones 30', price: '43,890.10', change: -0.12, type: 'INDEX' },
+      { ticker: 'NVDA', name: 'Nvidia Corp', price: '142.50', change: 2.40, type: 'STOCK', pe: '48.2', div: '0.03%' },
+      { ticker: 'AAPL', name: 'Apple Inc', price: '232.80', change: 0.35, type: 'STOCK', pe: '34.1', div: '0.43%' },
+      { ticker: 'TSLA', name: 'Tesla Inc', price: '345.20', change: -1.25, type: 'STOCK', pe: '88.4', div: '0.00%' }
+    ];
+  }
+
+  getFXSampleRates() {
+    return {
+      usdOfficialBCV: 62.40,
+      usdMarketParallel: 74.80,
+      eurOfficialBCV: 67.85,
+      usdtP2P: 75.10,
+      spreadPercent: ((74.80 - 62.40) / 62.40) * 100
+    };
+  }
+
+  calculateDCA(purchases) {
+    if (!Array.isArray(purchases) || purchases.length === 0) return null;
+    let totalInvested = 0;
+    let totalUnits = 0;
+
+    purchases.forEach(p => {
+      const amount = parseFloat(p.amount) || 0;
+      const price = parseFloat(p.price) || 0;
+      if (amount > 0 && price > 0) {
+        totalInvested += amount;
+        totalUnits += amount / price;
+      }
+    });
+
+    if (totalUnits === 0) return null;
+    const avgPrice = totalInvested / totalUnits;
+    return {
+      totalInvested,
+      totalUnits,
+      avgPrice
+    };
+  }
+
+  calculateBVCValuation(shares, priceVes, buyPriceVes, bcvRate = 62.40, parallelRate = 74.80) {
+    const totalVes = shares * priceVes;
+    const buyTotalVes = shares * buyPriceVes;
+    const nominalProfitVes = totalVes - buyTotalVes;
+    const nominalRoiVes = buyTotalVes > 0 ? (nominalProfitVes / buyTotalVes) * 100 : 0;
+
+    const usdOfficialValue = totalVes / bcvRate;
+    const usdParallelValue = totalVes / parallelRate;
+
+    return {
+      shares,
+      priceVes,
+      totalVes,
+      nominalProfitVes,
+      nominalRoiVes,
+      usdOfficialValue,
+      usdParallelValue
+    };
+  }
+
+  calculateArbitrageSpread(priceA, priceB, feePercentA = 0.1, feePercentB = 0.1) {
+    if (!priceA || !priceB || priceA <= 0) return null;
+    const grossSpread = ((priceB - priceA) / priceA) * 100;
+    const netSpread = grossSpread - (feePercentA + feePercentB);
+    return {
+      priceA,
+      priceB,
+      grossSpread,
+      netSpread,
+      profitable: netSpread > 0
+    };
+  }
+
+  calculateCryptoROI(initialUsd, buyPrice, sellPrice, feePercent = 0.2) {
     if (!buyPrice || buyPrice <= 0 || !initialUsd) return null;
     const tokens = initialUsd / buyPrice;
-    const finalValue = tokens * sellPrice;
+    const grossFinal = tokens * sellPrice;
+    const fees = (initialUsd * (feePercent / 100)) + (grossFinal * (feePercent / 100));
+    const finalValue = grossFinal - fees;
     const netProfit = finalValue - initialUsd;
-    const roiPercent = ((sellPrice - buyPrice) / buyPrice) * 100;
+    const roiPercent = (netProfit / initialUsd) * 100;
     return {
       tokens,
       initialUsd,
+      grossFinal,
+      fees,
       finalValue,
       netProfit,
       roiPercent
@@ -350,6 +445,18 @@ class YARBISBrain {
       apy,
       finalAmount,
       totalInterest
+    };
+  }
+
+  generateStructuredDataRequest(marketType, symbols = []) {
+    return {
+      schemaVersion: '1.0.0',
+      requestId: `req_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      marketType: marketType.toUpperCase(),
+      symbols: symbols,
+      requiredMetrics: ['lastPrice', 'change24h', 'volume24h', 'high24h', 'low24h', 'bid', 'ask', 'marketCap'],
+      webhookFormat: 'JSON_STARK_FEED'
     };
   }
 
@@ -752,12 +859,58 @@ class YARBISBrain {
 
       if (clean.includes('abrir cripto') || clean.includes('modulo cripto') || clean.includes('panel financiero') || clean.includes('calculadora cripto')) {
         return {
-          textResponse: `Abriendo el Radar Cuantitativo de Finanzas y Criptomonedas Stark, ${this.userName}.`,
+          textResponse: `Abriendo el Terminal Financiero y Bursátil Stark, ${this.userName}.`,
           action: 'OPEN_CRYPTO_HUB',
           themeChange: null,
           soundFx: 'scan'
         };
       }
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: BOLSA DE VALORES DE CARACAS (BVC) & FX CAMBIARIO
+    // -------------------------------------------------------------
+    if (clean.includes('bvc') || clean.includes('bolsa de caracas') || clean.includes('mercantil') || clean.includes('santa teresa') || clean.includes('bnc') || clean.includes('cantv') || clean.includes('dolar bcv') || clean.includes('dolar paralelo') || clean.includes('tasa bcv') || clean.includes('precio del dolar') || clean.includes('brecha cambiaria')) {
+      const fx = this.getFXSampleRates();
+      const bvc = this.getBVCSampleData();
+
+      if (clean.includes('dolar') || clean.includes('bcv') || clean.includes('tasa') || clean.includes('paralelo') || clean.includes('brecha')) {
+        return {
+          textResponse: `💵 Monitor FX Venezuela: Tasa Oficial BCV: Bs. ${fx.usdOfficialBCV.toFixed(2)} | Paralelo/USDT: Bs. ${fx.usdMarketParallel.toFixed(2)} | Brecha cambiaria: +${fx.spreadPercent.toFixed(2)}%, ${this.userName}.`,
+          action: 'OPEN_CRYPTO_HUB',
+          themeChange: null,
+          soundFx: 'success'
+        };
+      }
+
+      if (clean.includes('mercantil') || clean.includes('mvz')) {
+        const stock = bvc.stocks.find(s => s.ticker === 'MVZ.A');
+        const usdVal = (stock.priceVes / fx.usdOfficialBCV).toFixed(2);
+        return {
+          textResponse: `🏛️ BVC: Mercantil (MVZ.A) cotiza en Bs. ${stock.priceVes.toFixed(2)} ($${usdVal} USD Oficial) con variación de +${stock.change}%, ${this.userName}.`,
+          action: 'OPEN_CRYPTO_HUB',
+          themeChange: null,
+          soundFx: 'success'
+        };
+      }
+
+      if (clean.includes('santa teresa') || clean.includes('rst')) {
+        const stock = bvc.stocks.find(s => s.ticker === 'RST');
+        const usdVal = (stock.priceVes / fx.usdOfficialBCV).toFixed(2);
+        return {
+          textResponse: `🏛️ BVC: Ron Santa Teresa (RST) cotiza en Bs. ${stock.priceVes.toFixed(2)} ($${usdVal} USD Oficial) con variación de +${stock.change}%, ${this.userName}.`,
+          action: 'OPEN_CRYPTO_HUB',
+          themeChange: null,
+          soundFx: 'success'
+        };
+      }
+
+      return {
+        textResponse: `🏛️ Bolsa de Valores de Caracas (IBC): ${bvc.ibcIndex.points} pts (+${bvc.ibcIndex.change}%). Abriendo Terminal Bursátil Stark, ${this.userName}.`,
+        action: 'OPEN_CRYPTO_HUB',
+        themeChange: null,
+        soundFx: 'scan'
+      };
     }
 
     // -------------------------------------------------------------
@@ -1545,7 +1698,13 @@ class YARBISBrain {
 
     const model = this.activeGeminiModel || 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, carismático, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Además, posees maestría absoluta como Experto Matemático y Analista Financiero Cuantitativo de Criptomonedas de alto nivel: resuelves problemas de matemáticas (álgebra, cálculo, estadística, ecuaciones), estimaciones financieras, tokenomics, conversiones fiat/cripto, ROI, APY, APR, capitalización y comisiones de red con precisión rigurosa, verificando internamente tus pasos y mostrando un desarrollo estructurado y auditable cuando sea requerido.`;
+    const systemPrompt = `Eres YARBIS Veneco, un Asistente Personal de Análisis Financiero y Bursátil Cuantitativo de alto nivel, con acento venezolano sutil, carismático y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}".
+Tus 4 áreas de monitoreo y análisis son:
+1. Criptoactivos: Precios en tiempo real (Binance/CoinGecko), gas fees, tokenomics, FDV y arbitraje.
+2. Bolsas Internacionales: S&P 500, Nasdaq, Dow Jones, acciones globales (AAPL, NVDA, TSLA, MSFT), PER, dividendos y métricas fundamentales.
+3. Bolsa de Valores de Caracas (BVC): Cotizaciones del IBC, acciones locales (Mercantil, Ron Santa Teresa, BNC, CANTV) con valoración multidivisa en Bolívares (VES) y ajuste a USD/USDT según la tasa del día.
+4. Mercado Cambiario & FX: Monitoreo de tasas VES, USD Oficial BCV, Paralelo/P2P USDT, EUR y brecha cambiaria.
+Calcula ROI neto (deduciendo comisiones), DCA, rendimiento real vs devaluación y entrega tablas Markdown limpias y estructuradas cuando sea oportuno. Nunca inventes precios; sé analítico, preciso y orientado a datos.`;
 
     const requestBody = {
       contents: [
@@ -1555,8 +1714,8 @@ class YARBISBrain {
         }
       ],
       generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 600
+        temperature: 0.3,
+        maxOutputTokens: 800
       }
     };
 
@@ -1644,7 +1803,7 @@ class YARBISBrain {
   }
 
   async queryFreeAI(userText) {
-    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Posees maestría como Experto Matemático y Analista Financiero Cuantitativo de Criptomonedas de alto nivel: resuelves matemáticas, tokenomics, ROI, APY y finanzas con precisión lógica y paso a paso cuando sea requerido, manteniendo carisma venezolano sutil y fluido.`;
+    const systemPrompt = `Eres YARBIS Veneco, un Asistente Personal de Análisis Financiero y Bursátil Cuantitativo de alto nivel (Cripto, Bolsas Globales, Bolsa de Caracas BVC, Tasas FX e Inflación/Devaluación) para ${this.userName}. Responde con cálculos exactos, tablas limpias, análisis paso a paso y tono técnico, analítico y conciso.`;
     
     // Engine 1: Pollinations OpenAI Turbo
     try {

@@ -1190,11 +1190,15 @@ function initYarbisApp() {
     });
     
     const tabConv = document.getElementById('tabCryptoConverter');
-    const tabRoi = document.getElementById('tabCryptoROI');
+    const tabBvc = document.getElementById('tabCryptoBVC');
+    const tabGlobal = document.getElementById('tabCryptoGlobal');
+    const tabDca = document.getElementById('tabCryptoDCA');
     const tabMath = document.getElementById('tabCryptoMath');
 
     if (tabConv) tabConv.style.display = tabId === 'converter' ? 'block' : 'none';
-    if (tabRoi) tabRoi.style.display = tabId === 'roi' ? 'block' : 'none';
+    if (tabBvc) tabBvc.style.display = tabId === 'bvc' ? 'block' : 'none';
+    if (tabGlobal) tabGlobal.style.display = tabId === 'global' ? 'block' : 'none';
+    if (tabDca) tabDca.style.display = tabId === 'dca' ? 'block' : 'none';
     if (tabMath) tabMath.style.display = tabId === 'math' ? 'block' : 'none';
   }
 
@@ -1208,6 +1212,21 @@ function initYarbisApp() {
 
     const usdVal = parseFloat(inputAmount.value) || 0;
     const asset = selectAsset.value;
+
+    const fx = brain.getFXSampleRates ? brain.getFXSampleRates() : { usdOfficialBCV: 62.40, usdMarketParallel: 75.10 };
+
+    if (asset === 'VES_BCV') {
+      const vesAmount = usdVal * fx.usdOfficialBCV;
+      lblResult.textContent = `Bs. ${vesAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (lblRate) lblRate.textContent = `1 USD = Bs. ${fx.usdOfficialBCV.toFixed(2)} (Tasa Oficial BCV)`;
+      return;
+    } else if (asset === 'VES_P2P') {
+      const vesAmount = usdVal * fx.usdMarketParallel;
+      lblResult.textContent = `Bs. ${vesAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (lblRate) lblRate.textContent = `1 USDT = Bs. ${fx.usdMarketParallel.toFixed(2)} (Tasa Paralelo/P2P)`;
+      return;
+    }
+
     const item = cachedCryptoData ? cachedCryptoData[asset] : null;
 
     if (item && item.price > 0) {
@@ -1216,8 +1235,44 @@ function initYarbisApp() {
       lblResult.textContent = `${fmtCrypto} ${asset}`;
       if (lblRate) lblRate.textContent = `1 ${asset} = $${item.price.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD`;
     } else {
-      lblResult.textContent = `Ingresa cantidad...`;
+      lblResult.textContent = `Ingresa monto...`;
     }
+  }
+
+  function calcDcaUi() {
+    const p1 = parseFloat(document.getElementById('inputDcaP1')?.value) || 0;
+    const a1 = parseFloat(document.getElementById('inputDcaA1')?.value) || 0;
+    const p2 = parseFloat(document.getElementById('inputDcaP2')?.value) || 0;
+    const a2 = parseFloat(document.getElementById('inputDcaA2')?.value) || 0;
+
+    const res = brain.calculateDCA([
+      { amount: a1, price: p1 },
+      { amount: a2, price: p2 }
+    ]);
+
+    const lblAvg = document.getElementById('lblDcaAvg');
+    const lblTot = document.getElementById('lblDcaTotal');
+
+    if (res) {
+      if (lblAvg) lblAvg.textContent = `$${res.avgPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+      if (lblTot) lblTot.textContent = `$${res.totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+    }
+  }
+
+  function generateWebhookJson() {
+    audioSynth.playClickSound();
+    const payload = brain.generateStructuredDataRequest('BVC_CRYPTO_FEED', ['BTC', 'ETH', 'MVZ.A', 'RST', 'USD_BCV', 'USD_P2P']);
+    const jsonStr = JSON.stringify(payload, null, 2);
+    
+    const boxOutput = document.getElementById('boxMathOutput');
+    const lblOutput = document.getElementById('lblMathOutput');
+
+    if (boxOutput) boxOutput.style.display = 'block';
+    if (lblOutput) lblOutput.textContent = `// Payload JSON para Webhook / Automatización:\n${jsonStr}`;
+    
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      speechEngine.speak('Estructura JSON generada y copiada al portapapeles.');
+    });
   }
 
   function calcRoiUi() {
@@ -1260,15 +1315,15 @@ function initYarbisApp() {
     }
 
     if (boxOutput) boxOutput.style.display = 'block';
-    if (lblOutput) lblOutput.textContent = 'Procesando modelo analítico con precisión Stark...';
+    if (lblOutput) lblOutput.textContent = 'Procesando modelo bursátil/matemático con precisión Stark...';
 
     try {
       const answer = await brain.queryFreeAI(txt.value.trim());
       if (lblOutput) lblOutput.textContent = answer;
       audioSynth.playSuccessChime();
-      speechEngine.speak(`Cálculo y auditoría matemática completados, ${brain.userName}.`);
+      speechEngine.speak(`Análisis financiero y auditoría completados, ${brain.userName}.`);
     } catch (e) {
-      if (lblOutput) lblOutput.textContent = `Error al procesar el modelo matemático: ${e.message}`;
+      if (lblOutput) lblOutput.textContent = `Error al procesar el análisis: ${e.message}`;
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -1283,6 +1338,8 @@ function initYarbisApp() {
   window.switchCryptoTab = switchCryptoTab;
   window.calculateCryptoConversion = calculateCryptoConversion;
   window.calcRoiUi = calcRoiUi;
+  window.calcDcaUi = calcDcaUi;
+  window.generateWebhookJson = generateWebhookJson;
   window.solveMathProblem = solveMathProblem;
 
   window.addNoteFromInput = () => {

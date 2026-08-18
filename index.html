@@ -40,7 +40,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=9.1.0" />
+  <link rel="stylesheet" href="styles.css?v=9.2.0" />
 </head>
 <body>
 
@@ -279,45 +279,48 @@
     </div>
   </div>
 
-  <!-- CRYPTOCURRENCY & QUANTITATIVE FINANCIAL RADAR MODAL -->
+  <!-- FINANCIAL & STOCK MARKET RADAR TERMINAL MODAL -->
   <div class="modal-backdrop" id="modalCryptoFinance">
-    <div class="modal-box" style="max-width: 620px; width: 95%;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-        <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">📊 RADAR CUANTITATIVO, MATEMÁTICAS & CRIPTO</h3>
-        <button type="button" class="btn-wm-small" id="btnRefreshCrypto" onclick="if(window.refreshCryptoPrices) window.refreshCryptoPrices();" title="Actualizar cotizaciones en vivo">🔄 Actualizar</button>
+    <div class="modal-box" style="max-width: 660px; width: 95%;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">🏛️ TERMINAL FINANCIERO & BURSÁTIL STARK</h3>
+        <button type="button" class="btn-wm-small" id="btnRefreshCrypto" onclick="if(window.refreshCryptoPrices) window.refreshCryptoPrices();" title="Actualizar datos en vivo">🔄 Actualizar</button>
       </div>
 
-      <!-- Live Crypto Price Tickers Strip -->
+      <!-- Live FX & Market Strip -->
       <div class="crypto-ticker-strip" id="cryptoTickerStrip">
         <div class="crypto-card-ticker" id="tickerBTC"><span class="ticker-symbol">BTC</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
         <div class="crypto-card-ticker" id="tickerETH"><span class="ticker-symbol">ETH</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
         <div class="crypto-card-ticker" id="tickerSOL"><span class="ticker-symbol">SOL</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
-        <div class="crypto-card-ticker" id="tickerBNB"><span class="ticker-symbol">BNB</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
-        <div class="crypto-card-ticker" id="tickerXRP"><span class="ticker-symbol">XRP</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
+        <div class="crypto-card-ticker" id="tickerBCV"><span class="ticker-symbol">USD BCV</span><span class="ticker-price">Bs. 62.40</span><span class="ticker-change" style="color: var(--color-primary);">Oficial</span></div>
+        <div class="crypto-card-ticker" id="tickerUSDT"><span class="ticker-symbol">USDT/VES</span><span class="ticker-price">Bs. 75.10</span><span class="ticker-change negative">+20.3% spread</span></div>
       </div>
 
       <!-- Sub-Tabs Selector -->
-      <div class="crypto-tabs-bar">
-        <button type="button" class="btn-crypto-tab active" data-tab="converter" onclick="if(window.switchCryptoTab) window.switchCryptoTab('converter');">🧮 Convertidor</button>
-        <button type="button" class="btn-crypto-tab" data-tab="roi" onclick="if(window.switchCryptoTab) window.switchCryptoTab('roi');">📈 ROI & APY</button>
-        <button type="button" class="btn-crypto-tab" data-tab="math" onclick="if(window.switchCryptoTab) window.switchCryptoTab('math');">🧠 Solucionador Matemático IA</button>
+      <div class="crypto-tabs-bar" style="overflow-x: auto; scrollbar-width: none;">
+        <button type="button" class="btn-crypto-tab active" data-tab="converter" onclick="if(window.switchCryptoTab) window.switchCryptoTab('converter');">🪙 Cripto & FX</button>
+        <button type="button" class="btn-crypto-tab" data-tab="bvc" onclick="if(window.switchCryptoTab) window.switchCryptoTab('bvc');">🇻🇪 Bolsa Caracas (BVC)</button>
+        <button type="button" class="btn-crypto-tab" data-tab="global" onclick="if(window.switchCryptoTab) window.switchCryptoTab('global');">📈 Wall Street</button>
+        <button type="button" class="btn-crypto-tab" data-tab="dca" onclick="if(window.switchCryptoTab) window.switchCryptoTab('dca');">🧮 DCA & Arbitraje</button>
+        <button type="button" class="btn-crypto-tab" data-tab="math" onclick="if(window.switchCryptoTab) window.switchCryptoTab('math');">🧠 Auditoría IA</button>
       </div>
 
-      <!-- TAB 1: CONVERTER -->
+      <!-- TAB 1: CONVERTER & CRYPTO -->
       <div class="crypto-tab-content active" id="tabCryptoConverter">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
           <div>
-            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">CANTIDAD (USD):</label>
+            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">MONTO A CONVERTIR (USD):</label>
             <input type="number" id="inputCryptoAmount" value="100" placeholder="Ej: 100" style="width: 100%;" oninput="if(window.calculateCryptoConversion) window.calculateCryptoConversion();" />
           </div>
           <div>
-            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">CRIPTOMONEDA:</label>
+            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">ACTIVO DESTINO:</label>
             <select id="selectCryptoAsset" style="width: 100%;" onchange="if(window.calculateCryptoConversion) window.calculateCryptoConversion();">
               <option value="BTC">Bitcoin (BTC)</option>
               <option value="ETH">Ethereum (ETH)</option>
               <option value="SOL" selected>Solana (SOL)</option>
               <option value="BNB">Binance Coin (BNB)</option>
-              <option value="XRP">Ripple (XRP)</option>
+              <option value="VES_BCV">Bolívares (Tasa Oficial BCV)</option>
+              <option value="VES_P2P">Bolívares (Tasa Paralelo/USDT)</option>
             </select>
           </div>
         </div>
@@ -328,51 +331,115 @@
         </div>
       </div>
 
-      <!-- TAB 2: ROI & APY -->
-      <div class="crypto-tab-content" id="tabCryptoROI" style="display: none;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+      <!-- TAB 2: BOLSA DE VALORES DE CARACAS (BVC) & FX -->
+      <div class="crypto-tab-content" id="tabCryptoBVC" style="display: none;">
+        <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 6px; display: flex; justify-content: space-between;">
+          <span>🏛️ ÍNDICE BURSÁTIL DE CARACAS (IBC): 89,450.20 (+0.94%)</span>
+          <span style="color: var(--color-text-dim);">Tasa BCV: Bs. 62.40</span>
+        </div>
+        <div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--hud-glass-border); border-radius: 8px; margin-bottom: 8px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
+            <thead>
+              <tr style="background: rgba(0,0,0,0.6); color: var(--color-primary); border-bottom: 1px solid var(--hud-glass-border);">
+                <th style="padding: 6px 8px;">Ticker</th>
+                <th style="padding: 6px 8px;">Empresa</th>
+                <th style="padding: 6px 8px;">Precio VES</th>
+                <th style="padding: 6px 8px;">Equiv. USD</th>
+                <th style="padding: 6px 8px;">Var 24h</th>
+              </tr>
+            </thead>
+            <tbody id="tblBvcBody">
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">MVZ.A</td><td style="padding: 5px 8px;">Mercantil A</td><td style="padding: 5px 8px;">Bs. 185.50</td><td style="padding: 5px 8px; color:var(--color-primary);">$2.97</td><td style="padding: 5px 8px; color:var(--color-success);">+1.64%</td></tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">MVZ.B</td><td style="padding: 5px 8px;">Mercantil B</td><td style="padding: 5px 8px;">Bs. 172.00</td><td style="padding: 5px 8px; color:var(--color-primary);">$2.75</td><td style="padding: 5px 8px; color:#ff3366;">-0.58%</td></tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">RST</td><td style="padding: 5px 8px;">Ron Sta. Teresa</td><td style="padding: 5px 8px;">Bs. 42.80</td><td style="padding: 5px 8px; color:var(--color-primary);">$0.68</td><td style="padding: 5px 8px; color:var(--color-success);">+2.15%</td></tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">BNC</td><td style="padding: 5px 8px;">Banco Nac. Crédito</td><td style="padding: 5px 8px;">Bs. 2.45</td><td style="padding: 5px 8px; color:var(--color-primary);">$0.04</td><td style="padding: 5px 8px; color:var(--color-text-dim);">0.00%</td></tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">TDV.D</td><td style="padding: 5px 8px;">CANTV Clase D</td><td style="padding: 5px 8px;">Bs. 16.90</td><td style="padding: 5px 8px; color:var(--color-primary);">$0.27</td><td style="padding: 5px 8px; color:#ff3366;">-1.17%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="crypto-result-box" style="font-size: 0.72rem; color: var(--color-text-dim);">
+          💡 <strong>Valoración Multidivisa:</strong> Los precios en USD se calculan con base en la tasa oficial BCV del día para auditar el rendimiento real ajustado a la devaluación.
+        </div>
+      </div>
+
+      <!-- TAB 3: BOLSAS GLOBALES (WALL STREET) -->
+      <div class="crypto-tab-content" id="tabCryptoGlobal" style="display: none;">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
+          <div class="crypto-card-ticker"><span class="ticker-symbol">S&P 500</span><span class="ticker-price">5,980.50</span><span class="ticker-change positive">+0.45%</span></div>
+          <div class="crypto-card-ticker"><span class="ticker-symbol">NASDAQ 100</span><span class="ticker-price">21,120.30</span><span class="ticker-change positive">+0.82%</span></div>
+          <div class="crypto-card-ticker"><span class="ticker-symbol">DOW JONES</span><span class="ticker-price">43,890.10</span><span class="ticker-change negative">-0.12%</span></div>
+        </div>
+        <div style="max-height: 140px; overflow-y: auto; border: 1px solid var(--hud-glass-border); border-radius: 8px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
+            <thead>
+              <tr style="background: rgba(0,0,0,0.6); color: var(--color-primary); border-bottom: 1px solid var(--hud-glass-border);">
+                <th style="padding: 6px 8px;">Ticker</th>
+                <th style="padding: 6px 8px;">Empresa</th>
+                <th style="padding: 6px 8px;">Precio</th>
+                <th style="padding: 6px 8px;">P/E</th>
+                <th style="padding: 6px 8px;">Div. Yield</th>
+                <th style="padding: 6px 8px;">Var</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">NVDA</td><td style="padding: 5px 8px;">Nvidia Corp</td><td style="padding: 5px 8px;">$142.50</td><td style="padding: 5px 8px;">48.2</td><td style="padding: 5px 8px;">0.03%</td><td style="padding: 5px 8px; color:var(--color-success);">+2.40%</td></tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">AAPL</td><td style="padding: 5px 8px;">Apple Inc</td><td style="padding: 5px 8px;">$232.80</td><td style="padding: 5px 8px;">34.1</td><td style="padding: 5px 8px;">0.43%</td><td style="padding: 5px 8px; color:var(--color-success);">+0.35%</td></tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">TSLA</td><td style="padding: 5px 8px;">Tesla Inc</td><td style="padding: 5px 8px;">$345.20</td><td style="padding: 5px 8px;">88.4</td><td style="padding: 5px 8px;">0.00%</td><td style="padding: 5px 8px; color:#ff3366;">-1.25%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 4: DCA & ARBITRAJE -->
+      <div class="crypto-tab-content" id="tabCryptoDCA" style="display: none;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
           <div>
-            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">INVERSIÓN ($):</label>
-            <input type="number" id="inputRoiInitial" value="1000" placeholder="1000" style="width: 100%;" oninput="if(window.calcRoiUi) window.calcRoiUi();" />
+            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO COMPRA 1 ($ / U):</label>
+            <input type="number" id="inputDcaP1" value="60000" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
+            <label style="font-size: 0.7rem; color: var(--color-text-dim); margin-top: 4px; display:block;">Monto Invertido ($):</label>
+            <input type="number" id="inputDcaA1" value="500" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
           </div>
           <div>
-            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO ENTRADA ($):</label>
-            <input type="number" id="inputRoiBuy" value="50000" placeholder="50000" style="width: 100%;" oninput="if(window.calcRoiUi) window.calcRoiUi();" />
-          </div>
-          <div>
-            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO SALIDA ($):</label>
-            <input type="number" id="inputRoiSell" value="65000" placeholder="65000" style="width: 100%;" oninput="if(window.calcRoiUi) window.calcRoiUi();" />
+            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO COMPRA 2 ($ / U):</label>
+            <input type="number" id="inputDcaP2" value="50000" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
+            <label style="font-size: 0.7rem; color: var(--color-text-dim); margin-top: 4px; display:block;">Monto Invertido ($):</label>
+            <input type="number" id="inputDcaA2" value="500" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
           </div>
         </div>
-        <div class="crypto-result-box" id="boxRoiResult">
+        <div class="crypto-result-box" id="boxDcaResult">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-              <div style="font-size: 0.72rem; color: var(--color-text-dim);">RETORNO / ROI ESTIMADO:</div>
-              <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success); font-family: var(--font-hud);" id="lblRoiPercent">+30.00%</div>
+              <div style="font-size: 0.72rem; color: var(--color-text-dim);">PRECIO PROMEDIO PONDERADO (DCA):</div>
+              <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-hud);" id="lblDcaAvg">$54,545.45 USD</div>
             </div>
             <div style="text-align: right;">
-              <div style="font-size: 0.72rem; color: var(--color-text-dim);">GANANCIA NETA:</div>
-              <div style="font-size: 1.15rem; font-weight: 700; color: #fff; font-family: var(--font-hud);" id="lblRoiNetProfit">+$300.00 USD</div>
+              <div style="font-size: 0.72rem; color: var(--color-text-dim);">TOTAL INVERTIDO:</div>
+              <div style="font-size: 1.15rem; font-weight: 700; color: #fff; font-family: var(--font-hud);" id="lblDcaTotal">$1,000.00 USD</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- TAB 3: MATHEMATICAL SOLVER & TOKENOMICS -->
+      <!-- TAB 5: AUDITORÍA IA & SOLICITUD ESTRUCTURADA -->
       <div class="crypto-tab-content" id="tabCryptoMath" style="display: none;">
-        <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">PLANTEA TU PROBLEMA MATEMÁTICO, ECUACIÓN O ANÁLISIS DE TOKENOMICS:</label>
-        <textarea id="txtMathQuery" rows="3" placeholder="Ej: Resuelve la ecuación 3x^2 - 12x + 9 = 0 mostrando el paso a paso, o calcula el FDV de un token con supply de 100M cotizando a $0.45..." style="width: 100%; margin-top: 4px; margin-bottom: 8px;"></textarea>
-        <button type="button" class="btn-capture-scan" id="btnSolveMath" onclick="if(window.solveMathProblem) window.solveMathProblem();" style="width: 100%; justify-content: center;">
-          ⚡ Auditar y Resolver con Precisión Stark
-        </button>
+        <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">CONSULTA FINANCIERA, MODELO DE ARBITRAJE O VALORACIÓN BVC:</label>
+        <textarea id="txtMathQuery" rows="3" placeholder="Ej: Analiza el rendimiento de una compra de 10,000 acciones de Mercantil (MVZ.A) a Bs. 150 vendidas a Bs. 185 con devaluación de tasa BCV de 58 a 62.40 descontando 1% de corretaje..." style="width: 100%; margin-top: 4px; margin-bottom: 8px;"></textarea>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" class="btn-capture-scan" id="btnSolveMath" onclick="if(window.solveMathProblem) window.solveMathProblem();" style="flex: 1; justify-content: center;">
+            ⚡ Auditar y Resolver con Precisión Stark
+          </button>
+          <button type="button" class="btn-wm-small" onclick="if(window.generateWebhookJson) window.generateWebhookJson();" title="Generar Solicitud JSON estructurada para Webhook">
+            📦 JSON Webhook
+          </button>
+        </div>
         <div class="crypto-result-box" id="boxMathOutput" style="margin-top: 8px; display: none;">
-          <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 4px;">DESGLOSE MATEMÁTICO & AUDITORÍA PASO A PASO:</div>
+          <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 4px;">DESGLOSE MATEMÁTICO & AUDITORÍA BURSÁTIL:</div>
           <div id="lblMathOutput" style="font-size: 0.85rem; line-height: 1.4; color: #fff; white-space: pre-wrap;"></div>
         </div>
       </div>
 
       <div class="modal-actions" style="margin-top: 12px;">
-        <button type="button" class="btn-modal-close" onclick="if(window.closeCryptoFinance) window.closeCryptoFinance();" style="width: 100%;">Cerrar Radar Financiero</button>
+        <button type="button" class="btn-modal-close" onclick="if(window.closeCryptoFinance) window.closeCryptoFinance();" style="width: 100%;">Cerrar Terminal Financiero</button>
       </div>
     </div>
   </div>
@@ -525,11 +592,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=9.1.0"></script>
-  <script src="js/arcReactor.js?v=9.1.0"></script>
-  <script src="js/speechEngine.js?v=9.1.0"></script>
-  <script src="js/yarbisBrain.js?v=9.1.0"></script>
-  <script src="js/app.js?v=9.1.0"></script>
+  <script src="js/audioEffects.js?v=9.2.0"></script>
+  <script src="js/arcReactor.js?v=9.2.0"></script>
+  <script src="js/speechEngine.js?v=9.2.0"></script>
+  <script src="js/yarbisBrain.js?v=9.2.0"></script>
+  <script src="js/app.js?v=9.2.0"></script>
 
 </body>
 </html>
