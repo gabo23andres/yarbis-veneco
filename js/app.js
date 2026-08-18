@@ -208,6 +208,8 @@ function initYarbisApp() {
       openCameraModal();
     } else if (response.action === 'OPEN_WATERMARK_CLEANER') {
       openWatermarkModal();
+    } else if (response.action === 'OPEN_CRYPTO_HUB') {
+      openCryptoFinanceModal();
     } else if (response.action === 'TORCH_ON') {
       toggleTorch(true);
     } else if (response.action === 'TORCH_OFF') {
@@ -1128,6 +1130,160 @@ function initYarbisApp() {
   window.humanizeWatermarkText = humanizeWatermarkText;
   window.copyCleanedWatermarkText = copyCleanedWatermarkText;
   window.saveCleanedAsNote = saveCleanedAsNote;
+
+  // ==========================================
+  // CRYPTOCURRENCY & QUANTITATIVE FINANCE MODAL
+  // ==========================================
+  const modalCryptoFinance = document.getElementById('modalCryptoFinance');
+  let cachedCryptoData = null;
+
+  async function openCryptoFinanceModal() {
+    audioSynth.playScanSound();
+    if (modalCryptoFinance) {
+      modalCryptoFinance.classList.add('active');
+      await refreshCryptoPrices();
+      calculateCryptoConversion();
+      calcRoiUi();
+    }
+  }
+
+  function closeCryptoFinanceModal() {
+    audioSynth.playClickSound();
+    if (modalCryptoFinance) modalCryptoFinance.classList.remove('active');
+  }
+
+  async function refreshCryptoPrices() {
+    const btnRefresh = document.getElementById('btnRefreshCrypto');
+    if (btnRefresh) btnRefresh.textContent = '⏳ Cargando...';
+    
+    const data = await brain.fetchLiveCryptoPrices();
+    if (data) {
+      cachedCryptoData = data;
+      const symbols = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'];
+      symbols.forEach(sym => {
+        const item = data[sym];
+        const card = document.getElementById(`ticker${sym}`);
+        if (card && item) {
+          const sign = item.change24h >= 0 ? '+' : '';
+          const cls = item.change24h >= 0 ? 'positive' : 'negative';
+          const fmtPrice = item.price >= 1 ? '$' + item.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '$' + item.price.toFixed(4);
+          
+          const priceEl = card.querySelector('.ticker-price');
+          const changeEl = card.querySelector('.ticker-change');
+          if (priceEl) priceEl.textContent = fmtPrice;
+          if (changeEl) {
+            changeEl.textContent = `${sign}${item.change24h.toFixed(2)}%`;
+            changeEl.className = `ticker-change ${cls}`;
+          }
+        }
+      });
+      calculateCryptoConversion();
+    }
+
+    if (btnRefresh) btnRefresh.textContent = '🔄 Actualizar';
+  }
+
+  function switchCryptoTab(tabId) {
+    audioSynth.playClickSound();
+    document.querySelectorAll('.btn-crypto-tab').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
+    });
+    
+    const tabConv = document.getElementById('tabCryptoConverter');
+    const tabRoi = document.getElementById('tabCryptoROI');
+    const tabMath = document.getElementById('tabCryptoMath');
+
+    if (tabConv) tabConv.style.display = tabId === 'converter' ? 'block' : 'none';
+    if (tabRoi) tabRoi.style.display = tabId === 'roi' ? 'block' : 'none';
+    if (tabMath) tabMath.style.display = tabId === 'math' ? 'block' : 'none';
+  }
+
+  function calculateCryptoConversion() {
+    const inputAmount = document.getElementById('inputCryptoAmount');
+    const selectAsset = document.getElementById('selectCryptoAsset');
+    const lblResult = document.getElementById('lblConversionResult');
+    const lblRate = document.getElementById('lblConversionRate');
+
+    if (!inputAmount || !selectAsset || !lblResult) return;
+
+    const usdVal = parseFloat(inputAmount.value) || 0;
+    const asset = selectAsset.value;
+    const item = cachedCryptoData ? cachedCryptoData[asset] : null;
+
+    if (item && item.price > 0) {
+      const cryptoAmount = usdVal / item.price;
+      const fmtCrypto = cryptoAmount < 0.0001 ? cryptoAmount.toFixed(8) : cryptoAmount.toFixed(4);
+      lblResult.textContent = `${fmtCrypto} ${asset}`;
+      if (lblRate) lblRate.textContent = `1 ${asset} = $${item.price.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD`;
+    } else {
+      lblResult.textContent = `Ingresa cantidad...`;
+    }
+  }
+
+  function calcRoiUi() {
+    const inInitial = document.getElementById('inputRoiInitial');
+    const inBuy = document.getElementById('inputRoiBuy');
+    const inSell = document.getElementById('inputRoiSell');
+    const lblPercent = document.getElementById('lblRoiPercent');
+    const lblProfit = document.getElementById('lblRoiNetProfit');
+
+    if (!inInitial || !inBuy || !inSell || !lblPercent || !lblProfit) return;
+
+    const initial = parseFloat(inInitial.value) || 0;
+    const buy = parseFloat(inBuy.value) || 0;
+    const sell = parseFloat(inSell.value) || 0;
+
+    const res = brain.calculateCryptoROI(initial, buy, sell);
+    if (res) {
+      const sign = res.roiPercent >= 0 ? '+' : '';
+      lblPercent.textContent = `${sign}${res.roiPercent.toFixed(2)}%`;
+      lblPercent.style.color = res.roiPercent >= 0 ? 'var(--color-success)' : '#ff3366';
+
+      const profitSign = res.netProfit >= 0 ? '+$' : '-$';
+      lblProfit.textContent = `${profitSign}${Math.abs(res.netProfit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+      lblProfit.style.color = res.netProfit >= 0 ? '#fff' : '#ff3366';
+    }
+  }
+
+  async function solveMathProblem() {
+    const txt = document.getElementById('txtMathQuery');
+    const btn = document.getElementById('btnSolveMath');
+    const boxOutput = document.getElementById('boxMathOutput');
+    const lblOutput = document.getElementById('lblMathOutput');
+
+    if (!txt || !txt.value.trim()) return;
+
+    audioSynth.playScanSound();
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⚡ Auditando y Calculando...';
+    }
+
+    if (boxOutput) boxOutput.style.display = 'block';
+    if (lblOutput) lblOutput.textContent = 'Procesando modelo analítico con precisión Stark...';
+
+    try {
+      const answer = await brain.queryFreeAI(txt.value.trim());
+      if (lblOutput) lblOutput.textContent = answer;
+      audioSynth.playSuccessChime();
+      speechEngine.speak(`Cálculo y auditoría matemática completados, ${brain.userName}.`);
+    } catch (e) {
+      if (lblOutput) lblOutput.textContent = `Error al procesar el modelo matemático: ${e.message}`;
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '⚡ Auditar y Resolver con Precisión Stark';
+      }
+    }
+  }
+
+  window.openCryptoFinance = openCryptoFinanceModal;
+  window.closeCryptoFinance = closeCryptoFinanceModal;
+  window.refreshCryptoPrices = refreshCryptoPrices;
+  window.switchCryptoTab = switchCryptoTab;
+  window.calculateCryptoConversion = calculateCryptoConversion;
+  window.calcRoiUi = calcRoiUi;
+  window.solveMathProblem = solveMathProblem;
 
   window.addNoteFromInput = () => {
     if (inputNewNote && inputNewNote.value.trim()) {

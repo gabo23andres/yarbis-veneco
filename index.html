@@ -40,7 +40,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=9.0.0" />
+  <link rel="stylesheet" href="styles.css?v=9.1.0" />
 </head>
 <body>
 
@@ -113,6 +113,7 @@
           <button class="app-pill" data-launch="bdv" title="Banco de Venezuela (BDV)">🏦 BDV en Línea</button>
           <button class="app-pill" data-launch="banesco" title="Banesco Online">💳 Banesco</button>
           <button class="app-pill" id="btnLaunchWatermark" onclick="if(window.openWatermarkCleaner) window.openWatermarkCleaner();" title="Limpiador Anti-Marcas de Agua IA" style="background: rgba(0, 255, 102, 0.15); border-color: var(--color-success); color: var(--color-success);">🧹 Anti-Marcas IA</button>
+          <button class="app-pill" id="btnLaunchCrypto" onclick="if(window.openCryptoFinance) window.openCryptoFinance();" title="Radar Cuantitativo, Matemáticas y Criptomonedas" style="background: rgba(0, 243, 255, 0.15); border-color: var(--color-primary); color: var(--color-primary); font-weight: 700;">📊 Cripto & Finanzas IA</button>
           <button class="app-pill" data-launch="pedidosya" title="PedidosYa Delivery">🍔 PedidosYa</button>
           <button class="app-pill" data-launch="yummy" title="Yummy Rides & Food">🛵 Yummy</button>
           <button class="app-pill" data-launch="mercadolibre" title="Mercado Libre">🛍️ MercadoLibre</button>
@@ -278,6 +279,104 @@
     </div>
   </div>
 
+  <!-- CRYPTOCURRENCY & QUANTITATIVE FINANCIAL RADAR MODAL -->
+  <div class="modal-backdrop" id="modalCryptoFinance">
+    <div class="modal-box" style="max-width: 620px; width: 95%;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+        <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">📊 RADAR CUANTITATIVO, MATEMÁTICAS & CRIPTO</h3>
+        <button type="button" class="btn-wm-small" id="btnRefreshCrypto" onclick="if(window.refreshCryptoPrices) window.refreshCryptoPrices();" title="Actualizar cotizaciones en vivo">🔄 Actualizar</button>
+      </div>
+
+      <!-- Live Crypto Price Tickers Strip -->
+      <div class="crypto-ticker-strip" id="cryptoTickerStrip">
+        <div class="crypto-card-ticker" id="tickerBTC"><span class="ticker-symbol">BTC</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
+        <div class="crypto-card-ticker" id="tickerETH"><span class="ticker-symbol">ETH</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
+        <div class="crypto-card-ticker" id="tickerSOL"><span class="ticker-symbol">SOL</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
+        <div class="crypto-card-ticker" id="tickerBNB"><span class="ticker-symbol">BNB</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
+        <div class="crypto-card-ticker" id="tickerXRP"><span class="ticker-symbol">XRP</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
+      </div>
+
+      <!-- Sub-Tabs Selector -->
+      <div class="crypto-tabs-bar">
+        <button type="button" class="btn-crypto-tab active" data-tab="converter" onclick="if(window.switchCryptoTab) window.switchCryptoTab('converter');">🧮 Convertidor</button>
+        <button type="button" class="btn-crypto-tab" data-tab="roi" onclick="if(window.switchCryptoTab) window.switchCryptoTab('roi');">📈 ROI & APY</button>
+        <button type="button" class="btn-crypto-tab" data-tab="math" onclick="if(window.switchCryptoTab) window.switchCryptoTab('math');">🧠 Solucionador Matemático IA</button>
+      </div>
+
+      <!-- TAB 1: CONVERTER -->
+      <div class="crypto-tab-content active" id="tabCryptoConverter">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+          <div>
+            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">CANTIDAD (USD):</label>
+            <input type="number" id="inputCryptoAmount" value="100" placeholder="Ej: 100" style="width: 100%;" oninput="if(window.calculateCryptoConversion) window.calculateCryptoConversion();" />
+          </div>
+          <div>
+            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">CRIPTOMONEDA:</label>
+            <select id="selectCryptoAsset" style="width: 100%;" onchange="if(window.calculateCryptoConversion) window.calculateCryptoConversion();">
+              <option value="BTC">Bitcoin (BTC)</option>
+              <option value="ETH">Ethereum (ETH)</option>
+              <option value="SOL" selected>Solana (SOL)</option>
+              <option value="BNB">Binance Coin (BNB)</option>
+              <option value="XRP">Ripple (XRP)</option>
+            </select>
+          </div>
+        </div>
+        <div class="crypto-result-box" id="boxConversionResult">
+          <div style="font-size: 0.75rem; color: var(--color-text-dim);">RESULTADO ESTIMADO:</div>
+          <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-hud);" id="lblConversionResult">Calculando...</div>
+          <div style="font-size: 0.72rem; color: var(--color-text-dim);" id="lblConversionRate">Cotización en tiempo real</div>
+        </div>
+      </div>
+
+      <!-- TAB 2: ROI & APY -->
+      <div class="crypto-tab-content" id="tabCryptoROI" style="display: none;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+          <div>
+            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">INVERSIÓN ($):</label>
+            <input type="number" id="inputRoiInitial" value="1000" placeholder="1000" style="width: 100%;" oninput="if(window.calcRoiUi) window.calcRoiUi();" />
+          </div>
+          <div>
+            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO ENTRADA ($):</label>
+            <input type="number" id="inputRoiBuy" value="50000" placeholder="50000" style="width: 100%;" oninput="if(window.calcRoiUi) window.calcRoiUi();" />
+          </div>
+          <div>
+            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO SALIDA ($):</label>
+            <input type="number" id="inputRoiSell" value="65000" placeholder="65000" style="width: 100%;" oninput="if(window.calcRoiUi) window.calcRoiUi();" />
+          </div>
+        </div>
+        <div class="crypto-result-box" id="boxRoiResult">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.72rem; color: var(--color-text-dim);">RETORNO / ROI ESTIMADO:</div>
+              <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success); font-family: var(--font-hud);" id="lblRoiPercent">+30.00%</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 0.72rem; color: var(--color-text-dim);">GANANCIA NETA:</div>
+              <div style="font-size: 1.15rem; font-weight: 700; color: #fff; font-family: var(--font-hud);" id="lblRoiNetProfit">+$300.00 USD</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: MATHEMATICAL SOLVER & TOKENOMICS -->
+      <div class="crypto-tab-content" id="tabCryptoMath" style="display: none;">
+        <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">PLANTEA TU PROBLEMA MATEMÁTICO, ECUACIÓN O ANÁLISIS DE TOKENOMICS:</label>
+        <textarea id="txtMathQuery" rows="3" placeholder="Ej: Resuelve la ecuación 3x^2 - 12x + 9 = 0 mostrando el paso a paso, o calcula el FDV de un token con supply de 100M cotizando a $0.45..." style="width: 100%; margin-top: 4px; margin-bottom: 8px;"></textarea>
+        <button type="button" class="btn-capture-scan" id="btnSolveMath" onclick="if(window.solveMathProblem) window.solveMathProblem();" style="width: 100%; justify-content: center;">
+          ⚡ Auditar y Resolver con Precisión Stark
+        </button>
+        <div class="crypto-result-box" id="boxMathOutput" style="margin-top: 8px; display: none;">
+          <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 4px;">DESGLOSE MATEMÁTICO & AUDITORÍA PASO A PASO:</div>
+          <div id="lblMathOutput" style="font-size: 0.85rem; line-height: 1.4; color: #fff; white-space: pre-wrap;"></div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 12px;">
+        <button type="button" class="btn-modal-close" onclick="if(window.closeCryptoFinance) window.closeCryptoFinance();" style="width: 100%;">Cerrar Radar Financiero</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CAMERA VISION SCANNER MODAL -->
   <div class="modal-backdrop" id="modalCamera">
     <div class="camera-modal-box">
@@ -426,11 +525,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=9.0.0"></script>
-  <script src="js/arcReactor.js?v=9.0.0"></script>
-  <script src="js/speechEngine.js?v=9.0.0"></script>
-  <script src="js/yarbisBrain.js?v=9.0.0"></script>
-  <script src="js/app.js?v=9.0.0"></script>
+  <script src="js/audioEffects.js?v=9.1.0"></script>
+  <script src="js/arcReactor.js?v=9.1.0"></script>
+  <script src="js/speechEngine.js?v=9.1.0"></script>
+  <script src="js/yarbisBrain.js?v=9.1.0"></script>
+  <script src="js/app.js?v=9.1.0"></script>
 
 </body>
 </html>

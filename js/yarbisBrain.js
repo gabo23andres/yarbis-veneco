@@ -271,6 +271,89 @@ class YARBISBrain {
   }
 
   /* ==========================================
+     QUANTITATIVE FINANCE & CRYPTOCURRENCY RADAR
+     ========================================== */
+  async fetchLiveCryptoPrices() {
+    try {
+      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+      const fetches = symbols.map(s => 
+        fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${s}`)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      );
+      const results = await Promise.all(fetches);
+      const data = {};
+      results.forEach((item) => {
+        if (item && item.symbol) {
+          const base = item.symbol.replace('USDT', '');
+          data[base] = {
+            price: parseFloat(item.lastPrice),
+            change24h: parseFloat(item.priceChangePercent),
+            high24h: parseFloat(item.highPrice),
+            low24h: parseFloat(item.lowPrice),
+            volume: parseFloat(item.volume)
+          };
+        }
+      });
+
+      if (Object.keys(data).length > 0) return data;
+    } catch (e) {
+      console.warn('Binance ticker fetch error:', e);
+    }
+
+    // Fallback: CoinGecko API
+    try {
+      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,binancecoin,ripple&vs_currencies=usd&include_24hr_change=true');
+      if (cgRes.ok) {
+        const cg = await cgRes.json();
+        return {
+          BTC: { price: cg.bitcoin?.usd || 0, change24h: cg.bitcoin?.usd_24h_change || 0 },
+          ETH: { price: cg.ethereum?.usd || 0, change24h: cg.ethereum?.usd_24h_change || 0 },
+          SOL: { price: cg.solana?.usd || 0, change24h: cg.solana?.usd_24h_change || 0 },
+          BNB: { price: cg.binancecoin?.usd || 0, change24h: cg.binancecoin?.usd_24h_change || 0 },
+          XRP: { price: cg.ripple?.usd || 0, change24h: cg.ripple?.usd_24h_change || 0 }
+        };
+      }
+    } catch (err) {
+      console.warn('CoinGecko fallback error:', err);
+    }
+
+    return null;
+  }
+
+  calculateCryptoROI(initialUsd, buyPrice, sellPrice) {
+    if (!buyPrice || buyPrice <= 0 || !initialUsd) return null;
+    const tokens = initialUsd / buyPrice;
+    const finalValue = tokens * sellPrice;
+    const netProfit = finalValue - initialUsd;
+    const roiPercent = ((sellPrice - buyPrice) / buyPrice) * 100;
+    return {
+      tokens,
+      initialUsd,
+      finalValue,
+      netProfit,
+      roiPercent
+    };
+  }
+
+  calculateCompoundAPY(principal, ratePercent, compoundingFreq = 12, years = 1) {
+    const r = (ratePercent || 0) / 100;
+    const n = compoundingFreq || 12;
+    const t = years || 1;
+    const apy = (Math.pow(1 + r / n, n) - 1) * 100;
+    const finalAmount = (principal || 0) * Math.pow(1 + r / n, n * t);
+    const totalInterest = finalAmount - (principal || 0);
+    return {
+      principal: principal || 0,
+      ratePercent: ratePercent || 0,
+      compoundingFreq: n,
+      apy,
+      finalAmount,
+      totalInterest
+    };
+  }
+
+  /* ==========================================
      CONTACTS AGENDA & HELPER UTILITIES
      ========================================== */
   parseSpokenNumbers(text) {
@@ -638,6 +721,43 @@ class YARBISBrain {
         themeChange: null,
         soundFx: 'scan'
       };
+    }
+
+    // -------------------------------------------------------------
+    // INTENT: CRYPTOCURRENCY & QUANTITATIVE FINANCIAL RADAR
+    // -------------------------------------------------------------
+    if (clean.includes('cripto') || clean.includes('bitcoin') || clean.includes('btc') || clean.includes('ethereum') || clean.includes('eth') || clean.includes('solana') || clean.includes('sol') || clean.includes('binance') || clean.includes('bnb') || clean.includes('xrp') || clean.includes('tokenomics')) {
+      if (clean.includes('precio') || clean.includes('cuanto vale') || clean.includes('cotizacion') || clean.includes('cotización') || clean.includes('valor de') || clean.includes('cuanto esta')) {
+        const prices = await this.fetchLiveCryptoPrices();
+        if (prices) {
+          let asset = 'BTC';
+          if (clean.includes('ethereum') || clean.includes('eth')) asset = 'ETH';
+          else if (clean.includes('solana') || clean.includes('sol')) asset = 'SOL';
+          else if (clean.includes('bnb') || clean.includes('binance')) asset = 'BNB';
+          else if (clean.includes('xrp') || clean.includes('ripple')) asset = 'XRP';
+
+          const d = prices[asset];
+          if (d) {
+            const sign = d.change24h >= 0 ? '+' : '';
+            const fmtPrice = d.price >= 1 ? d.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : d.price.toFixed(4);
+            return {
+              textResponse: `📊 Cotización en tiempo real de ${asset}/USDT: $${fmtPrice} (${sign}${d.change24h.toFixed(2)}% en 24h), ${this.userName}. Radar cuantitativo Stark en línea.`,
+              action: 'NONE',
+              themeChange: null,
+              soundFx: 'success'
+            };
+          }
+        }
+      }
+
+      if (clean.includes('abrir cripto') || clean.includes('modulo cripto') || clean.includes('panel financiero') || clean.includes('calculadora cripto')) {
+        return {
+          textResponse: `Abriendo el Radar Cuantitativo de Finanzas y Criptomonedas Stark, ${this.userName}.`,
+          action: 'OPEN_CRYPTO_HUB',
+          themeChange: null,
+          soundFx: 'scan'
+        };
+      }
     }
 
     // -------------------------------------------------------------
@@ -1425,7 +1545,7 @@ class YARBISBrain {
 
     const model = this.activeGeminiModel || 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, carismático, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Responde de forma concisa, fluida, natural y directa (máximo 2 o 3 oraciones). No uses markdown excesivo.`;
+    const systemPrompt = `Eres YARBIS Veneco, un asistente de inteligencia artificial personal con acento venezolano sutil, carismático, inteligente, respetuoso y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}". Además, posees maestría absoluta como Experto Matemático y Analista Financiero Cuantitativo de Criptomonedas de alto nivel: resuelves problemas de matemáticas (álgebra, cálculo, estadística, ecuaciones), estimaciones financieras, tokenomics, conversiones fiat/cripto, ROI, APY, APR, capitalización y comisiones de red con precisión rigurosa, verificando internamente tus pasos y mostrando un desarrollo estructurado y auditable cuando sea requerido.`;
 
     const requestBody = {
       contents: [
@@ -1435,8 +1555,8 @@ class YARBISBrain {
         }
       ],
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 150
+        temperature: 0.4,
+        maxOutputTokens: 600
       }
     };
 
@@ -1524,7 +1644,7 @@ class YARBISBrain {
   }
 
   async queryFreeAI(userText) {
-    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Responde con acento y carisma venezolano sutil, conciso (máximo 2 oraciones) y en español.`;
+    const systemPrompt = `Eres YARBIS Veneco, un asistente de voz futurista tipo JARVIS para ${this.userName}. Posees maestría como Experto Matemático y Analista Financiero Cuantitativo de Criptomonedas de alto nivel: resuelves matemáticas, tokenomics, ROI, APY y finanzas con precisión lógica y paso a paso cuando sea requerido, manteniendo carisma venezolano sutil y fluido.`;
     
     // Engine 1: Pollinations OpenAI Turbo
     try {
