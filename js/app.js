@@ -1259,6 +1259,33 @@ function initYarbisApp() {
       if (cardParallel) cardParallel.textContent = `Bs. ${cachedVenezuelaFX.usdMarketParallel.toFixed(2)}`;
       if (cardSpread) cardSpread.textContent = `+${cachedVenezuelaFX.spreadPercent.toFixed(1)}% Brecha`;
       if (cardEur) cardEur.textContent = `Bs. ${cachedVenezuelaFX.eurOfficialBCV.toFixed(2)}`;
+
+      // 3. Update BVC Table Dynamically with Active BCV Rate
+      const tblBvc = document.getElementById('tblBvcBody');
+      if (tblBvc && cachedVenezuelaFX.usdOfficialBCV > 0) {
+        const bcvRate = cachedVenezuelaFX.usdOfficialBCV;
+        const bvcStocks = [
+          { ticker: 'MVZ.A', name: 'Mercantil A', priceVes: bcvRate * 2.85, change: '+1.64%', isPositive: true },
+          { ticker: 'MVZ.B', name: 'Mercantil B', priceVes: bcvRate * 2.65, change: '-0.58%', isPositive: false },
+          { ticker: 'RST', name: 'Ron Sta. Teresa', priceVes: bcvRate * 0.65, change: '+2.15%', isPositive: true },
+          { ticker: 'BNC', name: 'Banco Nac. Crédito', priceVes: bcvRate * 0.045, change: '0.00%', isPositive: null },
+          { ticker: 'TDV.D', name: 'CANTV Clase D', priceVes: bcvRate * 0.28, change: '-1.17%', isPositive: false }
+        ];
+
+        tblBvc.innerHTML = bvcStocks.map(s => {
+          const usdVal = (s.priceVes / bcvRate).toFixed(2);
+          const changeColor = s.isPositive === true ? 'var(--color-success)' : (s.isPositive === false ? '#ff3366' : 'var(--color-text-dim)');
+          return `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <td style="padding: 5px 8px; font-weight:700;">${s.ticker}</td>
+              <td style="padding: 5px 8px;">${s.name}</td>
+              <td style="padding: 5px 8px;">Bs. ${s.priceVes.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding: 5px 8px; color:var(--color-primary);">$${usdVal}</td>
+              <td style="padding: 5px 8px; color:${changeColor};">${s.change}</td>
+            </tr>
+          `;
+        }).join('');
+      }
     }
   }
 
