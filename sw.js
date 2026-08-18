@@ -1,5 +1,5 @@
 /* ==========================================================================
-   YARBIS - SERVICE WORKER (AUTO-CLEANUP & DIRECT NETWORK)
+   YARBIS - SERVICE WORKER (AUTO-CLEANUP & ZERO-CACHE NETWORK DIRECT)
    ========================================================================== */
 
 self.addEventListener('install', (event) => {
@@ -12,4 +12,9 @@ self.addEventListener('activate', (event) => {
       .then(() => self.registration.unregister())
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('fetch', (event) => {
+  // Always fetch directly from network to guarantee fresh version
+  event.respondWith(fetch(event.request));
 });

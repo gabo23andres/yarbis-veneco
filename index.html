@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="YARBIS Veneco" />
   <link rel="manifest" href="manifest.json" />
 
-  <!-- Direct Fresh Cache Initializer -->
+  <!-- Direct Fresh Cache Initializer & Global Bridge -->
   <script>
     try {
       if (window.location.protocol.startsWith('http') && 'serviceWorker' in navigator) {
@@ -27,6 +27,91 @@
         }).catch(function(){});
       }
     } catch(e) {}
+
+    // Instant Global Bridge for Modals & Launchers
+    window.openSettings = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalSettings');
+      if (m) m.classList.add('active');
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+      if (window.brain && window.renderContactsUI) window.renderContactsUI();
+    };
+    window.closeSettings = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalSettings');
+      if (m) m.classList.remove('active');
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+    };
+    window.openCryptoFinance = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalCryptoFinance');
+      if (m) m.classList.add('active');
+      if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
+      if (window.refreshCryptoPrices) window.refreshCryptoPrices();
+    };
+    window.closeCryptoFinance = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalCryptoFinance');
+      if (m) m.classList.remove('active');
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+    };
+    window.openWatermarkCleaner = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalWatermarksCleaner');
+      if (m) m.classList.add('active');
+      if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
+    };
+    window.closeWatermarkCleaner = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalWatermarksCleaner');
+      if (m) m.classList.remove('active');
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+    };
+    window.openCamera = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalCamera');
+      if (m) m.classList.add('active');
+      if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
+      if (window.startCameraStream) window.startCameraStream();
+    };
+    window.closeCamera = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalCamera');
+      if (m) m.classList.remove('active');
+      if (window.stopCameraStream) window.stopCameraStream();
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+    };
+    window.openInstallPwa = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalInstallPwa');
+      if (m) m.classList.add('active');
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+    };
+    window.closeInstallPwa = function(e) {
+      if (e && e.type === 'touchend') e.preventDefault();
+      var m = document.getElementById('modalInstallPwa');
+      if (m) m.classList.remove('active');
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+    };
+    window.launchAppByName = function(appKey) {
+      var map = {
+        whatsapp: { url: 'https://web.whatsapp.com', deep: 'whatsapp://' },
+        youtube: { url: 'https://www.youtube.com', deep: 'vnd.youtube://' },
+        spotify: { url: 'https://open.spotify.com', deep: 'spotify://' },
+        bdv: { url: 'https://bdvenlinea.banvenez.com', deep: null },
+        banesco: { url: 'https://www.banesconline.com', deep: null },
+        pedidosya: { url: 'https://www.pedidosya.com.ve', deep: 'pedidosya://' },
+        yummy: { url: 'https://www.yummy.com.ve', deep: 'yummy://' },
+        mercadolibre: { url: 'https://www.mercadolibre.com.ve', deep: 'mercadolibre://' },
+        maps: { url: 'https://maps.google.com', deep: 'maps://' },
+        chatgpt: { url: 'https://chatgpt.com', deep: null }
+      };
+      var target = map[appKey];
+      if (target) {
+        if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+        window.open(target.url, '_blank');
+      }
+    };
   </script>
 
   <!-- Modern Google Fonts -->
@@ -40,7 +125,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=9.6.0" />
+  <link rel="stylesheet" href="styles.css?v=9.7.0" />
 </head>
 <body>
 
@@ -107,18 +192,18 @@
 
         <!-- Quick Web App Launcher -->
         <div class="app-launcher-grid">
-          <button class="app-pill" data-launch="whatsapp" title="Abrir WhatsApp">💬 WhatsApp</button>
-          <button class="app-pill" data-launch="youtube" title="Abrir YouTube">▶️ YouTube</button>
-          <button class="app-pill" data-launch="spotify" title="Abrir Spotify">🎵 Spotify</button>
-          <button class="app-pill" data-launch="bdv" title="Banco de Venezuela (BDV)">🏦 BDV en Línea</button>
-          <button class="app-pill" data-launch="banesco" title="Banesco Online">💳 Banesco</button>
-          <button class="app-pill" id="btnLaunchWatermark" onclick="if(window.openWatermarkCleaner) window.openWatermarkCleaner();" title="Limpiador Anti-Marcas de Agua IA" style="background: rgba(0, 255, 102, 0.15); border-color: var(--color-success); color: var(--color-success);">🧹 Anti-Marcas IA</button>
-          <button class="app-pill" id="btnLaunchCrypto" onclick="if(window.openCryptoFinance) window.openCryptoFinance();" title="Radar Cuantitativo, Matemáticas y Criptomonedas" style="background: rgba(0, 243, 255, 0.15); border-color: var(--color-primary); color: var(--color-primary); font-weight: 700;">📊 Cripto & Finanzas IA</button>
-          <button class="app-pill" data-launch="pedidosya" title="PedidosYa Delivery">🍔 PedidosYa</button>
-          <button class="app-pill" data-launch="yummy" title="Yummy Rides & Food">🛵 Yummy</button>
-          <button class="app-pill" data-launch="mercadolibre" title="Mercado Libre">🛍️ MercadoLibre</button>
-          <button class="app-pill" data-launch="maps" title="Abrir Google Maps">📍 Maps</button>
-          <button class="app-pill" data-launch="chatgpt" title="Abrir ChatGPT">🤖 ChatGPT</button>
+          <button type="button" class="app-pill" data-launch="whatsapp" onclick="window.launchAppByName('whatsapp');" title="Abrir WhatsApp">💬 WhatsApp</button>
+          <button type="button" class="app-pill" data-launch="youtube" onclick="window.launchAppByName('youtube');" title="Abrir YouTube">▶️ YouTube</button>
+          <button type="button" class="app-pill" data-launch="spotify" onclick="window.launchAppByName('spotify');" title="Abrir Spotify">🎵 Spotify</button>
+          <button type="button" class="app-pill" data-launch="bdv" onclick="window.launchAppByName('bdv');" title="Banco de Venezuela (BDV)">🏦 BDV en Línea</button>
+          <button type="button" class="app-pill" data-launch="banesco" onclick="window.launchAppByName('banesco');" title="Banesco Online">💳 Banesco</button>
+          <button type="button" class="app-pill" id="btnLaunchWatermark" onclick="window.openWatermarkCleaner();" title="Limpiador Anti-Marcas de Agua IA" style="background: rgba(0, 255, 102, 0.15); border-color: var(--color-success); color: var(--color-success);">🧹 Anti-Marcas IA</button>
+          <button type="button" class="app-pill" id="btnLaunchCrypto" onclick="window.openCryptoFinance();" title="Radar Cuantitativo, Matemáticas y Criptomonedas" style="background: rgba(0, 243, 255, 0.15); border-color: var(--color-primary); color: var(--color-primary); font-weight: 700;">📊 Cripto & Finanzas IA</button>
+          <button type="button" class="app-pill" data-launch="pedidosya" onclick="window.launchAppByName('pedidosya');" title="PedidosYa Delivery">🍔 PedidosYa</button>
+          <button type="button" class="app-pill" data-launch="yummy" onclick="window.launchAppByName('yummy');" title="Yummy Rides & Food">🛵 Yummy</button>
+          <button type="button" class="app-pill" data-launch="mercadolibre" onclick="window.launchAppByName('mercadolibre');" title="Mercado Libre">🛍️ MercadoLibre</button>
+          <button type="button" class="app-pill" data-launch="maps" onclick="window.launchAppByName('maps');" title="Abrir Google Maps">📍 Maps</button>
+          <button type="button" class="app-pill" data-launch="chatgpt" onclick="window.launchAppByName('chatgpt');" title="Abrir ChatGPT">🤖 ChatGPT</button>
         </div>
 
       </section>
@@ -644,11 +729,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=9.6.0"></script>
-  <script src="js/arcReactor.js?v=9.6.0"></script>
-  <script src="js/speechEngine.js?v=9.6.0"></script>
-  <script src="js/yarbisBrain.js?v=9.6.0"></script>
-  <script src="js/app.js?v=9.6.0"></script>
+  <script src="js/audioEffects.js?v=9.7.0"></script>
+  <script src="js/arcReactor.js?v=9.7.0"></script>
+  <script src="js/speechEngine.js?v=9.7.0"></script>
+  <script src="js/yarbisBrain.js?v=9.7.0"></script>
+  <script src="js/app.js?v=9.7.0"></script>
 
 </body>
 </html>
