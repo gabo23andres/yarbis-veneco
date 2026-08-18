@@ -661,7 +661,6 @@ function initYarbisApp() {
 
   // AI Badge Status Updates
   const btnTestKey = document.getElementById('btnTestKey');
-  const keyTestResult = document.getElementById('keyTestResult');
   const aiStatusText = document.getElementById('aiStatusText');
   const aiStatusDot = document.getElementById('aiStatusDot');
 
@@ -928,6 +927,8 @@ function initYarbisApp() {
     if (speechEngine.continuousMode && !speechEngine.isListening) {
       speechEngine.startListening();
     }
+  };
+
   // ==========================================
   // CAMERA VISION & MULTI-MODE SCANNER
   // ==========================================
@@ -1520,93 +1521,9 @@ function initYarbisApp() {
     });
   });
 
-  // Camera Vision Controller
+  // Attach Camera Modal Trigger
   const btnCamera = document.getElementById('btnCamera');
-  const modalCamera = document.getElementById('modalCamera');
-  const btnCloseCamera = document.getElementById('btnCloseCamera');
-  const btnSwitchCamera = document.getElementById('btnSwitchCamera');
-  const btnCaptureScan = document.getElementById('btnCaptureScan');
-  const videoCamera = document.getElementById('videoCamera');
-  const canvasCameraSnapshot = document.getElementById('canvasCameraSnapshot');
-
-  let cameraStream = null;
-  let currentFacingMode = 'environment';
-
-  async function openCameraModal() {
-    if (!modalCamera) return;
-    modalCamera.classList.add('active');
-    audioSynth.playScanSound();
-    await startCameraStream();
-  }
-
-  function closeCameraModal() {
-    if (!modalCamera) return;
-    modalCamera.classList.remove('active');
-    stopCameraStream();
-  }
-
-  async function startCameraStream() {
-    try {
-      stopCameraStream();
-      const constraints = {
-        video: {
-          facingMode: currentFacingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      };
-      cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-      if (videoCamera) {
-        videoCamera.srcObject = cameraStream;
-        await videoCamera.play();
-      }
-    } catch (e) {
-      console.warn('Camera stream error:', e);
-      appendMessage(brain.assistantName, 'No pude acceder a la cámara. Por favor autoriza el permiso en tu navegador.', true);
-    }
-  }
-
-  function stopCameraStream() {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      cameraStream = null;
-    }
-    if (videoCamera) videoCamera.srcObject = null;
-  }
-
   if (btnCamera) btnCamera.addEventListener('click', openCameraModal);
-  if (btnCloseCamera) btnCloseCamera.addEventListener('click', closeCameraModal);
-  if (btnSwitchCamera) {
-    btnSwitchCamera.addEventListener('click', async () => {
-      audioSynth.playClickSound();
-      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-      await startCameraStream();
-    });
-  }
-
-  if (btnCaptureScan) {
-    btnCaptureScan.addEventListener('click', async () => {
-      audioSynth.playClickSound();
-      if (!videoCamera || !canvasCameraSnapshot) return;
-
-      canvasCameraSnapshot.width = videoCamera.videoWidth || 640;
-      canvasCameraSnapshot.height = videoCamera.videoHeight || 480;
-      const ctx = canvasCameraSnapshot.getContext('2d');
-      ctx.drawImage(videoCamera, 0, 0, canvasCameraSnapshot.width, canvasCameraSnapshot.height);
-
-      const base64Img = canvasCameraSnapshot.toDataURL('image/jpeg', 0.85);
-      closeCameraModal();
-
-      appendMessage('USER', '📸 [Foto enviada a Escáner]');
-      appendMessage(brain.assistantName, '⚡ Analizando imagen con visión artificial Stark...', true);
-      audioSynth.playScanSound();
-
-      const visionAnalysis = await brain.analyzeImage(base64Img);
-      appendMessage(brain.assistantName, visionAnalysis, true);
-      speechEngine.speak(visionAnalysis);
-    });
-  }
 
   // Alarms Scheduler Controller
   let activeAlarms = JSON.parse(localStorage.getItem('yarbis_alarms') || '[]');
