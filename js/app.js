@@ -1396,6 +1396,99 @@ function initYarbisApp() {
     }
   }
 
+  // Tab Switcher for Crypto & Finance Modal
+  function switchCryptoTab(tabName) {
+    const tabs = {
+      converter: document.getElementById('tabCryptoConverter'),
+      bvc: document.getElementById('tabCryptoBVC'),
+      global: document.getElementById('tabCryptoGlobal'),
+      dca: document.getElementById('tabCryptoDCA'),
+      math: document.getElementById('tabCryptoMath')
+    };
+
+    const buttons = document.querySelectorAll('.btn-crypto-tab');
+    buttons.forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+    });
+
+    Object.keys(tabs).forEach(k => {
+      if (tabs[k]) {
+        tabs[k].style.display = (k === tabName) ? 'block' : 'none';
+        tabs[k].classList.toggle('active', k === tabName);
+      }
+    });
+
+    audioSynth.playClickSound();
+
+    if (tabName === 'dca') {
+      calcDcaUi();
+    } else if (tabName === 'converter') {
+      calculateCryptoConversion();
+    } else if (tabName === 'math') {
+      evalInstantMath();
+    }
+  }
+
+  // Instant Mathematical Evaluator
+  function evalInstantMath() {
+    const input = document.getElementById('inputInstantMath');
+    const lbl = document.getElementById('lblMathInstantResult');
+    if (!input || !lbl) return;
+
+    const val = input.value.trim();
+    if (!val) {
+      lbl.textContent = '0';
+      lbl.style.color = 'var(--color-primary)';
+      return;
+    }
+
+    const res = brain.evaluateMathExpression(val);
+    if (res) {
+      lbl.textContent = `= ${res.formatted}`;
+      lbl.style.color = 'var(--color-success)';
+    } else {
+      lbl.textContent = 'Expresión pendiente o compleja';
+      lbl.style.color = 'var(--color-text-dim)';
+    }
+  }
+
+  // Mathematical & Financial Presets
+  function applyMathPreset(preset) {
+    audioSynth.playClickSound();
+    const txt = document.getElementById('txtMathQuery');
+    const instant = document.getElementById('inputInstantMath');
+    if (!txt) return;
+
+    if (preset === 'compound') {
+      txt.value = 'Calcula el interés compuesto de un capital inicial de $2,500 USD con una tasa anual del 12% capitalizable mensualmente durante 3 años. Muestra la fórmula, desglose año por año y el monto final acumulado.';
+      if (instant) instant.value = '2500 * (1 + 0.12/12)^(12 * 3)';
+    } else if (preset === 'devaluation') {
+      txt.value = 'Si mantengo Bs. 50,000 en cuenta bancaria y la tasa de cambio BCV pasa de Bs. 62.40 a Bs. 85.00 por USD en 6 meses, ¿cuál es el porcentaje de devaluación y la pérdida real de poder adquisitivo en dólares?';
+      if (instant) instant.value = '((85.00 - 62.40) / 62.40) * 100';
+    } else if (preset === 'arbitrage') {
+      txt.value = 'Evalúa una oportunidad de arbitraje comprando $1,000 USDT en Binance P2P a Bs. 74.50 por dólar y liquidando en mercado comercial a Bs. 78.20 con 0.15% de comisión por transacción. ¿Cuál es la ganancia neta en USD y VES?';
+      if (instant) instant.value = '(1000 * 78.20 * 0.9985) - (1000 * 74.50 * 1.0015)';
+    } else if (preset === 'rule3') {
+      txt.value = 'Si 15 desarrolladores completan un proyecto en 40 días, ¿cuántos días tomará completar el mismo proyecto con 25 desarrolladores a ritmo constante? Muestra el paso a paso matemático.';
+      if (instant) instant.value = '(15 * 40) / 25';
+    } else if (preset === 'loan') {
+      txt.value = 'Calcula la cuota mensual fija (sistema de amortización francés) para un préstamo de $10,000 USD al 8.5% de interés anual a 24 meses plazo. Detalla la tabla resumen de amortización.';
+      if (instant) instant.value = '(10000 * (0.085/12) * (1 + 0.085/12)^24) / ((1 + 0.085/12)^24 - 1)';
+    }
+
+    evalInstantMath();
+    solveMathProblem();
+  }
+
+  function copyMathOutput() {
+    const lblOutput = document.getElementById('lblMathOutput');
+    if (!lblOutput || !lblOutput.textContent) return;
+    navigator.clipboard.writeText(lblOutput.textContent).then(() => {
+      audioSynth.playSuccessChime();
+      speechEngine.speak('Desglose matemático copiado al portapapeles.');
+    });
+  }
+
   async function solveMathProblem() {
     const txt = document.getElementById('txtMathQuery');
     const btn = document.getElementById('btnSolveMath');
@@ -1404,6 +1497,7 @@ function initYarbisApp() {
 
     if (!txt || !txt.value.trim()) return;
 
+    const query = txt.value.trim();
     audioSynth.playScanSound();
     if (btn) {
       btn.disabled = true;
@@ -1414,7 +1508,27 @@ function initYarbisApp() {
     if (lblOutput) lblOutput.textContent = 'Procesando modelo bursátil/matemático con precisión Stark...';
 
     try {
-      const answer = await brain.queryFreeAI(txt.value.trim());
+      // First check if it's a pure mathematical expression
+      const instantRes = brain.evaluateMathExpression(query);
+      if (instantRes) {
+        lblOutput.textContent = `🎯 RESULTADO EXACTO:\n\nFórmula evaluada: ${instantRes.expression}\nResultado numérico = ${instantRes.formatted}\n\n[Precisión Stark 100% verificada]`;
+        audioSynth.playSuccessChime();
+        speechEngine.speak(`El resultado matemático es ${instantRes.formatted}.`);
+        return;
+      }
+
+      // Query AI Quantitative Engine
+      const prompt = `Actúa como un Experto Matemático y Analista Financiero Cuantitativo de alto nivel Stark.
+Resuelve con precisión matemática absoluta el siguiente problema o consulta:
+"${query}"
+
+Estructura tu respuesta exactamente con:
+1. 📐 **Fórmulas y Variables Identificadas**
+2. 🧮 **Paso a Paso de Resolución Numérica / Algebraica**
+3. 🎯 **Resultado Final Exacto (con unidades monetarias o porcentuales)**
+4. 💡 **Conclusión Financiera / Recomendación Estratégica**`;
+
+      const answer = await brain.queryFreeAI(prompt);
       if (lblOutput) lblOutput.textContent = answer;
       audioSynth.playSuccessChime();
       speechEngine.speak(`Análisis financiero y auditoría completados, ${brain.userName}.`);
@@ -1438,6 +1552,9 @@ function initYarbisApp() {
   window.calcDcaUi = calcDcaUi;
   window.generateWebhookJson = generateWebhookJson;
   window.solveMathProblem = solveMathProblem;
+  window.evalInstantMath = evalInstantMath;
+  window.applyMathPreset = applyMathPreset;
+  window.copyMathOutput = copyMathOutput;
 
   window.addNoteFromInput = () => {
     if (inputNewNote && inputNewNote.value.trim()) {

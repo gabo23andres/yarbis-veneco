@@ -573,9 +573,91 @@ class YARBISBrain {
       requestId: `req_${Date.now()}`,
       timestamp: new Date().toISOString(),
       marketType: marketType.toUpperCase(),
-      symbols: symbols,
       requiredMetrics: ['lastPrice', 'change24h', 'volume24h', 'high24h', 'low24h', 'bid', 'ask', 'marketCap'],
       webhookFormat: 'JSON_STARK_FEED'
+    };
+  }
+
+  evaluateMathExpression(expr) {
+    if (!expr || typeof expr !== 'string') return null;
+    try {
+      let clean = expr.trim()
+        .replace(/×/g, '*')
+        .replace(/÷/g, '/')
+        .replace(/\^/g, '**')
+        .replace(/(\d+)%/g, '($1/100)')
+        .replace(/\bsqrt\(([^)]+)\)/gi, 'Math.sqrt($1)')
+        .replace(/\bcbrt\(([^)]+)\)/gi, 'Math.cbrt($1)')
+        .replace(/\babs\(([^)]+)\)/gi, 'Math.abs($1)')
+        .replace(/\bsin\(([^)]+)\)/gi, 'Math.sin($1)')
+        .replace(/\bcos\(([^)]+)\)/gi, 'Math.cos($1)')
+        .replace(/\btan\(([^)]+)\)/gi, 'Math.tan($1)')
+        .replace(/\blog\(([^)]+)\)/gi, 'Math.log10($1)')
+        .replace(/\bln\(([^)]+)\)/gi, 'Math.log($1)')
+        .replace(/\bpi\b/gi, 'Math.PI')
+        .replace(/\be\b/gi, 'Math.E');
+
+      if (/[^0-9\.\+\-\*\/\(\)\,\s\%\^Math\.sqrtcbrtabsincostanlogEPI]/.test(clean)) {
+        return null;
+      }
+
+      const res = Function(`'use strict'; return (${clean});`)();
+      if (typeof res === 'number' && !isNaN(res) && isFinite(res)) {
+        return {
+          expression: expr,
+          result: res,
+          formatted: Number.isInteger(res) ? res.toString() : (Math.abs(res) < 0.0001 ? res.toExponential(4) : res.toLocaleString('en-US', { maximumFractionDigits: 6 }))
+        };
+      }
+    } catch (err) {
+      return null;
+    }
+    return null;
+  }
+
+  calculateLoanPayment(principal, annualRatePercent, months) {
+    const p = parseFloat(principal) || 0;
+    const r = (parseFloat(annualRatePercent) || 0) / 100 / 12;
+    const n = parseInt(months) || 12;
+    if (p <= 0 || n <= 0) return null;
+    if (r === 0) {
+      const monthly = p / n;
+      return { monthlyPayment: monthly, totalPayment: p, totalInterest: 0 };
+    }
+    const monthlyPayment = (p * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    const totalPayment = monthlyPayment * n;
+    const totalInterest = totalPayment - p;
+    return {
+      principal: p,
+      annualRatePercent,
+      months: n,
+      monthlyPayment,
+      totalPayment,
+      totalInterest
+    };
+  }
+
+  calculateRuleOfThree(a, b, c) {
+    if (!a || a === 0) return null;
+    const result = (b * c) / a;
+    return { a, b, c, result };
+  }
+
+  calculateInflationDevaluation(initialVes, initialBcvRate, finalBcvRate, nominalInterestRate = 0) {
+    if (!initialVes || !initialBcvRate || !finalBcvRate) return null;
+    const initialUsd = initialVes / initialBcvRate;
+    const devaluationPercent = ((finalBcvRate - initialBcvRate) / initialBcvRate) * 100;
+    const finalVesWithInterest = initialVes * (1 + nominalInterestRate / 100);
+    const finalUsd = finalVesWithInterest / finalBcvRate;
+    const purchasingPowerLossPercent = ((finalUsd - initialUsd) / initialUsd) * 100;
+    return {
+      initialVes,
+      initialUsd,
+      finalVesWithInterest,
+      finalUsd,
+      devaluationPercent,
+      purchasingPowerLossPercent,
+      realYieldUsdPercent: purchasingPowerLossPercent
     };
   }
 

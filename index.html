@@ -49,6 +49,31 @@
       if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
       if (window.refreshCryptoPrices) window.refreshCryptoPrices();
     };
+    window.switchCryptoTab = function(tabName) {
+      var tabs = {
+        converter: document.getElementById('tabCryptoConverter'),
+        bvc: document.getElementById('tabCryptoBVC'),
+        global: document.getElementById('tabCryptoGlobal'),
+        dca: document.getElementById('tabCryptoDCA'),
+        math: document.getElementById('tabCryptoMath')
+      };
+      var buttons = document.querySelectorAll('.btn-crypto-tab');
+      for (var b of buttons) {
+        if (b.getAttribute('data-tab') === tabName) b.classList.add('active');
+        else b.classList.remove('active');
+      }
+      for (var k in tabs) {
+        if (tabs[k]) {
+          tabs[k].style.display = (k === tabName) ? 'block' : 'none';
+          if (k === tabName) tabs[k].classList.add('active');
+          else tabs[k].classList.remove('active');
+        }
+      }
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+      if (tabName === 'dca' && window.calcDcaUi) window.calcDcaUi();
+      if (tabName === 'converter' && window.calculateCryptoConversion) window.calculateCryptoConversion();
+      if (tabName === 'math' && window.evalInstantMath) window.evalInstantMath();
+    };
     window.closeCryptoFinance = function(e) {
       if (e && e.type === 'touchend') e.preventDefault();
       var m = document.getElementById('modalCryptoFinance');
@@ -125,7 +150,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=9.7.0" />
+  <link rel="stylesheet" href="styles.css?v=9.8.0" />
 </head>
 <body>
 
@@ -557,10 +582,29 @@
         </div>
       </div>
 
-      <!-- TAB 5: AUDITORÍA IA & SOLICITUD ESTRUCTURADA -->
+      <!-- TAB 5: MOTOR MATEMÁTICO & AUDITORÍA BURSÁTIL IA -->
       <div class="crypto-tab-content" id="tabCryptoMath" style="display: none;">
+        <!-- Instant Mathematical Calculator -->
+        <div style="background: rgba(0,0,0,0.5); border: 1px solid var(--hud-glass-border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">🧮 CALCULADORA MATEMÁTICA INSTANTÁNEA:</label>
+            <span id="lblMathInstantResult" style="font-size: 0.85rem; font-weight: 700; color: var(--color-success); font-family: var(--font-mono);">0</span>
+          </div>
+          <input type="text" id="inputInstantMath" placeholder="Ej: (1500 * 1.16) / 62.40  o  sqrt(144) + 15%" style="width: 100%; font-family: var(--font-mono); font-size: 0.85rem; padding: 6px 10px;" oninput="if(window.evalInstantMath) window.evalInstantMath();" />
+        </div>
+
+        <!-- Quick Mathematical & Financial Presets -->
+        <div style="display: flex; gap: 4px; overflow-x: auto; margin-bottom: 8px; scrollbar-width: none;">
+          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('compound');" title="Interés Compuesto APY">📈 Interés Compuesto</button>
+          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('devaluation');" title="Devaluación e Inflación VES">🇻🇪 Devaluación VES</button>
+          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('arbitrage');" title="Margen de Arbitraje Cripto/P2P">⚖️ Spread Arbitraje</button>
+          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('rule3');" title="Regla de Tres / Proporciones">📐 Regla de Tres</button>
+          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('loan');" title="Cuota de Préstamo / Amortización">🏦 Cuota Préstamo</button>
+        </div>
+
+        <!-- AI Deep Financial & Mathematical Auditor -->
         <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">CONSULTA FINANCIERA, MODELO DE ARBITRAJE O VALORACIÓN BVC:</label>
-        <textarea id="txtMathQuery" rows="3" placeholder="Ej: Analiza el rendimiento de una compra de 10,000 acciones de Mercantil (MVZ.A) a Bs. 150 vendidas a Bs. 185 con devaluación de tasa BCV de 58 a 62.40 descontando 1% de corretaje..." style="width: 100%; margin-top: 4px; margin-bottom: 8px;"></textarea>
+        <textarea id="txtMathQuery" rows="3" placeholder="Ej: Analiza el rendimiento de comprar 10,000 acciones de Mercantil (MVZ.A) a Bs. 150 y venderlas a Bs. 185, con una tasa BCV que pasa de 58 a 62.40, descontando 1% de corretaje..." style="width: 100%; margin-top: 4px; margin-bottom: 8px;"></textarea>
         <div style="display: flex; gap: 6px;">
           <button type="button" class="btn-capture-scan" id="btnSolveMath" onclick="if(window.solveMathProblem) window.solveMathProblem();" style="flex: 1; justify-content: center;">
             ⚡ Auditar y Resolver con Precisión Stark
@@ -570,8 +614,11 @@
           </button>
         </div>
         <div class="crypto-result-box" id="boxMathOutput" style="margin-top: 8px; display: none;">
-          <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 4px;">DESGLOSE MATEMÁTICO & AUDITORÍA BURSÁTIL:</div>
-          <div id="lblMathOutput" style="font-size: 0.85rem; line-height: 1.4; color: #fff; white-space: pre-wrap;"></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">DESGLOSE MATEMÁTICO & AUDITORÍA BURSÁTIL:</div>
+            <button type="button" class="btn-wm-small" onclick="window.copyMathOutput();" title="Copiar desglose">📋 Copiar</button>
+          </div>
+          <div id="lblMathOutput" style="font-size: 0.82rem; line-height: 1.4; color: #fff; white-space: pre-wrap; font-family: var(--font-mono);"></div>
         </div>
       </div>
 
@@ -729,11 +776,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=9.7.0"></script>
-  <script src="js/arcReactor.js?v=9.7.0"></script>
-  <script src="js/speechEngine.js?v=9.7.0"></script>
-  <script src="js/yarbisBrain.js?v=9.7.0"></script>
-  <script src="js/app.js?v=9.7.0"></script>
+  <script src="js/audioEffects.js?v=9.8.0"></script>
+  <script src="js/arcReactor.js?v=9.8.0"></script>
+  <script src="js/speechEngine.js?v=9.8.0"></script>
+  <script src="js/yarbisBrain.js?v=9.8.0"></script>
+  <script src="js/app.js?v=9.8.0"></script>
 
 </body>
 </html>
