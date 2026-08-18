@@ -49,6 +49,11 @@
       if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
       if (window.refreshCryptoPrices) window.refreshCryptoPrices();
     };
+    window.toggleRateEditor = function() {
+      var p = document.getElementById('panelManualRates');
+      if (p) p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
+    };
     window.switchCryptoTab = function(tabName) {
       var tabs = {
         converter: document.getElementById('tabCryptoConverter'),
@@ -150,7 +155,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=9.9.0" />
+  <link rel="stylesheet" href="styles.css?v=10.0.0" />
 </head>
 <body>
 
@@ -394,7 +399,47 @@
     <div class="modal-box" style="max-width: 660px; width: 95%;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
         <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">🏛️ TERMINAL FINANCIERO & BURSÁTIL STARK</h3>
-        <button type="button" class="btn-wm-small" id="btnRefreshCrypto" onclick="if(window.refreshCryptoPrices) window.refreshCryptoPrices();" title="Actualizar datos en vivo">🔄 Actualizar</button>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" class="btn-wm-small" id="btnToggleRateEditor" onclick="window.toggleRateEditor();" title="Editar tasas manualmente">✏️ Ajustar Tasas</button>
+          <button type="button" class="btn-wm-small" id="btnRefreshCrypto" onclick="if(window.refreshCryptoPrices) window.refreshCryptoPrices();" title="Actualizar datos en vivo">🔄 Actualizar</button>
+        </div>
+      </div>
+
+      <!-- Quick Manual Rate Override Panel -->
+      <div id="panelManualRates" style="display: none; background: rgba(0, 0, 0, 0.7); border: 1px solid var(--color-primary); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+        <div style="font-size: 0.75rem; color: var(--color-primary); font-family: var(--font-hud); font-weight: 700; margin-bottom: 6px;">
+          ✏️ CONFIGURACIÓN PERSONALIZADA DE TASAS Y PRECIOS:
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
+          <div>
+            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Dólar BCV (Bs.):</label>
+            <input type="number" id="inputCustomBcv" step="0.01" value="62.40" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Dólar Paralelo (Bs.):</label>
+            <input type="number" id="inputCustomParalelo" step="0.01" value="75.10" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Euro BCV (Bs.):</label>
+            <input type="number" id="inputCustomEur" step="0.01" value="67.85" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Bitcoin ($ USD):</label>
+            <input type="number" id="inputCustomBtc" step="1" value="64500" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Ethereum ($ USD):</label>
+            <input type="number" id="inputCustomEth" step="1" value="2600" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Solana ($ USD):</label>
+            <input type="number" id="inputCustomSol" step="0.1" value="145" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+          </div>
+        </div>
+        <div style="display: flex; gap: 6px; justify-content: flex-end;">
+          <button type="button" class="btn-wm-small" onclick="window.resetRatesToBase();" style="background: rgba(255,255,255,0.1);">⚡ Valores Base</button>
+          <button type="button" class="btn-wm-small" onclick="window.saveCustomRates();" style="background: var(--color-primary); color: #000; font-weight: 700;">💾 Guardar y Aplicar</button>
+        </div>
       </div>
 
       <!-- Live FX & Market Strip -->
@@ -412,7 +457,7 @@
         <button type="button" class="btn-crypto-tab" data-tab="bvc" onclick="if(window.switchCryptoTab) window.switchCryptoTab('bvc');">🇻🇪 Tasas Venezuela & BVC</button>
         <button type="button" class="btn-crypto-tab" data-tab="global" onclick="if(window.switchCryptoTab) window.switchCryptoTab('global');">📈 Wall Street</button>
         <button type="button" class="btn-crypto-tab" data-tab="dca" onclick="if(window.switchCryptoTab) window.switchCryptoTab('dca');">🧮 DCA & Arbitraje</button>
-        <button type="button" class="btn-crypto-tab" data-tab="math" onclick="if(window.switchCryptoTab) window.switchCryptoTab('math');">🧠 Auditoría IA</button>
+        <button type="button" class="btn-crypto-tab" data-tab="math" onclick="if(window.switchCryptoTab) window.switchCryptoTab('math');">🧠 Motor Matemático</button>
       </div>
 
       <!-- TAB 1: CONVERTER UNIVERSAL MULTIDIVISA -->
@@ -776,11 +821,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=9.9.0"></script>
-  <script src="js/arcReactor.js?v=9.9.0"></script>
-  <script src="js/speechEngine.js?v=9.9.0"></script>
-  <script src="js/yarbisBrain.js?v=9.9.0"></script>
-  <script src="js/app.js?v=9.9.0"></script>
+  <script src="js/audioEffects.js?v=10.0.0"></script>
+  <script src="js/arcReactor.js?v=10.0.0"></script>
+  <script src="js/speechEngine.js?v=10.0.0"></script>
+  <script src="js/yarbisBrain.js?v=10.0.0"></script>
+  <script src="js/app.js?v=10.0.0"></script>
 
 </body>
 </html>

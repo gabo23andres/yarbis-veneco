@@ -1213,20 +1213,7 @@ function initYarbisApp() {
     if (modalCryptoFinance) modalCryptoFinance.classList.remove('active');
   }
 
-  async function refreshCryptoPrices() {
-    const btnRefresh = document.getElementById('btnRefreshCrypto');
-    if (btnRefresh) btnRefresh.textContent = '⏳ Cargando...';
-    
-    const [cryptoData, fxData, fiatData] = await Promise.all([
-      brain.fetchLiveCryptoPrices(),
-      brain.fetchLiveVenezuelaFX(),
-      brain.fetchGlobalFiatRates()
-    ]);
-
-    if (cryptoData) cachedCryptoData = cryptoData;
-    if (fxData) cachedVenezuelaFX = fxData;
-    if (fiatData) cachedFiatRates = fiatData;
-
+  function updateAllFinancialTickers() {
     // 1. Update Crypto Tickers Strip
     if (cachedCryptoData) {
       const symbols = ['BTC', 'ETH', 'SOL'];
@@ -1234,15 +1221,15 @@ function initYarbisApp() {
         const item = cachedCryptoData[sym];
         const card = document.getElementById(`ticker${sym}`);
         if (card && item) {
-          const sign = item.change24h >= 0 ? '+' : '';
-          const cls = item.change24h >= 0 ? 'positive' : 'negative';
+          const sign = (item.change24h || 0) >= 0 ? '+' : '';
+          const cls = (item.change24h || 0) >= 0 ? 'positive' : 'negative';
           const fmtPrice = item.price >= 1 ? '$' + item.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '$' + item.price.toFixed(4);
           
           const priceEl = card.querySelector('.ticker-price');
           const changeEl = card.querySelector('.ticker-change');
           if (priceEl) priceEl.textContent = fmtPrice;
           if (changeEl) {
-            changeEl.textContent = `${sign}${item.change24h.toFixed(2)}%`;
+            changeEl.textContent = `${sign}${(item.change24h || 0).toFixed(2)}%`;
             changeEl.className = `ticker-change ${cls}`;
           }
         }
@@ -1273,7 +1260,125 @@ function initYarbisApp() {
       if (cardSpread) cardSpread.textContent = `+${cachedVenezuelaFX.spreadPercent.toFixed(1)}% Brecha`;
       if (cardEur) cardEur.textContent = `Bs. ${cachedVenezuelaFX.eurOfficialBCV.toFixed(2)}`;
     }
+  }
 
+  function toggleRateEditor() {
+    audioSynth.playClickSound();
+    const panel = document.getElementById('panelManualRates');
+    if (panel) {
+      panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+      if (panel.style.display === 'block') {
+        const inBcv = document.getElementById('inputCustomBcv');
+        const inPar = document.getElementById('inputCustomParalelo');
+        const inEur = document.getElementById('inputCustomEur');
+        const inBtc = document.getElementById('inputCustomBtc');
+        const inEth = document.getElementById('inputCustomEth');
+        const inSol = document.getElementById('inputCustomSol');
+
+        if (cachedVenezuelaFX) {
+          if (inBcv) inBcv.value = cachedVenezuelaFX.usdOfficialBCV.toFixed(2);
+          if (inPar) inPar.value = cachedVenezuelaFX.usdMarketParallel.toFixed(2);
+          if (inEur) inEur.value = cachedVenezuelaFX.eurOfficialBCV.toFixed(2);
+        }
+        if (cachedCryptoData) {
+          if (inBtc && cachedCryptoData.BTC) inBtc.value = cachedCryptoData.BTC.price;
+          if (inEth && cachedCryptoData.ETH) inEth.value = cachedCryptoData.ETH.price;
+          if (inSol && cachedCryptoData.SOL) inSol.value = cachedCryptoData.SOL.price;
+        }
+      }
+    }
+  }
+
+  function saveCustomRates() {
+    audioSynth.playSuccessChime();
+    const bcv = parseFloat(document.getElementById('inputCustomBcv')?.value) || 62.40;
+    const par = parseFloat(document.getElementById('inputCustomParalelo')?.value) || 75.10;
+    const eur = parseFloat(document.getElementById('inputCustomEur')?.value) || (bcv * 1.087);
+    const btc = parseFloat(document.getElementById('inputCustomBtc')?.value) || 64500;
+    const eth = parseFloat(document.getElementById('inputCustomEth')?.value) || 2600;
+    const sol = parseFloat(document.getElementById('inputCustomSol')?.value) || 145;
+
+    const customFX = {
+      usdOfficialBCV: bcv,
+      usdMarketParallel: par,
+      eurOfficialBCV: eur,
+      usdtP2P: par,
+      copVesRate: (bcv / 4120),
+      vesCopRate: (4120 / bcv),
+      brlVesRate: (bcv / 5.65),
+      spreadPercent: ((par - bcv) / bcv) * 100,
+      lastUpdated: 'Personalizado',
+      source: 'Tasas fijadas por el usuario'
+    };
+
+    const customCrypto = {
+      BTC: { price: btc, change24h: 1.2 },
+      ETH: { price: eth, change24h: 0.8 },
+      SOL: { price: sol, change24h: 2.1 },
+      BNB: { price: 650, change24h: 0.5 },
+      XRP: { price: 1.45, change24h: 0.0 }
+    };
+
+    cachedVenezuelaFX = customFX;
+    cachedCryptoData = customCrypto;
+
+    try {
+      localStorage.setItem('yarbis_custom_fx', JSON.stringify(customFX));
+      localStorage.setItem('yarbis_custom_crypto', JSON.stringify(customCrypto));
+    } catch (e) {}
+
+    updateAllFinancialTickers();
+    calculateCryptoConversion();
+    calcDcaUi();
+
+    const panel = document.getElementById('panelManualRates');
+    if (panel) panel.style.display = 'none';
+
+    speechEngine.speak('Tasas y precios actualizados correctamente.');
+  }
+
+  function resetRatesToBase() {
+    audioSynth.playClickSound();
+    const inBcv = document.getElementById('inputCustomBcv');
+    const inPar = document.getElementById('inputCustomParalelo');
+    const inEur = document.getElementById('inputCustomEur');
+    const inBtc = document.getElementById('inputCustomBtc');
+    const inEth = document.getElementById('inputCustomEth');
+    const inSol = document.getElementById('inputCustomSol');
+
+    if (inBcv) inBcv.value = '62.40';
+    if (inPar) inPar.value = '75.10';
+    if (inEur) inEur.value = '67.85';
+    if (inBtc) inBtc.value = '64500';
+    if (inEth) inEth.value = '2600';
+    if (inSol) inSol.value = '145';
+
+    saveCustomRates();
+  }
+
+  async function refreshCryptoPrices() {
+    const btnRefresh = document.getElementById('btnRefreshCrypto');
+    if (btnRefresh) btnRefresh.textContent = '⏳ Cargando...';
+    
+    // Check if user set custom override
+    try {
+      const savedFx = localStorage.getItem('yarbis_custom_fx');
+      const savedCrypto = localStorage.getItem('yarbis_custom_crypto');
+      if (savedFx) cachedVenezuelaFX = JSON.parse(savedFx);
+      if (savedCrypto) cachedCryptoData = JSON.parse(savedCrypto);
+    } catch (e) {}
+
+    const [cryptoData, fxData, fiatData] = await Promise.all([
+      brain.fetchLiveCryptoPrices(),
+      brain.fetchLiveVenezuelaFX(),
+      brain.fetchGlobalFiatRates()
+    ]);
+
+    if (cryptoData && !cachedCryptoData) cachedCryptoData = cryptoData;
+    if (fxData && !cachedVenezuelaFX) cachedVenezuelaFX = fxData;
+    if (fiatData) cachedFiatRates = fiatData;
+
+    updateAllFinancialTickers();
     calculateCryptoConversion();
 
     if (btnRefresh) btnRefresh.textContent = '🔄 Actualizar';
@@ -1555,6 +1660,9 @@ Estructura tu respuesta exactamente con:
   window.evalInstantMath = evalInstantMath;
   window.applyMathPreset = applyMathPreset;
   window.copyMathOutput = copyMathOutput;
+  window.toggleRateEditor = toggleRateEditor;
+  window.saveCustomRates = saveCustomRates;
+  window.resetRatesToBase = resetRatesToBase;
 
   window.addNoteFromInput = () => {
     if (inputNewNote && inputNewNote.value.trim()) {
