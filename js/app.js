@@ -7,16 +7,31 @@ function initYarbisApp() {
   if (window.__yarbisInitialized) return;
   window.__yarbisInitialized = true;
 
-  // Initialize Subsystems
-  const audioSynth = window.audioSynth;
-  const arcReactor = new window.ArcReactorEngine('arcReactorCanvas', 'waveformCanvas', 'bgParticlesCanvas');
-  const speechEngine = new window.YARBISSpeechEngine();
-  const brain = new window.YARBISBrain();
+  // Initialize Subsystems Resiliently
+  let audioSynth = window.audioSynth;
+  if (!audioSynth && window.AudioSynthesizer) {
+    try { audioSynth = new window.AudioSynthesizer(); } catch(e) { console.warn('AudioSynth init warning:', e); }
+  }
 
-  window.audioSynth = audioSynth;
-  window.arcReactor = arcReactor;
-  window.speechEngine = speechEngine;
-  window.brain = brain;
+  let arcReactor = null;
+  if (window.ArcReactorEngine) {
+    try { arcReactor = new window.ArcReactorEngine('arcReactorCanvas', 'waveformCanvas', 'bgParticlesCanvas'); } catch(e) { console.warn('ArcReactor init warning:', e); }
+  }
+
+  let speechEngine = window.speechEngine;
+  if (!speechEngine && window.YARBISSpeechEngine) {
+    try { speechEngine = new window.YARBISSpeechEngine(); } catch(e) { console.warn('SpeechEngine init warning:', e); }
+  }
+
+  let brain = window.brain;
+  if (!brain && window.YARBISBrain) {
+    try { brain = new window.YARBISBrain(); } catch(e) { console.warn('Brain init warning:', e); }
+  }
+
+  window.audioSynth = audioSynth || { playClickSound: ()=>{}, playSuccessChime: ()=>{}, playScanSound: ()=>{}, initContext: ()=>{} };
+  window.arcReactor = arcReactor || { setAudioLevel: ()=>{}, setState: ()=>{} };
+  window.speechEngine = speechEngine || { speak: ()=>{}, toggleListening: ()=>{}, primeSpeechSynthesis: ()=>{} };
+  window.brain = brain || { userName: 'Señor', assistantName: 'YARBIS' };
 
   // UI Element References
   const btnMic = document.getElementById('btnMic');
@@ -66,9 +81,13 @@ function initYarbisApp() {
   const inputUserName = document.getElementById('inputUserName');
   const inputGeminiKey = document.getElementById('inputGeminiKey');
   const selectLanguage = document.getElementById('selectLanguage');
+  const keyTestResult = document.getElementById('keyTestResult');
 
-  // Watermarks Cleaner Elements
+  // Modal Elements
   const modalWatermarksCleaner = document.getElementById('modalWatermarksCleaner');
+  const modalCryptoFinance = document.getElementById('modalCryptoFinance');
+  const modalInstallPwa = document.getElementById('modalInstallPwa');
+  const btnCloseInstallPwa = document.getElementById('btnCloseInstallPwa');
   const txtWatermarkInput = document.getElementById('txtWatermarkInput');
   const txtWatermarkOutput = document.getElementById('txtWatermarkOutput');
   const valZeroWidthTokens = document.getElementById('valZeroWidthTokens');
@@ -909,10 +928,49 @@ function initYarbisApp() {
     if (speechEngine.continuousMode && !speechEngine.isListening) {
       speechEngine.startListening();
     }
-  };
-  // Camera Vision Controllers
+  // ==========================================
+  // CAMERA VISION & MULTI-MODE SCANNER
+  // ==========================================
+  const modalCamera = document.getElementById('modalCamera');
+  const videoCamera = document.getElementById('videoCamera');
+  const canvasCameraSnapshot = document.getElementById('canvasCameraSnapshot');
+  let cameraStream = null;
+  let currentFacingMode = 'environment';
   let currentScanMode = 'general';
   let isFlashOn = false;
+
+  async function startCameraStream() {
+    if (!videoCamera) return;
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+    }
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: currentFacingMode } },
+        audio: false
+      });
+      videoCamera.srcObject = cameraStream;
+      await videoCamera.play();
+    } catch (err) {
+      console.warn('Camera stream error:', err);
+      alert('No se pudo acceder a la cámara. Por favor verifica los permisos en tu navegador.');
+    }
+  }
+
+  async function openCameraModal() {
+    audioSynth.playScanSound();
+    if (modalCamera) modalCamera.classList.add('active');
+    await startCameraStream();
+  }
+
+  function closeCameraModal() {
+    audioSynth.playClickSound();
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    if (modalCamera) modalCamera.classList.remove('active');
+  }
 
   window.setScanMode = (mode) => {
     currentScanMode = mode;
@@ -1134,7 +1192,6 @@ function initYarbisApp() {
   // ==========================================
   // CRYPTOCURRENCY & QUANTITATIVE FINANCE MODAL
   // ==========================================
-  const modalCryptoFinance = document.getElementById('modalCryptoFinance');
   let cachedCryptoData = null;
 
   async function openCryptoFinanceModal() {
@@ -1636,8 +1693,6 @@ function initYarbisApp() {
 
   // PWA Install Modal Controller
   const btnInstallPwa = document.getElementById('btnInstallPwa');
-  const modalInstallPwa = document.getElementById('modalInstallPwa');
-  const btnCloseInstallPwa = document.getElementById('btnCloseInstallPwa');
 
   if (btnInstallPwa && modalInstallPwa) {
     btnInstallPwa.addEventListener('click', () => {
