@@ -331,15 +331,6 @@ class YARBISBrain {
      GLOBAL CURRENCY ENGINE & VENEZUELA FX RADAR
      ========================================== */
   async fetchLiveVenezuelaFX() {
-    // Check if user set custom override
-    try {
-      const savedFx = localStorage.getItem('yarbis_custom_fx');
-      if (savedFx) {
-        const parsed = JSON.parse(savedFx);
-        if (parsed && parsed.usdOfficialBCV) return parsed;
-      }
-    } catch (e) {}
-
     const defaultFX = {
       usdOfficialBCV: 772.54,
       usdMarketParallel: 889.65,

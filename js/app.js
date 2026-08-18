@@ -1383,29 +1383,18 @@ function initYarbisApp() {
     saveCustomRates();
   }
 
-  async function refreshCryptoPrices(forceApi = false) {
+  // Limpiar caché antigua de tasas desactualizadas automáticamente
+  try {
+    const oldFx = localStorage.getItem('yarbis_custom_fx');
+    if (oldFx && (oldFx.includes('62.4') || oldFx.includes('75.1'))) {
+      localStorage.removeItem('yarbis_custom_fx');
+      localStorage.removeItem('yarbis_custom_crypto');
+    }
+  } catch (e) {}
+
+  async function refreshCryptoPrices(forceApi = true) {
     const btnRefresh = document.getElementById('btnRefreshCrypto');
     if (btnRefresh) btnRefresh.textContent = '⏳ Sincronizando...';
-    
-    let hasCustomOverride = false;
-    if (!forceApi) {
-      try {
-        const savedFx = localStorage.getItem('yarbis_custom_fx');
-        const savedCrypto = localStorage.getItem('yarbis_custom_crypto');
-        if (savedFx) {
-          cachedVenezuelaFX = JSON.parse(savedFx);
-          hasCustomOverride = true;
-        }
-        if (savedCrypto) {
-          cachedCryptoData = JSON.parse(savedCrypto);
-        }
-      } catch (e) {}
-    } else {
-      try {
-        localStorage.removeItem('yarbis_custom_fx');
-        localStorage.removeItem('yarbis_custom_crypto');
-      } catch (e) {}
-    }
 
     const [cryptoData, fxData, fiatData] = await Promise.all([
       brain.fetchLiveCryptoPrices(),
@@ -1413,8 +1402,8 @@ function initYarbisApp() {
       brain.fetchGlobalFiatRates()
     ]);
 
-    if (cryptoData && (!hasCustomOverride || forceApi)) cachedCryptoData = cryptoData;
-    if (fxData && (!hasCustomOverride || forceApi)) cachedVenezuelaFX = fxData;
+    if (cryptoData) cachedCryptoData = cryptoData;
+    if (fxData) cachedVenezuelaFX = fxData;
     if (fiatData) cachedFiatRates = fiatData;
 
     updateAllFinancialTickers();
@@ -1426,13 +1415,13 @@ function initYarbisApp() {
 
   // Auto-Sync Heartbeat (Actualiza automáticamente cada 30 segundos)
   setInterval(() => {
-    refreshCryptoPrices(false);
+    refreshCryptoPrices(true);
   }, 30000);
 
   // Carga automática inicial de precios en vivo al iniciar
   setTimeout(() => {
-    refreshCryptoPrices(false);
-  }, 1000);
+    refreshCryptoPrices(true);
+  }, 300);
 
   function swapCurrencies() {
     audioSynth.playClickSound();
