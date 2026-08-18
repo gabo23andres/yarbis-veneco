@@ -1373,12 +1373,12 @@ function initYarbisApp() {
     const inEth = document.getElementById('inputCustomEth');
     const inSol = document.getElementById('inputCustomSol');
 
-    if (inBcv) inBcv.value = '62.40';
-    if (inPar) inPar.value = '75.10';
-    if (inEur) inEur.value = '67.85';
-    if (inBtc) inBtc.value = '64500';
-    if (inEth) inEth.value = '2600';
-    if (inSol) inSol.value = '145';
+    if (inBcv) inBcv.value = '772.54';
+    if (inPar) inPar.value = '889.65';
+    if (inEur) inEur.value = '840.59';
+    if (inBtc) inBtc.value = '64792';
+    if (inEth) inEth.value = '1910';
+    if (inSol) inSol.value = '76.8';
 
     saveCustomRates();
   }

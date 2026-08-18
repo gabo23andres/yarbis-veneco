@@ -155,7 +155,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=10.2.0" />
+  <link rel="stylesheet" href="styles.css?v=10.3.0" />
 </head>
 <body>
 
@@ -413,27 +413,27 @@
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
           <div>
             <label style="font-size: 0.65rem; color: var(--color-text-dim);">Dólar BCV (Bs.):</label>
-            <input type="number" id="inputCustomBcv" step="0.01" value="62.40" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+            <input type="number" id="inputCustomBcv" step="0.01" value="772.54" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
           </div>
           <div>
             <label style="font-size: 0.65rem; color: var(--color-text-dim);">Dólar Paralelo (Bs.):</label>
-            <input type="number" id="inputCustomParalelo" step="0.01" value="75.10" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+            <input type="number" id="inputCustomParalelo" step="0.01" value="889.65" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
           </div>
           <div>
             <label style="font-size: 0.65rem; color: var(--color-text-dim);">Euro BCV (Bs.):</label>
-            <input type="number" id="inputCustomEur" step="0.01" value="67.85" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+            <input type="number" id="inputCustomEur" step="0.01" value="840.59" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
           </div>
           <div>
             <label style="font-size: 0.65rem; color: var(--color-text-dim);">Bitcoin ($ USD):</label>
-            <input type="number" id="inputCustomBtc" step="1" value="64500" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+            <input type="number" id="inputCustomBtc" step="1" value="64792" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
           </div>
           <div>
             <label style="font-size: 0.65rem; color: var(--color-text-dim);">Ethereum ($ USD):</label>
-            <input type="number" id="inputCustomEth" step="1" value="2600" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+            <input type="number" id="inputCustomEth" step="1" value="1910" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
           </div>
           <div>
             <label style="font-size: 0.65rem; color: var(--color-text-dim);">Solana ($ USD):</label>
-            <input type="number" id="inputCustomSol" step="0.1" value="145" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
+            <input type="number" id="inputCustomSol" step="0.1" value="76.8" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
           </div>
         </div>
         <div style="display: flex; gap: 6px; justify-content: flex-end;">
@@ -444,11 +444,11 @@
 
       <!-- Live FX & Market Strip -->
       <div class="crypto-ticker-strip" id="cryptoTickerStrip">
-        <div class="crypto-card-ticker" id="tickerBTC"><span class="ticker-symbol">BTC</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
-        <div class="crypto-card-ticker" id="tickerETH"><span class="ticker-symbol">ETH</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
-        <div class="crypto-card-ticker" id="tickerSOL"><span class="ticker-symbol">SOL</span><span class="ticker-price">Cargando...</span><span class="ticker-change">--</span></div>
-        <div class="crypto-card-ticker" id="tickerBCV"><span class="ticker-symbol">USD BCV</span><span class="ticker-price">Bs. 62.40</span><span class="ticker-change" style="color: var(--color-primary);">Oficial</span></div>
-        <div class="crypto-card-ticker" id="tickerUSDT"><span class="ticker-symbol">USDT/VES</span><span class="ticker-price">Bs. 75.10</span><span class="ticker-change negative">+20.3% spread</span></div>
+        <div class="crypto-card-ticker" id="tickerBTC"><span class="ticker-symbol">BTC</span><span class="ticker-price">$64,792.00</span><span class="ticker-change positive">+1.50%</span></div>
+        <div class="crypto-card-ticker" id="tickerETH"><span class="ticker-symbol">ETH</span><span class="ticker-price">$1,910.50</span><span class="ticker-change negative">-0.20%</span></div>
+        <div class="crypto-card-ticker" id="tickerSOL"><span class="ticker-symbol">SOL</span><span class="ticker-price">$76.77</span><span class="ticker-change positive">+0.80%</span></div>
+        <div class="crypto-card-ticker" id="tickerBCV"><span class="ticker-symbol">USD BCV</span><span class="ticker-price">Bs. 772.54</span><span class="ticker-change" style="color: var(--color-primary);">Oficial</span></div>
+        <div class="crypto-card-ticker" id="tickerUSDT"><span class="ticker-symbol">USDT/VES</span><span class="ticker-price">Bs. 889.65</span><span class="ticker-change negative">+15.2% spread</span></div>
       </div>
 
       <!-- Sub-Tabs Selector -->
@@ -535,9 +535,9 @@
       <div class="crypto-tab-content" id="tabCryptoBVC" style="display: none;">
         <!-- Monitor Cambiario Venezuela Grid -->
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
-          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💵 DÓLAR BCV</span><span class="ticker-price" id="cardBcvRate">Bs. 62.40</span><span class="ticker-change" style="color:var(--color-primary);">Oficial</span></div>
-          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">📈 PARALELO</span><span class="ticker-price" id="cardParallelRate">Bs. 75.10</span><span class="ticker-change negative" id="cardSpreadRate">+20.3% Brecha</span></div>
-          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💶 EURO BCV</span><span class="ticker-price" id="cardEurRate">Bs. 67.85</span><span class="ticker-change positive">Oficial</span></div>
+          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💵 DÓLAR BCV</span><span class="ticker-price" id="cardBcvRate">Bs. 772.54</span><span class="ticker-change" style="color:var(--color-primary);">Oficial</span></div>
+          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">📈 PARALELO</span><span class="ticker-price" id="cardParallelRate">Bs. 889.65</span><span class="ticker-change negative" id="cardSpreadRate">+15.2% Brecha</span></div>
+          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💶 EURO BCV</span><span class="ticker-price" id="cardEurRate">Bs. 840.59</span><span class="ticker-change positive">Oficial</span></div>
         </div>
 
         <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 6px; display: flex; justify-content: space-between;">
@@ -821,11 +821,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=10.2.0"></script>
-  <script src="js/arcReactor.js?v=10.2.0"></script>
-  <script src="js/speechEngine.js?v=10.2.0"></script>
-  <script src="js/yarbisBrain.js?v=10.2.0"></script>
-  <script src="js/app.js?v=10.2.0"></script>
+  <script src="js/audioEffects.js?v=10.3.0"></script>
+  <script src="js/arcReactor.js?v=10.3.0"></script>
+  <script src="js/speechEngine.js?v=10.3.0"></script>
+  <script src="js/yarbisBrain.js?v=10.3.0"></script>
+  <script src="js/app.js?v=10.3.0"></script>
 
 </body>
 </html>
