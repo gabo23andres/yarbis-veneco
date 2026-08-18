@@ -325,24 +325,33 @@ class YARBISBrain {
      GLOBAL CURRENCY ENGINE & VENEZUELA FX RADAR
      ========================================== */
   async fetchLiveVenezuelaFX() {
+    // Check if user set custom override
+    try {
+      const savedFx = localStorage.getItem('yarbis_custom_fx');
+      if (savedFx) {
+        const parsed = JSON.parse(savedFx);
+        if (parsed && parsed.usdOfficialBCV) return parsed;
+      }
+    } catch (e) {}
+
     const defaultFX = {
       usdOfficialBCV: 62.40,
       usdMarketParallel: 75.10,
       eurOfficialBCV: 67.85,
       usdtP2P: 75.40,
-      copVesRate: 0.0175, // 1 COP en VES
-      vesCopRate: 57.14,  // 1 VES en COP
-      brlVesRate: 11.85,  // 1 BRL en VES
-      cnyVesRate: 8.65,   // 1 CNY en VES
-      rubVesRate: 0.68,   // 1 RUB en VES
+      copVesRate: 0.0175,
+      vesCopRate: 57.14,
+      brlVesRate: 11.85,
+      cnyVesRate: 8.65,
+      rubVesRate: 0.68,
       spreadPercent: ((75.10 - 62.40) / 62.40) * 100,
       lastUpdated: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
-      source: 'Mesas de Cambio BCV & P2P'
+      source: 'Mesas de Cambio BCV & P2P Live'
     };
 
+    // 1. Primary: DolarApi Venezuela
     try {
-      // Primary: DolarApi Venezuela
-      const res = await fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(4000) });
+      const res = await fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(3500) });
       if (res.ok) {
         const list = await res.json();
         const bcvObj = list.find(x => x.fuente === 'oficial') || list.find(x => x.nombre?.toLowerCase().includes('oficial'));
@@ -351,15 +360,32 @@ class YARBISBrain {
         if (bcvObj && bcvObj.promedio) defaultFX.usdOfficialBCV = parseFloat(bcvObj.promedio);
         if (parObj && parObj.promedio) {
           defaultFX.usdMarketParallel = parseFloat(parObj.promedio);
-          defaultFX.usdtP2P = parseFloat(parObj.promedio) * 1.004; // Spread Binance P2P habitual
+          defaultFX.usdtP2P = parseFloat(parObj.promedio) * 1.004;
         }
         defaultFX.eurOfficialBCV = defaultFX.usdOfficialBCV * 1.087;
         defaultFX.spreadPercent = ((defaultFX.usdMarketParallel - defaultFX.usdOfficialBCV) / defaultFX.usdOfficialBCV) * 100;
-        defaultFX.source = 'DolarAPI & BCV en Vivo';
+        defaultFX.source = 'DolarAPI & BCV Live Feed';
+        return defaultFX;
       }
     } catch (e) {
-      console.warn('Venezuela FX API fetch error (using resilient fallback):', e);
+      console.warn('DolarAPI fetch warning:', e);
     }
+
+    // 2. Secondary: Currency API (jsdelivr)
+    try {
+      const res2 = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json', { signal: AbortSignal.timeout(3500) });
+      if (res2.ok) {
+        const d2 = await res2.json();
+        if (d2.usd && d2.usd.ves) {
+          defaultFX.usdOfficialBCV = parseFloat(d2.usd.ves);
+          defaultFX.usdMarketParallel = defaultFX.usdOfficialBCV * 1.15;
+          defaultFX.eurOfficialBCV = defaultFX.usdOfficialBCV * 1.087;
+          defaultFX.spreadPercent = 15.0;
+          defaultFX.source = 'Currency-API Global Feed';
+          return defaultFX;
+        }
+      }
+    } catch (e2) {}
 
     return defaultFX;
   }

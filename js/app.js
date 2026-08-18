@@ -1356,17 +1356,29 @@ function initYarbisApp() {
     saveCustomRates();
   }
 
-  async function refreshCryptoPrices() {
+  async function refreshCryptoPrices(forceApi = false) {
     const btnRefresh = document.getElementById('btnRefreshCrypto');
-    if (btnRefresh) btnRefresh.textContent = '⏳ Cargando...';
+    if (btnRefresh) btnRefresh.textContent = '⏳ Sincronizando...';
     
-    // Check if user set custom override
-    try {
-      const savedFx = localStorage.getItem('yarbis_custom_fx');
-      const savedCrypto = localStorage.getItem('yarbis_custom_crypto');
-      if (savedFx) cachedVenezuelaFX = JSON.parse(savedFx);
-      if (savedCrypto) cachedCryptoData = JSON.parse(savedCrypto);
-    } catch (e) {}
+    let hasCustomOverride = false;
+    if (!forceApi) {
+      try {
+        const savedFx = localStorage.getItem('yarbis_custom_fx');
+        const savedCrypto = localStorage.getItem('yarbis_custom_crypto');
+        if (savedFx) {
+          cachedVenezuelaFX = JSON.parse(savedFx);
+          hasCustomOverride = true;
+        }
+        if (savedCrypto) {
+          cachedCryptoData = JSON.parse(savedCrypto);
+        }
+      } catch (e) {}
+    } else {
+      try {
+        localStorage.removeItem('yarbis_custom_fx');
+        localStorage.removeItem('yarbis_custom_crypto');
+      } catch (e) {}
+    }
 
     const [cryptoData, fxData, fiatData] = await Promise.all([
       brain.fetchLiveCryptoPrices(),
@@ -1374,15 +1386,26 @@ function initYarbisApp() {
       brain.fetchGlobalFiatRates()
     ]);
 
-    if (cryptoData && !cachedCryptoData) cachedCryptoData = cryptoData;
-    if (fxData && !cachedVenezuelaFX) cachedVenezuelaFX = fxData;
+    if (cryptoData && (!hasCustomOverride || forceApi)) cachedCryptoData = cryptoData;
+    if (fxData && (!hasCustomOverride || forceApi)) cachedVenezuelaFX = fxData;
     if (fiatData) cachedFiatRates = fiatData;
 
     updateAllFinancialTickers();
     calculateCryptoConversion();
+    calcDcaUi();
 
     if (btnRefresh) btnRefresh.textContent = '🔄 Actualizar';
   }
+
+  // Auto-Sync Heartbeat (Actualiza automáticamente cada 30 segundos)
+  setInterval(() => {
+    refreshCryptoPrices(false);
+  }, 30000);
+
+  // Carga automática inicial de precios en vivo al iniciar
+  setTimeout(() => {
+    refreshCryptoPrices(false);
+  }, 1000);
 
   function swapCurrencies() {
     audioSynth.playClickSound();
