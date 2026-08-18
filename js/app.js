@@ -1373,9 +1373,9 @@ function initYarbisApp() {
     const inEth = document.getElementById('inputCustomEth');
     const inSol = document.getElementById('inputCustomSol');
 
-    if (inBcv) inBcv.value = '772.54';
+    if (inBcv) inBcv.value = '773.31';
     if (inPar) inPar.value = '889.65';
-    if (inEur) inEur.value = '840.59';
+    if (inEur) inEur.value = '896.03';
     if (inBtc) inBtc.value = '64792';
     if (inEth) inEth.value = '1910';
     if (inSol) inSol.value = '76.8';

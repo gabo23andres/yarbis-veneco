@@ -332,18 +332,18 @@ class YARBISBrain {
      ========================================== */
   async fetchLiveVenezuelaFX() {
     const defaultFX = {
-      usdOfficialBCV: 772.54,
+      usdOfficialBCV: 773.31,
       usdMarketParallel: 889.65,
-      eurOfficialBCV: 840.59,
+      eurOfficialBCV: 896.03,
       usdtP2P: 889.65,
       copVesRate: 0.187,
       vesCopRate: 5.34,
       brlVesRate: 136.7,
-      cnyVesRate: 106.7,
-      rubVesRate: 7.84,
-      spreadPercent: ((889.65 - 772.54) / 772.54) * 100,
+      cnyVesRate: 114.75,
+      rubVesRate: 9.10,
+      spreadPercent: ((889.65 - 773.31) / 773.31) * 100,
       lastUpdated: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
-      source: 'Banco Central de Venezuela (BCV) & P2P Live'
+      source: 'Banco Central de Venezuela (BCV Oficial)'
     };
 
     // 1. Primary: DolarApi Venezuela
@@ -357,11 +357,11 @@ class YARBISBrain {
         if (bcvObj && bcvObj.promedio) defaultFX.usdOfficialBCV = parseFloat(bcvObj.promedio);
         if (parObj && parObj.promedio) {
           defaultFX.usdMarketParallel = parseFloat(parObj.promedio);
-          defaultFX.usdtP2P = parseFloat(parObj.promedio) * 1.004;
+          defaultFX.usdtP2P = parseFloat(parObj.promedio);
         }
-        defaultFX.eurOfficialBCV = defaultFX.usdOfficialBCV * 1.088;
+        defaultFX.eurOfficialBCV = 896.03;
         defaultFX.spreadPercent = ((defaultFX.usdMarketParallel - defaultFX.usdOfficialBCV) / defaultFX.usdOfficialBCV) * 100;
-        defaultFX.source = 'BCV Oficial & DolarAPI Live Feed';
+        defaultFX.source = 'BCV Oficial (bcv.org.ve) & DolarAPI';
         return defaultFX;
       }
     } catch (e) {
