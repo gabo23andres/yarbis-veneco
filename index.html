@@ -40,7 +40,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=9.2.0" />
+  <link rel="stylesheet" href="styles.css?v=9.3.0" />
 </head>
 <body>
 
@@ -298,46 +298,98 @@
 
       <!-- Sub-Tabs Selector -->
       <div class="crypto-tabs-bar" style="overflow-x: auto; scrollbar-width: none;">
-        <button type="button" class="btn-crypto-tab active" data-tab="converter" onclick="if(window.switchCryptoTab) window.switchCryptoTab('converter');">🪙 Cripto & FX</button>
-        <button type="button" class="btn-crypto-tab" data-tab="bvc" onclick="if(window.switchCryptoTab) window.switchCryptoTab('bvc');">🇻🇪 Bolsa Caracas (BVC)</button>
+        <button type="button" class="btn-crypto-tab active" data-tab="converter" onclick="if(window.switchCryptoTab) window.switchCryptoTab('converter');">💱 Convertidor Universal</button>
+        <button type="button" class="btn-crypto-tab" data-tab="bvc" onclick="if(window.switchCryptoTab) window.switchCryptoTab('bvc');">🇻🇪 Tasas Venezuela & BVC</button>
         <button type="button" class="btn-crypto-tab" data-tab="global" onclick="if(window.switchCryptoTab) window.switchCryptoTab('global');">📈 Wall Street</button>
         <button type="button" class="btn-crypto-tab" data-tab="dca" onclick="if(window.switchCryptoTab) window.switchCryptoTab('dca');">🧮 DCA & Arbitraje</button>
         <button type="button" class="btn-crypto-tab" data-tab="math" onclick="if(window.switchCryptoTab) window.switchCryptoTab('math');">🧠 Auditoría IA</button>
       </div>
 
-      <!-- TAB 1: CONVERTER & CRYPTO -->
+      <!-- TAB 1: CONVERTER UNIVERSAL MULTIDIVISA -->
       <div class="crypto-tab-content active" id="tabCryptoConverter">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+        <div style="display: grid; grid-template-columns: 1fr 40px 1fr; gap: 6px; align-items: flex-end; margin-bottom: 8px;">
           <div>
-            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">MONTO A CONVERTIR (USD):</label>
-            <input type="number" id="inputCryptoAmount" value="100" placeholder="Ej: 100" style="width: 100%;" oninput="if(window.calculateCryptoConversion) window.calculateCryptoConversion();" />
+            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">DE (ORIGEN):</label>
+            <input type="number" id="inputCryptoAmount" value="100" placeholder="100" style="width: 100%; margin-bottom: 4px;" oninput="if(window.calculateCryptoConversion) window.calculateCryptoConversion();" />
+            <select id="selectFromCurrency" style="width: 100%; font-size: 0.75rem;" onchange="if(window.calculateCryptoConversion) window.calculateCryptoConversion();">
+              <option value="USD" selected>🇺🇸 USD - Dólar USA</option>
+              <option value="VES_BCV">🇻🇪 VES - Bolívar (BCV Oficial)</option>
+              <option value="VES_PARALELO">🇻🇪 VES - Bolívar (Paralelo)</option>
+              <option value="USDT">💵 USDT - Tether P2P</option>
+              <option value="EUR">💶 EUR - Euro</option>
+              <option value="COP">🇨🇴 COP - Peso Colombiano</option>
+              <option value="BRL">🇧🇷 BRL - Real Brasileño</option>
+              <option value="MXN">🇲🇽 MXN - Peso Mexicano</option>
+              <option value="PEN">🇵🇪 PEN - Sol Peruano</option>
+              <option value="CLP">🇨🇱 CLP - Peso Chileno</option>
+              <option value="ARS">🇦🇷 ARS - Peso Argentino</option>
+              <option value="GBP">🇬🇧 GBP - Libra Esterlina</option>
+              <option value="JPY">🇯🇵 JPY - Yen Japonés</option>
+              <option value="CAD">🇨🇦 CAD - Dólar Canadiense</option>
+              <option value="CNY">🇨🇳 CNY - Yuan Chino</option>
+              <option value="RUB">🇷🇺 RUB - Rublo Ruso</option>
+              <option value="BTC">🪙 BTC - Bitcoin</option>
+              <option value="ETH">🪙 ETH - Ethereum</option>
+              <option value="SOL">🪙 SOL - Solana</option>
+              <option value="BNB">🪙 BNB - Binance Coin</option>
+              <option value="XRP">🪙 XRP - Ripple</option>
+            </select>
           </div>
+
+          <div style="text-align: center; margin-bottom: 6px;">
+            <button type="button" class="btn-wm-small" onclick="if(window.swapCurrencies) window.swapCurrencies();" title="Invertir divisas" style="padding: 6px 8px; width: 100%;">⇄</button>
+          </div>
+
           <div>
-            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">ACTIVO DESTINO:</label>
-            <select id="selectCryptoAsset" style="width: 100%;" onchange="if(window.calculateCryptoConversion) window.calculateCryptoConversion();">
-              <option value="BTC">Bitcoin (BTC)</option>
-              <option value="ETH">Ethereum (ETH)</option>
-              <option value="SOL" selected>Solana (SOL)</option>
-              <option value="BNB">Binance Coin (BNB)</option>
-              <option value="VES_BCV">Bolívares (Tasa Oficial BCV)</option>
-              <option value="VES_P2P">Bolívares (Tasa Paralelo/USDT)</option>
+            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">A (DESTINO):</label>
+            <div style="height: 28px; display: flex; align-items: center; justify-content: flex-end; font-size: 0.7rem; color: var(--color-text-dim); margin-bottom: 4px;">Conversión en vivo</div>
+            <select id="selectToCurrency" style="width: 100%; font-size: 0.75rem;" onchange="if(window.calculateCryptoConversion) window.calculateCryptoConversion();">
+              <option value="VES_BCV" selected>🇻🇪 VES - Bolívar (BCV Oficial)</option>
+              <option value="VES_PARALELO">🇻🇪 VES - Bolívar (Paralelo)</option>
+              <option value="USD">🇺🇸 USD - Dólar USA</option>
+              <option value="USDT">💵 USDT - Tether P2P</option>
+              <option value="EUR">💶 EUR - Euro</option>
+              <option value="COP">🇨🇴 COP - Peso Colombiano</option>
+              <option value="BRL">🇧🇷 BRL - Real Brasileño</option>
+              <option value="MXN">🇲🇽 MXN - Peso Mexicano</option>
+              <option value="PEN">🇵🇪 PEN - Sol Peruano</option>
+              <option value="CLP">🇨🇱 CLP - Peso Chileno</option>
+              <option value="ARS">🇦🇷 ARS - Peso Argentino</option>
+              <option value="GBP">🇬🇧 GBP - Libra Esterlina</option>
+              <option value="JPY">🇯🇵 JPY - Yen Japonés</option>
+              <option value="CAD">🇨🇦 CAD - Dólar Canadiense</option>
+              <option value="CNY">🇨🇳 CNY - Yuan Chino</option>
+              <option value="RUB">🇷🇺 RUB - Rublo Ruso</option>
+              <option value="BTC">🪙 BTC - Bitcoin</option>
+              <option value="ETH">🪙 ETH - Ethereum</option>
+              <option value="SOL">🪙 SOL - Solana</option>
+              <option value="BNB">🪙 BNB - Binance Coin</option>
+              <option value="XRP">🪙 XRP - Ripple</option>
             </select>
           </div>
         </div>
+
         <div class="crypto-result-box" id="boxConversionResult">
-          <div style="font-size: 0.75rem; color: var(--color-text-dim);">RESULTADO ESTIMADO:</div>
-          <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-hud);" id="lblConversionResult">Calculando...</div>
-          <div style="font-size: 0.72rem; color: var(--color-text-dim);" id="lblConversionRate">Cotización en tiempo real</div>
+          <div style="font-size: 0.72rem; color: var(--color-text-dim);">RESULTADO ESTIMADO:</div>
+          <div style="font-size: 1.2rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-hud);" id="lblConversionResult">Calculando...</div>
+          <div style="font-size: 0.72rem; color: var(--color-text-dim); margin-top: 2px;" id="lblConversionRate">Cotización en tiempo real</div>
         </div>
       </div>
 
-      <!-- TAB 2: BOLSA DE VALORES DE CARACAS (BVC) & FX -->
+      <!-- TAB 2: TASAS VENEZUELA (BCV/PARALELO) & BOLSA DE CARACAS -->
       <div class="crypto-tab-content" id="tabCryptoBVC" style="display: none;">
+        <!-- Monitor Cambiario Venezuela Grid -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
+          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💵 DÓLAR BCV</span><span class="ticker-price" id="cardBcvRate">Bs. 62.40</span><span class="ticker-change" style="color:var(--color-primary);">Oficial</span></div>
+          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">📈 PARALELO</span><span class="ticker-price" id="cardParallelRate">Bs. 75.10</span><span class="ticker-change negative" id="cardSpreadRate">+20.3% Brecha</span></div>
+          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💶 EURO BCV</span><span class="ticker-price" id="cardEurRate">Bs. 67.85</span><span class="ticker-change positive">Oficial</span></div>
+        </div>
+
         <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 6px; display: flex; justify-content: space-between;">
           <span>🏛️ ÍNDICE BURSÁTIL DE CARACAS (IBC): 89,450.20 (+0.94%)</span>
-          <span style="color: var(--color-text-dim);">Tasa BCV: Bs. 62.40</span>
+          <span style="color: var(--color-text-dim);">Acciones BVC</span>
         </div>
-        <div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--hud-glass-border); border-radius: 8px; margin-bottom: 8px;">
+        <div style="max-height: 140px; overflow-y: auto; border: 1px solid var(--hud-glass-border); border-radius: 8px; margin-bottom: 8px;">
           <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
             <thead>
               <tr style="background: rgba(0,0,0,0.6); color: var(--color-primary); border-bottom: 1px solid var(--hud-glass-border);">
@@ -592,11 +644,11 @@
   </div>
 
   <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=9.2.0"></script>
-  <script src="js/arcReactor.js?v=9.2.0"></script>
-  <script src="js/speechEngine.js?v=9.2.0"></script>
-  <script src="js/yarbisBrain.js?v=9.2.0"></script>
-  <script src="js/app.js?v=9.2.0"></script>
+  <script src="js/audioEffects.js?v=9.3.0"></script>
+  <script src="js/arcReactor.js?v=9.3.0"></script>
+  <script src="js/speechEngine.js?v=9.3.0"></script>
+  <script src="js/yarbisBrain.js?v=9.3.0"></script>
+  <script src="js/app.js?v=9.3.0"></script>
 
 </body>
 </html>

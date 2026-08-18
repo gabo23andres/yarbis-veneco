@@ -318,7 +318,123 @@ class YARBISBrain {
       console.warn('CoinGecko fallback error:', err);
     }
 
-    return null;
+  /* ==========================================
+     GLOBAL CURRENCY ENGINE & VENEZUELA FX RADAR
+     ========================================== */
+  async fetchLiveVenezuelaFX() {
+    const defaultFX = {
+      usdOfficialBCV: 62.40,
+      usdMarketParallel: 75.10,
+      eurOfficialBCV: 67.85,
+      usdtP2P: 75.40,
+      copVesRate: 0.0175, // 1 COP en VES
+      vesCopRate: 57.14,  // 1 VES en COP
+      brlVesRate: 11.85,  // 1 BRL en VES
+      cnyVesRate: 8.65,   // 1 CNY en VES
+      rubVesRate: 0.68,   // 1 RUB en VES
+      spreadPercent: ((75.10 - 62.40) / 62.40) * 100,
+      lastUpdated: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
+      source: 'Mesas de Cambio BCV & P2P'
+    };
+
+    try {
+      // Primary: DolarApi Venezuela
+      const res = await fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const list = await res.json();
+        const bcvObj = list.find(x => x.fuente === 'oficial') || list.find(x => x.nombre?.toLowerCase().includes('oficial'));
+        const parObj = list.find(x => x.fuente === 'paralelo') || list.find(x => x.nombre?.toLowerCase().includes('paralelo'));
+
+        if (bcvObj && bcvObj.promedio) defaultFX.usdOfficialBCV = parseFloat(bcvObj.promedio);
+        if (parObj && parObj.promedio) {
+          defaultFX.usdMarketParallel = parseFloat(parObj.promedio);
+          defaultFX.usdtP2P = parseFloat(parObj.promedio) * 1.004; // Spread Binance P2P habitual
+        }
+        defaultFX.eurOfficialBCV = defaultFX.usdOfficialBCV * 1.087;
+        defaultFX.spreadPercent = ((defaultFX.usdMarketParallel - defaultFX.usdOfficialBCV) / defaultFX.usdOfficialBCV) * 100;
+        defaultFX.source = 'DolarAPI & BCV en Vivo';
+      }
+    } catch (e) {
+      console.warn('Venezuela FX API fetch error (using resilient fallback):', e);
+    }
+
+    return defaultFX;
+  }
+
+  async fetchGlobalFiatRates() {
+    const defaultRates = {
+      USD: 1.0,
+      EUR: 0.92,
+      GBP: 0.79,
+      JPY: 154.5,
+      CAD: 1.38,
+      CHF: 0.88,
+      CNY: 7.24,
+      COP: 4120.0,
+      BRL: 5.65,
+      MXN: 19.80,
+      PEN: 3.75,
+      CLP: 940.0,
+      ARS: 1040.0,
+      RUB: 98.5,
+      TRY: 34.2
+    };
+
+    try {
+      const res = await fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.rates) return json.rates;
+      }
+    } catch (e) {
+      console.warn('Global fiat rates error (using default rates):', e);
+    }
+    return defaultRates;
+  }
+
+  convertUniversalCurrency(amount, fromCode, toCode, fxRates, cryptoRates, fiatRates) {
+    if (!amount || amount <= 0) return 0;
+    const fx = fxRates || { usdOfficialBCV: 62.40, usdMarketParallel: 75.10, eurOfficialBCV: 67.85 };
+    const fiat = fiatRates || { EUR: 0.92, COP: 4120, BRL: 5.65, MXN: 19.8, GBP: 0.79, JPY: 154.5, ARS: 1040, PEN: 3.75, CLP: 940 };
+    const crypto = cryptoRates || { BTC: { price: 95000 }, ETH: { price: 3400 }, SOL: { price: 190 }, BNB: { price: 650 }, XRP: { price: 1.45 } };
+
+    // Step 1: Convert FROM currency to base USD
+    let inUSD = 0;
+    if (fromCode === 'USD' || fromCode === 'USDT' || fromCode === 'USDC') {
+      inUSD = amount;
+    } else if (fromCode === 'VES_BCV') {
+      inUSD = amount / fx.usdOfficialBCV;
+    } else if (fromCode === 'VES_PARALELO') {
+      inUSD = amount / fx.usdMarketParallel;
+    } else if (fromCode === 'EUR_BCV') {
+      inUSD = (amount / fx.eurOfficialBCV) * (fx.eurOfficialBCV / fx.usdOfficialBCV);
+    } else if (crypto[fromCode]) {
+      inUSD = amount * crypto[fromCode].price;
+    } else if (fiat[fromCode]) {
+      inUSD = amount / fiat[fromCode];
+    } else {
+      inUSD = amount;
+    }
+
+    // Step 2: Convert USD to TARGET currency
+    let outTarget = 0;
+    if (toCode === 'USD' || toCode === 'USDT' || toCode === 'USDC') {
+      outTarget = inUSD;
+    } else if (toCode === 'VES_BCV') {
+      outTarget = inUSD * fx.usdOfficialBCV;
+    } else if (toCode === 'VES_PARALELO') {
+      outTarget = inUSD * fx.usdMarketParallel;
+    } else if (toCode === 'EUR_BCV') {
+      outTarget = inUSD * (fx.usdOfficialBCV / fx.eurOfficialBCV);
+    } else if (crypto[toCode]) {
+      outTarget = inUSD / crypto[toCode].price;
+    } else if (fiat[toCode]) {
+      outTarget = inUSD * fiat[toCode];
+    } else {
+      outTarget = inUSD;
+    }
+
+    return outTarget;
   }
 
   getBVCSampleData() {
@@ -349,10 +465,10 @@ class YARBISBrain {
   getFXSampleRates() {
     return {
       usdOfficialBCV: 62.40,
-      usdMarketParallel: 74.80,
+      usdMarketParallel: 75.10,
       eurOfficialBCV: 67.85,
-      usdtP2P: 75.10,
-      spreadPercent: ((74.80 - 62.40) / 62.40) * 100
+      usdtP2P: 75.40,
+      spreadPercent: ((75.10 - 62.40) / 62.40) * 100
     };
   }
 
@@ -868,15 +984,42 @@ class YARBISBrain {
     }
 
     // -------------------------------------------------------------
-    // INTENT: BOLSA DE VALORES DE CARACAS (BVC) & FX CAMBIARIO
+    // INTENT: VENEZUELA FX & GLOBAL CURRENCIES MONITOR
     // -------------------------------------------------------------
-    if (clean.includes('bvc') || clean.includes('bolsa de caracas') || clean.includes('mercantil') || clean.includes('santa teresa') || clean.includes('bnc') || clean.includes('cantv') || clean.includes('dolar bcv') || clean.includes('dolar paralelo') || clean.includes('tasa bcv') || clean.includes('precio del dolar') || clean.includes('brecha cambiaria')) {
-      const fx = this.getFXSampleRates();
+    if (clean.includes('bvc') || clean.includes('bolsa de caracas') || clean.includes('mercantil') || clean.includes('santa teresa') || clean.includes('bnc') || clean.includes('cantv') || clean.includes('dolar') || clean.includes('bcv') || clean.includes('tasa') || clean.includes('paralelo') || clean.includes('brecha') || clean.includes('euro') || clean.includes('peso colombiano') || clean.includes('pesos') || clean.includes('real brasileño') || clean.includes('divisas') || clean.includes('monedas')) {
+      const fx = await this.fetchLiveVenezuelaFX();
       const bvc = this.getBVCSampleData();
 
-      if (clean.includes('dolar') || clean.includes('bcv') || clean.includes('tasa') || clean.includes('paralelo') || clean.includes('brecha')) {
+      if (clean.includes('euro')) {
         return {
-          textResponse: `💵 Monitor FX Venezuela: Tasa Oficial BCV: Bs. ${fx.usdOfficialBCV.toFixed(2)} | Paralelo/USDT: Bs. ${fx.usdMarketParallel.toFixed(2)} | Brecha cambiaria: +${fx.spreadPercent.toFixed(2)}%, ${this.userName}.`,
+          textResponse: `💶 Tasa Euro Oficial BCV: Bs. ${fx.eurOfficialBCV.toFixed(2)} por Euro (€). Brecha con dólar oficial: +${(fx.eurOfficialBCV - fx.usdOfficialBCV).toFixed(2)} Bs, ${this.userName}.`,
+          action: 'OPEN_CRYPTO_HUB',
+          themeChange: null,
+          soundFx: 'success'
+        };
+      }
+
+      if (clean.includes('peso') || clean.includes('cop')) {
+        return {
+          textResponse: `🇨🇴 Monitor Cambiario Frontera: 1 COP ≈ Bs. ${fx.copVesRate.toFixed(4)} | 1 VES ≈ ${fx.vesCopRate.toFixed(2)} COP (Tasa referencial frontera), ${this.userName}.`,
+          action: 'OPEN_CRYPTO_HUB',
+          themeChange: null,
+          soundFx: 'success'
+        };
+      }
+
+      if (clean.includes('real') || clean.includes('brl')) {
+        return {
+          textResponse: `🇧🇷 Tasa Real Brasileño / Bolívar: 1 BRL ≈ Bs. ${fx.brlVesRate.toFixed(2)}, ${this.userName}.`,
+          action: 'OPEN_CRYPTO_HUB',
+          themeChange: null,
+          soundFx: 'success'
+        };
+      }
+
+      if (clean.includes('dolar') || clean.includes('bcv') || clean.includes('tasa') || clean.includes('paralelo') || clean.includes('brecha') || clean.includes('cambiaria') || clean.includes('divisas') || clean.includes('monedas')) {
+        return {
+          textResponse: `💵 Monitor FX Venezuela: Dólar BCV: Bs. ${fx.usdOfficialBCV.toFixed(2)} | Paralelo / USDT P2P: Bs. ${fx.usdMarketParallel.toFixed(2)} | Brecha Cambiaria: +${fx.spreadPercent.toFixed(2)}% | Euro BCV: Bs. ${fx.eurOfficialBCV.toFixed(2)}, ${this.userName}.`,
           action: 'OPEN_CRYPTO_HUB',
           themeChange: null,
           soundFx: 'success'
@@ -906,7 +1049,7 @@ class YARBISBrain {
       }
 
       return {
-        textResponse: `🏛️ Bolsa de Valores de Caracas (IBC): ${bvc.ibcIndex.points} pts (+${bvc.ibcIndex.change}%). Abriendo Terminal Bursátil Stark, ${this.userName}.`,
+        textResponse: `🏛️ Bolsa de Valores de Caracas (IBC): ${bvc.ibcIndex.points} pts (+${bvc.ibcIndex.change}%). Abriendo Terminal Bursátil & Cambiario Stark, ${this.userName}.`,
         action: 'OPEN_CRYPTO_HUB',
         themeChange: null,
         soundFx: 'scan'

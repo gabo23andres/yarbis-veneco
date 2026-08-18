@@ -1147,6 +1147,9 @@ function initYarbisApp() {
     }
   }
 
+  let cachedVenezuelaFX = null;
+  let cachedFiatRates = null;
+
   function closeCryptoFinanceModal() {
     audioSynth.playClickSound();
     if (modalCryptoFinance) modalCryptoFinance.classList.remove('active');
@@ -1156,12 +1159,21 @@ function initYarbisApp() {
     const btnRefresh = document.getElementById('btnRefreshCrypto');
     if (btnRefresh) btnRefresh.textContent = '⏳ Cargando...';
     
-    const data = await brain.fetchLiveCryptoPrices();
-    if (data) {
-      cachedCryptoData = data;
-      const symbols = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'];
+    const [cryptoData, fxData, fiatData] = await Promise.all([
+      brain.fetchLiveCryptoPrices(),
+      brain.fetchLiveVenezuelaFX(),
+      brain.fetchGlobalFiatRates()
+    ]);
+
+    if (cryptoData) cachedCryptoData = cryptoData;
+    if (fxData) cachedVenezuelaFX = fxData;
+    if (fiatData) cachedFiatRates = fiatData;
+
+    // 1. Update Crypto Tickers Strip
+    if (cachedCryptoData) {
+      const symbols = ['BTC', 'ETH', 'SOL'];
       symbols.forEach(sym => {
-        const item = data[sym];
+        const item = cachedCryptoData[sym];
         const card = document.getElementById(`ticker${sym}`);
         if (card && item) {
           const sign = item.change24h >= 0 ? '+' : '';
@@ -1177,65 +1189,91 @@ function initYarbisApp() {
           }
         }
       });
-      calculateCryptoConversion();
     }
+
+    // 2. Update Venezuela FX Tickers
+    if (cachedVenezuelaFX) {
+      const tickerBcv = document.getElementById('tickerBCV');
+      const tickerUsdt = document.getElementById('tickerUSDT');
+      const cardBcv = document.getElementById('cardBcvRate');
+      const cardParallel = document.getElementById('cardParallelRate');
+      const cardSpread = document.getElementById('cardSpreadRate');
+      const cardEur = document.getElementById('cardEurRate');
+
+      if (tickerBcv) {
+        const p = tickerBcv.querySelector('.ticker-price');
+        if (p) p.textContent = `Bs. ${cachedVenezuelaFX.usdOfficialBCV.toFixed(2)}`;
+      }
+      if (tickerUsdt) {
+        const p = tickerUsdt.querySelector('.ticker-price');
+        const c = tickerUsdt.querySelector('.ticker-change');
+        if (p) p.textContent = `Bs. ${cachedVenezuelaFX.usdMarketParallel.toFixed(2)}`;
+        if (c) c.textContent = `+${cachedVenezuelaFX.spreadPercent.toFixed(1)}% spread`;
+      }
+      if (cardBcv) cardBcv.textContent = `Bs. ${cachedVenezuelaFX.usdOfficialBCV.toFixed(2)}`;
+      if (cardParallel) cardParallel.textContent = `Bs. ${cachedVenezuelaFX.usdMarketParallel.toFixed(2)}`;
+      if (cardSpread) cardSpread.textContent = `+${cachedVenezuelaFX.spreadPercent.toFixed(1)}% Brecha`;
+      if (cardEur) cardEur.textContent = `Bs. ${cachedVenezuelaFX.eurOfficialBCV.toFixed(2)}`;
+    }
+
+    calculateCryptoConversion();
 
     if (btnRefresh) btnRefresh.textContent = '🔄 Actualizar';
   }
 
-  function switchCryptoTab(tabId) {
+  function swapCurrencies() {
     audioSynth.playClickSound();
-    document.querySelectorAll('.btn-crypto-tab').forEach(b => {
-      b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
-    });
-    
-    const tabConv = document.getElementById('tabCryptoConverter');
-    const tabBvc = document.getElementById('tabCryptoBVC');
-    const tabGlobal = document.getElementById('tabCryptoGlobal');
-    const tabDca = document.getElementById('tabCryptoDCA');
-    const tabMath = document.getElementById('tabCryptoMath');
-
-    if (tabConv) tabConv.style.display = tabId === 'converter' ? 'block' : 'none';
-    if (tabBvc) tabBvc.style.display = tabId === 'bvc' ? 'block' : 'none';
-    if (tabGlobal) tabGlobal.style.display = tabId === 'global' ? 'block' : 'none';
-    if (tabDca) tabDca.style.display = tabId === 'dca' ? 'block' : 'none';
-    if (tabMath) tabMath.style.display = tabId === 'math' ? 'block' : 'none';
+    const selFrom = document.getElementById('selectFromCurrency');
+    const selTo = document.getElementById('selectToCurrency');
+    if (selFrom && selTo) {
+      const temp = selFrom.value;
+      selFrom.value = selTo.value;
+      selTo.value = temp;
+      calculateCryptoConversion();
+    }
   }
 
   function calculateCryptoConversion() {
     const inputAmount = document.getElementById('inputCryptoAmount');
-    const selectAsset = document.getElementById('selectCryptoAsset');
+    const selFrom = document.getElementById('selectFromCurrency');
+    const selTo = document.getElementById('selectToCurrency');
     const lblResult = document.getElementById('lblConversionResult');
     const lblRate = document.getElementById('lblConversionRate');
 
-    if (!inputAmount || !selectAsset || !lblResult) return;
+    if (!inputAmount || !selFrom || !selTo || !lblResult) return;
 
-    const usdVal = parseFloat(inputAmount.value) || 0;
-    const asset = selectAsset.value;
+    const amount = parseFloat(inputAmount.value) || 0;
+    const fromCode = selFrom.value;
+    const toCode = selTo.value;
 
-    const fx = brain.getFXSampleRates ? brain.getFXSampleRates() : { usdOfficialBCV: 62.40, usdMarketParallel: 75.10 };
+    const fx = cachedVenezuelaFX || (brain.getFXSampleRates ? brain.getFXSampleRates() : { usdOfficialBCV: 62.40, usdMarketParallel: 75.10, eurOfficialBCV: 67.85 });
+    const fiat = cachedFiatRates || (brain.fetchGlobalFiatRates ? { EUR: 0.92, COP: 4120, BRL: 5.65, MXN: 19.80, PEN: 3.75, CLP: 940, ARS: 1040, GBP: 0.79, JPY: 154.5, CAD: 1.38, CNY: 7.24, RUB: 98.5 } : {});
+    const crypto = cachedCryptoData || { BTC: { price: 95000 }, ETH: { price: 3400 }, SOL: { price: 190 }, BNB: { price: 650 }, XRP: { price: 1.45 } };
 
-    if (asset === 'VES_BCV') {
-      const vesAmount = usdVal * fx.usdOfficialBCV;
-      lblResult.textContent = `Bs. ${vesAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      if (lblRate) lblRate.textContent = `1 USD = Bs. ${fx.usdOfficialBCV.toFixed(2)} (Tasa Oficial BCV)`;
-      return;
-    } else if (asset === 'VES_P2P') {
-      const vesAmount = usdVal * fx.usdMarketParallel;
-      lblResult.textContent = `Bs. ${vesAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      if (lblRate) lblRate.textContent = `1 USDT = Bs. ${fx.usdMarketParallel.toFixed(2)} (Tasa Paralelo/P2P)`;
-      return;
+    const converted = brain.convertUniversalCurrency(amount, fromCode, toCode, fx, crypto, fiat);
+
+    // Format display
+    let formattedResult = '';
+    if (toCode.startsWith('VES')) {
+      formattedResult = `Bs. ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else if (toCode === 'USD' || toCode === 'USDT' || toCode === 'USDC') {
+      formattedResult = `$${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${toCode}`;
+    } else if (toCode === 'EUR') {
+      formattedResult = `€${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+    } else if (toCode === 'COP' || toCode === 'ARS' || toCode === 'CLP' || toCode === 'JPY') {
+      formattedResult = `${converted.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${toCode}`;
+    } else if (crypto && crypto[toCode]) {
+      formattedResult = `${converted < 0.0001 ? converted.toFixed(8) : converted.toFixed(4)} ${toCode}`;
+    } else {
+      formattedResult = `${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${toCode}`;
     }
 
-    const item = cachedCryptoData ? cachedCryptoData[asset] : null;
+    lblResult.textContent = formattedResult;
 
-    if (item && item.price > 0) {
-      const cryptoAmount = usdVal / item.price;
-      const fmtCrypto = cryptoAmount < 0.0001 ? cryptoAmount.toFixed(8) : cryptoAmount.toFixed(4);
-      lblResult.textContent = `${fmtCrypto} ${asset}`;
-      if (lblRate) lblRate.textContent = `1 ${asset} = $${item.price.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD`;
-    } else {
-      lblResult.textContent = `Ingresa monto...`;
+    // Unit rate label
+    const unitRate = brain.convertUniversalCurrency(1, fromCode, toCode, fx, crypto, fiat);
+    if (lblRate) {
+      lblRate.textContent = `1 ${fromCode.replace('_', ' ')} ≈ ${unitRate < 0.0001 ? unitRate.toFixed(6) : unitRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ${toCode.replace('_', ' ')}`;
     }
   }
 
@@ -1337,6 +1375,7 @@ function initYarbisApp() {
   window.refreshCryptoPrices = refreshCryptoPrices;
   window.switchCryptoTab = switchCryptoTab;
   window.calculateCryptoConversion = calculateCryptoConversion;
+  window.swapCurrencies = swapCurrencies;
   window.calcRoiUi = calcRoiUi;
   window.calcDcaUi = calcDcaUi;
   window.generateWebhookJson = generateWebhookJson;
