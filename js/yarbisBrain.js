@@ -318,6 +318,9 @@ class YARBISBrain {
       console.warn('CoinGecko fallback error:', err);
     }
 
+    return null;
+  }
+
   /* ==========================================
      GLOBAL CURRENCY ENGINE & VENEZUELA FX RADAR
      ========================================== */
