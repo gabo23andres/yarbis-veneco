@@ -308,6 +308,8 @@
 
       this.trivia = null;
       this.lastAiEngine = '';
+      // Límites de espera de Gemini (ms): petición, primer dato en streaming y prueba de modelos
+      this.geminiTimeouts = { request: 15000, stream: 10000, probe: 8000, grace: 2000 };
     }
 
     get name() {
@@ -329,7 +331,10 @@
       const clean = this.cleanKey(key);
       if (clean !== this.geminiApiKey) {
         this.geminiModel = '';
+        this.geminiModelList = null;
         S.remove('yarbis_gemini_model');
+        S.remove('yarbis_gemini_bad');
+        S.remove('yarbis_gemini_search_off');
       }
       this.geminiApiKey = clean;
       if (clean) S.setRaw('yarbis_gemini_api_key', clean);
@@ -1944,7 +1949,7 @@ Reglas:
       if (!res.ok) {
         const err = new Error(this.geminiErrorMessage(res.status, data));
         err.status = res.status;
-        err.fatal = res.status === 401 || res.status === 403 || /API key not valid|API_KEY_INVALID|API key expired/i.test(JSON.stringify(data));
+        err.fatal = this.isGeminiKeyInvalid(res.status, data);
         throw err;
       }
       return (data.models || [])
@@ -1952,21 +1957,25 @@ Reglas:
         .map(m => m.name.replace(/^models\//, ''));
     }
 
+    // Modelos "normales" de Gemini, en orden de preferencia. Se descartan
+    // vistas previas, voz, imagen y nombres en clave (argon, omni…), que en
+    // cuentas gratis suelen estar saturados, sin cupo o sin permiso.
+    geminiCandidates(models, pref = S.getRaw('yarbis_gemini_pref', 'auto')) {
+      const NORMAL = /^gemini-(\d+(?:\.\d+)?)-(flash-lite|flash|pro)$/;
+      const ALIAS = /^gemini-(flash-lite|flash|pro)-latest$/;
+      const tiers = pref === 'pro' ? ['pro', 'flash', 'flash-lite'] : pref === 'lite' ? ['flash-lite', 'flash', 'pro'] : ['flash', 'flash-lite', 'pro'];
+      const items = models.map(m => {
+        let x = m.match(NORMAL);
+        if (x) return { m, v: parseFloat(x[1]), tier: x[2] };
+        x = m.match(ALIAS);
+        return x ? { m, v: -1, tier: x[1] } : null;
+      }).filter(Boolean);
+      items.sort((a, b) => (tiers.indexOf(a.tier) - tiers.indexOf(b.tier)) || (b.v - a.v));
+      return items.map(x => x.m);
+    }
+
     chooseModel(models, pref = S.getRaw('yarbis_gemini_pref', 'auto')) {
-      const usable = models.filter(m => /^gemini-/.test(m) && !/(embedding|aqa|tts|image|audio|live|thinking|exp|preview|learnlm)/.test(m));
-      const version = (m) => {
-        const v = m.match(/^gemini-(\d+(?:\.\d+)?)/);
-        return v ? parseFloat(v[1]) : 0;
-      };
-      // auto: el Flash más nuevo · pro: el más inteligente · lite: el que más cupo gratis tiene
-      const tier = pref === 'pro'
-        ? (m) => (/-pro$/.test(m) ? 3 : /-pro-latest$/.test(m) ? 2.5 : /pro/.test(m) ? 2 : /flash(?!-lite)/.test(m) ? 1 : 0)
-        : pref === 'lite'
-          ? (m) => (/flash-lite$/.test(m) ? 3 : /flash-lite/.test(m) ? 2.5 : /-flash$/.test(m) ? 2 : 0)
-          : (m) => (/-flash$/.test(m) ? 3 : /-flash-latest$/.test(m) ? 2.5 : /flash(?!-lite)/.test(m) ? 2 : /flash-lite/.test(m) ? 1 : /pro/.test(m) ? 0.5 : 0);
-      const rank = (m) => version(m) * 10 + tier(m);
-      const sorted = (usable.length ? usable : models).slice().sort((x, y) => rank(y) - rank(x));
-      return sorted[0] || 'gemini-flash-latest';
+      return this.geminiCandidates(models, pref)[0] || 'gemini-flash-latest';
     }
 
     setModelPreference(pref) {
@@ -1975,10 +1984,100 @@ Reglas:
       S.remove('yarbis_gemini_model');
     }
 
+    geminiUrl(model, stream = false) {
+      return `https://generativelanguage.googleapis.com/v1beta/models/${model}:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`;
+    }
+
+    isGeminiKeyInvalid(status, data) {
+      return status === 401 || /API key not valid|API_KEY_INVALID|API key expired|ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(JSON.stringify(data || {}));
+    }
+
+    // Prueba en paralelo los mejores candidatos y se queda con el más
+    // preferido que responde de verdad.
+    async pickWorkingGeminiModel(models, pref = S.getRaw('yarbis_gemini_pref', 'auto')) {
+      const key = this.geminiApiKey;
+      const bad = this.badGeminiModels();
+      const all = this.geminiCandidates(models, pref).filter(m => !bad.has(m));
+      const probe = async (model, retry = true) => {
+        try {
+          const res = await U.fetchWithTimeout(this.geminiUrl(model), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+            body: JSON.stringify(this.geminiBodyFor({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 32 } }, model))
+          }, this.geminiTimeouts.probe);
+          if (res.ok) return { ok: true };
+          const data = await res.json().catch(() => ({}));
+          if (retry && res.status === 400 && /thinking/i.test(JSON.stringify(data)) && !this.noThinkingConfig) {
+            this.noThinkingConfig = true;
+            return probe(model, false);
+          }
+          return { ok: false, status: res.status, data };
+        } catch (e) {
+          return { ok: false, status: 0, timeout: true };
+        }
+      };
+      // Al primer modelo que responde se le dan 2 s a los preferidos que aún
+      // no contestan; los que se cuelgan no hacen esperar más.
+      const runBatch = (batch) => new Promise(resolve => {
+        const res = new Array(batch.length);
+        let done = 0;
+        let grace = null;
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(grace);
+          // Los que fallaron o siguen sin responder no se vuelven a probar por unas horas
+          const win = res.findIndex(r => r && r.ok);
+          batch.forEach((m, i) => {
+            if (i === win || (res[i] && res[i].ok)) return;
+            // Sin cupo por minuto: se vuelve a probar pronto; colgado o sin permiso: en horas
+            this.markBadGeminiModel(m, res[i] && res[i].status === 429 ? 10 * 60000 : undefined);
+          });
+          resolve(res);
+        };
+        const check = () => {
+          for (let i = 0; i < batch.length; i++) {
+            if (!res[i]) break;
+            if (res[i].ok) return finish();
+          }
+          if (done === batch.length) finish();
+        };
+        batch.forEach((m, i) => probe(m).then(r => {
+          res[i] = r;
+          done++;
+          if (r.ok && !grace) grace = setTimeout(finish, this.geminiTimeouts.grace);
+          check();
+        }));
+      });
+      const results = [];
+      for (let i = 0; i < Math.min(all.length, 10); i += 5) {
+        const batch = all.slice(i, i + 5);
+        const res = await runBatch(batch);
+        const win = res.findIndex(r => r && r.ok);
+        if (win >= 0) return batch[win];
+        const invalid = res.find(r => r && this.isGeminiKeyInvalid(r.status, r.data));
+        if (invalid) {
+          const err = new Error(this.geminiErrorMessage(invalid.status || 401, invalid.data));
+          err.fatal = true;
+          throw err;
+        }
+        results.push(...res.filter(Boolean));
+      }
+      const count = (fn) => results.filter(fn).length;
+      let why = 'ningún modelo respondió';
+      if (count(r => r.status === 429) >= results.length / 2) why = 'se agotó el cupo gratis por ahora; espera un minuto';
+      else if (count(r => r.status === 403) >= results.length / 2) why = 'tu clave no tiene permiso para usar los modelos de Gemini';
+      else if (count(r => r.timeout || r.status >= 500)) why = 'los modelos están saturados o tardan demasiado; inténtalo en unos minutos';
+      throw new Error(`No encontré un modelo de Gemini que responda: ${why}.`);
+    }
+
     async resolveGeminiModel(key, force = false) {
       if (this.geminiModel && !force) return this.geminiModel;
       const models = await this.listGeminiModels(key);
-      this.geminiModel = this.chooseModel(models);
+      this.geminiModelList = models;
+      if (force) S.remove('yarbis_gemini_bad');
+      this.geminiModel = await this.pickWorkingGeminiModel(models);
       S.setRaw('yarbis_gemini_model', this.geminiModel);
       return this.geminiModel;
     }
@@ -2003,47 +2102,85 @@ Reglas:
 
     geminiErrorMessage(status, data) {
       const raw = (data && data.error && data.error.message) || `HTTP ${status}`;
-      if (/API key not valid|API_KEY_INVALID|API key expired/i.test(raw)) return 'La clave de Gemini no es válida o expiró. Cópiala de nuevo desde Google AI Studio.';
-      if (status === 401 || status === 403) return `La clave no tiene permiso para usar Gemini (${raw.slice(0, 120)}).`;
+      if (this.isGeminiKeyInvalid(status, data)) return 'La clave de Gemini no es válida o expiró. Cópiala de nuevo desde Google AI Studio.';
+      if (status === 403) return 'Tu clave no tiene permiso para ese modelo de Gemini.';
       if (status === 429) return 'Se agotó por ahora el cupo gratis de Gemini. Espera un minuto o elige el modelo "Ahorro" en Ajustes.';
       if (status >= 500) return 'Gemini está saturado en este momento. Inténtalo de nuevo en unos segundos.';
       return raw;
     }
 
-    // Otro modelo para reintentar (saturado, sin cupo o retirado)
-    async alternateGeminiModel(tried) {
+    // Otro modelo para reintentar. Sin cupo: primero los Lite, que tienen más.
+    async alternateGeminiModel(tried, quota = false) {
       let models = this.geminiModelList;
       if (!models) {
         try { models = this.geminiModelList = await this.listGeminiModels(this.geminiApiKey); } catch (e) { return null; }
       }
-      for (const pref of ['lite', 'auto', 'pro']) {
-        const pool = models.filter(m => !tried.has(m));
-        if (!pool.length) return null;
-        const pick = this.chooseModel(pool, pref);
-        if (pick && !tried.has(pick) && /^gemini-/.test(pick)) return pick;
-      }
-      return null;
+      const bad = this.badGeminiModels();
+      const pref = quota ? 'lite' : S.getRaw('yarbis_gemini_pref', 'auto');
+      return this.geminiCandidates(models, pref).find(m => !tried.has(m) && !bad.has(m)) || null;
+    }
+
+    // Modelos que fallaron o se colgaron: se evitan por un tiempo (6 h por defecto)
+    badGeminiModels() {
+      const saved = S.get('yarbis_gemini_bad', {}) || {};
+      const now = Date.now();
+      return new Set(Object.keys(saved).filter(m => saved[m] > now));
+    }
+
+    markBadGeminiModel(model, ms = 6 * 3600 * 1000) {
+      const saved = S.get('yarbis_gemini_bad', {}) || {};
+      saved[model] = Date.now() + ms;
+      S.set('yarbis_gemini_bad', saved);
     }
 
     // Todas las llamadas a Gemini pasan por aquí: elige modelo, ajusta el
-    // pensamiento y reintenta con otro modelo si hace falta.
-    async geminiFetch(body, { stream = false } = {}) {
+    // pensamiento y, si un modelo falla (sin permiso, colgado, saturado, sin
+    // cupo o retirado), prueba con otro.
+    async geminiFetch(body, { stream = false, noAlternate = false } = {}) {
       const key = this.geminiApiKey;
       if (!key) throw new Error('Sin clave de Gemini.');
       let model = await this.resolveGeminiModel(key);
       const tried = new Set();
+      let persist = false;
       let lastErr = null;
-      for (let attempt = 0; attempt < 4; attempt++) {
+      const switchTo = async (keep, quota = false) => {
+        if (noAlternate) return false;
+        const alt = await this.alternateGeminiModel(tried, quota);
+        if (!alt) return false;
+        if (keep) {
+          this.markBadGeminiModel(model);
+          persist = true;
+        }
+        model = alt;
+        return true;
+      };
+      for (let attempt = 0; attempt < 5; attempt++) {
         tried.add(model);
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`;
         const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(this.geminiBodyFor(body, model)) };
-        const res = stream ? await this.streamFetch(url, opts, null, 30000) : await U.fetchWithTimeout(url, opts, 45000);
-        if (res.ok) return { res, model };
+        let res;
+        try {
+          res = stream
+            ? await this.streamFetch(this.geminiUrl(model, true), opts, null, this.geminiTimeouts.stream)
+            : await U.fetchWithTimeout(this.geminiUrl(model), opts, this.geminiTimeouts.request);
+        } catch (e) {
+          lastErr = new Error(e && e.name === 'AbortError' ? 'Gemini tardó demasiado en responder.' : `No se pudo conectar con Gemini (${e.message}).`);
+          lastErr.status = 0;
+          lastErr.timeout = true;
+          if (await switchTo(true)) continue;
+          throw lastErr;
+        }
+        if (res.ok) {
+          if (persist && model !== this.geminiModel) {
+            this.geminiModel = model;
+            S.setRaw('yarbis_gemini_model', model);
+          }
+          return { res, model };
+        }
         const data = await res.json().catch(() => ({}));
         const raw = JSON.stringify(data);
         lastErr = new Error(this.geminiErrorMessage(res.status, data));
         lastErr.status = res.status;
-        lastErr.fatal = res.status === 401 || res.status === 403 || /API key not valid|API_KEY_INVALID|API key expired/i.test(raw);
+        lastErr.fatal = this.isGeminiKeyInvalid(res.status, data);
         if (lastErr.fatal) throw lastErr;
         if (res.status === 400 && /thinking/i.test(raw) && !this.noThinkingConfig) {
           this.noThinkingConfig = true;
@@ -2051,16 +2188,10 @@ Reglas:
           continue;
         }
         const retired = res.status === 404 || (res.status === 400 && /model/i.test(raw) && /not found|not supported|unsupported|deprecated/i.test(raw));
-        if (retired || res.status === 429 || res.status >= 500) {
-          const alt = await this.alternateGeminiModel(tried);
-          if (alt) {
-            if (retired) {
-              this.geminiModel = alt;
-              S.setRaw('yarbis_gemini_model', alt);
-            }
-            model = alt;
-            continue;
-          }
+        if (retired || res.status === 403 || res.status >= 500) {
+          if (await switchTo(true)) continue;
+        } else if (res.status === 429) {
+          if (await switchTo(false, true)) continue;
         }
         throw lastErr;
       }
@@ -2112,9 +2243,8 @@ Reglas:
       try {
         this.geminiApiKey = key;
         this.geminiModelList = null;
-        await this.resolveGeminiModel(key, true);
-        // Basta con que Gemini acepte la petición: la clave funciona
-        const { model } = await this.geminiFetch({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 256 } });
+        // Elige, probándolos, el mejor modelo que responde con esta clave
+        const model = await this.resolveGeminiModel(key, true);
         return { success: true, message: `✅ Clave válida. Gemini es tu cerebro (modelo ${model}).`, model };
       } catch (e) {
         this.geminiApiKey = prevKey;
@@ -2169,7 +2299,7 @@ Reglas:
     /* ---------- Diagnóstico: prueba cada motor de IA y dice qué falla ---------- */
     async diagnoseAI() {
       const out = [];
-      const add = (ok, name, detail) => out.push({ ok, name, detail });
+      const add = (ok, name, detail, info = false) => out.push({ ok, name, detail, info });
       if (this.geminiApiKey) {
         try {
           const { model } = await this.geminiFetch({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 256 } });
@@ -2179,6 +2309,19 @@ Reglas:
             add(r.tools.length > 0, 'Gemini como cerebro', r.tools.length ? `usó ${r.tools.join(', ')}: ${r.text.slice(0, 80)}` : 'respondió sin usar las herramientas');
           } catch (e) {
             add(false, 'Gemini como cerebro', e.message);
+          }
+          try {
+            const { res } = await this.geminiFetch({ contents: [{ role: 'user', parts: [{ text: '¿Qué día es hoy?' }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 256 } }, { noAlternate: true });
+            await res.json().catch(() => ({}));
+            S.remove('yarbis_gemini_search_off');
+            add(true, 'Búsqueda en Google', 'disponible');
+          } catch (e) {
+            if (e.status === 429 || e.status === 403 || e.status === 400) {
+              S.setRaw('yarbis_gemini_search_off', String(Date.now()));
+              add(false, 'Búsqueda en Google', 'no está incluida en tu plan gratis; YARBIS busca en Wikipedia', true);
+            } else {
+              add(false, 'Búsqueda en Google', e.message);
+            }
           }
         } catch (e) {
           add(false, 'Gemini', e.message);

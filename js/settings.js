@@ -158,9 +158,18 @@
         this.onAiChange();
       });
 
-      $('#setGeminiPref').addEventListener('change', (e) => {
+      $('#setGeminiPref').addEventListener('change', async (e) => {
         brain.setModelPreference(e.target.value);
-        $('#keyStatus').textContent = brain.geminiApiKey ? 'Modelo cambiado. Se elegirá en tu próxima pregunta.' : '';
+        const status = $('#keyStatus');
+        if (!brain.geminiApiKey) { status.textContent = ''; return; }
+        status.textContent = 'Buscando el mejor modelo que responda…';
+        try {
+          const model = await brain.resolveGeminiModel(brain.geminiApiKey, true);
+          status.textContent = `✅ Modelo: ${model}.`;
+        } catch (err) {
+          status.textContent = `❌ ${err.message}`;
+        }
+        this.onAiChange();
       });
 
       // Diagnóstico de la IA
@@ -173,7 +182,7 @@
         try {
           const results = await brain.diagnoseAI();
           list.replaceChildren(...results.map(r => U.el('li', { class: `diag-item ${r.ok ? 'ok' : 'bad'}` },
-            U.el('span', { class: 'diag-mark', text: r.ok ? '✅' : '❌' }),
+            U.el('span', { class: 'diag-mark', text: r.ok ? '✅' : r.info ? 'ℹ️' : '❌' }),
             U.el('span', null, U.el('strong', { text: r.name }), ` — ${r.detail}`))));
         } catch (e) {
           list.replaceChildren(U.el('li', { text: `❌ ${e.message}` }));
