@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.gabo23andres.yarbis",
+      "sha256_cert_fingerprints": ["74:37:7E:44:60:40:78:48:45:D0:F9:38:5E:BE:2C:11:3F:9E:06:B9:BC:7F:DA:D5:89:DA:68:E6:1E:4B:98:52"]
+    }
+  }
+]
