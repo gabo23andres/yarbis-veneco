@@ -18,6 +18,7 @@ jobs:
     env:
       VERSION_CODE: ${{ github.run_number }}
       VERSION_NAME: 14.0.${{ github.run_number }}
+      HAS_SECRET: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -30,11 +31,37 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      # Firma: usa la llave fija guardada en el secreto KEYSTORE_BASE64 (las
-      # contraseñas y el alias son opcionales: KEYSTORE_PASSWORD, KEY_ALIAS,
-      # KEY_PASSWORD). Sin ese secreto se crea una llave temporal: el APK
-      # funciona, pero para instalar una versión nueva hay que desinstalar la
-      # anterior y se ve la barra de dirección.
+      # Firma, en este orden:
+      # 1. Secreto KEYSTORE_BASE64 (opcionales: KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD).
+      # 2. Llave fija guardada en la caché de Actions (clave yarbis-firma-v1). Se crea
+      #    la primera vez en main y llave-apk.yml la mantiene viva cada 3 días.
+      # 3. Llave temporal (fuera de main y sin caché): el APK funciona, pero para
+      #    instalar una versión nueva hay que desinstalar la anterior.
+      - name: Buscar llave guardada
+        id: llave
+        if: ${{ env.HAS_SECRET != 'true' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.yarbis-firma/release.keystore
+          key: yarbis-firma-v1
+
+      - name: Crear llave fija
+        id: nueva
+        if: ${{ env.HAS_SECRET != 'true' && steps.llave.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' }}
+        run: |
+          mkdir -p ~/.yarbis-firma
+          keytool -genkeypair -keystore ~/.yarbis-firma/release.keystore -storetype PKCS12 \
+            -alias yarbis -keyalg RSA -keysize 2048 -validity 20000 \
+            -storepass yarbis-firma -keypass yarbis-firma -dname "CN=YARBIS, O=YARBIS, C=VE"
+          echo "::notice::Llave fija creada y guardada en la caché (yarbis-firma-v1)."
+
+      - name: Guardar llave fija
+        if: ${{ steps.nueva.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.yarbis-firma/release.keystore
+          key: yarbis-firma-v1
+
       - name: Preparar llave de firma
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -49,8 +76,13 @@ jobs:
             echo "KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
             echo "KEY_ALIAS=${KEY_ALIAS:-yarbis}" >> "$GITHUB_ENV"
             echo "KEY_PASSWORD=${KEY_PASSWORD:-$PASS}" >> "$GITHUB_ENV"
+          elif [ -f ~/.yarbis-firma/release.keystore ]; then
+            cp ~/.yarbis-firma/release.keystore "$KS"
+            echo "KEYSTORE_PASSWORD=yarbis-firma" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=yarbis" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=yarbis-firma" >> "$GITHUB_ENV"
           else
-            echo "::warning::Falta el secreto KEYSTORE_BASE64: se usa una llave temporal."
+            echo "::warning::Sin llave fija (fuera de main y sin caché): se usa una llave temporal."
             PASS="yarbis-$(openssl rand -hex 12)"
             keytool -genkeypair -v -keystore "$KS" -alias yarbis -keyalg RSA -keysize 2048 \
               -validity 10000 -storepass "$PASS" -keypass "$PASS" \

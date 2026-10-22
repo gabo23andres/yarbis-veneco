@@ -1,0 +1,31 @@
+name: Mantener llave del APK
+
+# La llave fija del APK vive en la caché de Actions (clave yarbis-firma-v1).
+# GitHub borra las cachés que pasan 7 días sin usarse; leerla cada 3 días la
+# mantiene viva para que las actualizaciones del APK se instalen encima.
+on:
+  schedule:
+    - cron: '23 9 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  llave:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Leer llave guardada
+        id: llave
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.yarbis-firma/release.keystore
+          key: yarbis-firma-v1
+
+      - name: Resultado
+        run: |
+          if [ "${{ steps.llave.outputs.cache-hit }}" = "true" ]; then
+            echo "::notice::Llave del APK encontrada y renovada."
+          else
+            echo "::warning::No hay llave guardada: la próxima compilación en main creará una nueva (habrá que reinstalar la app y actualizar assetlinks.json)."
+          fi
