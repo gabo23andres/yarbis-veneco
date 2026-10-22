@@ -134,3 +134,100 @@ test('clave de Gemini: acepta el formato nuevo "AQ." y rechaza basura', async ()
     globalThis.fetch = saved;
   }
 });
+
+/* ---------------- v12 ---------------- */
+
+test('alarmas repetitivas: lunes a viernes salta el fin de semana', () => {
+  const S = R.ScheduleStore;
+  // Viernes 23/10/2026 a las 20:00 -> la próxima de 6:30 L-V es el lunes 26
+  const friday = new Date(2026, 9, 23, 20, 0).getTime();
+  const next = new Date(S.nextOccurrence(6, 30, 'weekdays', friday));
+  assert.strictEqual(next.getDay(), 1);
+  assert.strictEqual(next.getDate(), 26);
+  const daily = new Date(S.nextOccurrence(6, 30, 'daily', friday));
+  assert.strictEqual(daily.getDate(), 24);
+  const tueThu = new Date(S.nextOccurrence(20, 0, [2, 4], friday));
+  assert.strictEqual(tueThu.getDay(), 2);
+});
+
+test('alarma repetitiva por voz y se reprograma al sonar', async () => {
+  const before = R.schedule.alarms.length;
+  await ask('despiértame todos los días a las 6');
+  const a = R.schedule.alarms.find(x => x.repeat === 'daily');
+  assert.ok(a && R.schedule.alarms.length === before + 1);
+  // Simula que ya sonó: queda programada para el día siguiente
+  const rang = [];
+  R.schedule.onRing = (e) => rang.push(e);
+  a.at = Date.now() - 1000;
+  R.schedule.tick();
+  R.schedule.stopTicking();
+  assert.strictEqual(rang.length, 1);
+  assert.ok(R.schedule.alarms.some(x => x.id === a.id && x.at > Date.now()));
+  R.schedule.onRing = null;
+  assert.deepStrictEqual(globalThis.YARBISBrain.parseRepeat('cada martes y jueves a las 8'), [2, 4]);
+});
+
+test('listas: varios productos y lectura', async () => {
+  R.notes.clearAll();
+  assert.match((await ask('agrega leche, huevos y harina pan a la lista de compras')).text, /Leche, Huevos, Harina pan/);
+  assert.match((await ask('pon arroz en la lista del mercado')).text, /Compras/);
+  assert.match((await ask('qué hay en la lista de compras')).text, /Arroz[\s\S]*Harina pan/);
+  assert.match((await ask('agrega leche a la lista de compras')).text, /ya está/);
+  assert.strictEqual(R.notes.inList('Compras').length, 4);
+});
+
+test('comandos encadenados', async () => {
+  R.schedule.cancelAllTimers();
+  const r = await ask('pon un timer de 5 minutos y anota comprar pan');
+  assert.match(r.text, /Temporizador[\s\S]*Anotado/);
+  assert.strictEqual(r.effects.length, 1);
+  // " y " dentro de una lista no se divide
+  assert.strictEqual(brain.splitChain('agrega leche y huevos a la lista de compras').length, 1);
+  R.schedule.cancelAllTimers();
+});
+
+test('alertas del dólar por voz', async () => {
+  const F = win.YarbisFinance;
+  F.alerts = [];
+  const r = await ask('avísame cuando el dólar pase de 250');
+  assert.match(r.text, /dólar BCV suba de Bs\. 250,00/);
+  const r2 = await ask('alértame si el paralelo baja de 110');
+  assert.match(r2.text, /paralelo baje de Bs\. 110,00/);
+  assert.strictEqual(F.alerts.length, 2);
+});
+
+test('gastos por voz', async () => {
+  const E = win.YarbisExpenses.store;
+  E.items = [];
+  assert.match((await ask('gasté 20 dólares en comida')).text, /\$20,00\*\* en Comida/);
+  assert.match((await ask('pagué 5000 bs de luz')).text, /Bs\. 5\.000,00 \(≈ \$50,00\)\*\* en Servicios/);
+  assert.match((await ask('¿cuánto he gastado este mes?')).text, /\$70,00/);
+  assert.match((await ask('cuánto llevo en comida')).text, /\$20,00/);
+});
+
+test('presupuesto avisa al pasar del 80 %', async () => {
+  const E = win.YarbisExpenses.store;
+  E.items = [];
+  E.setBudget(100);
+  await ask('gasté 50 dólares en comida');
+  assert.match((await ask('gasté 35 dólares en transporte')).text, /80 %/);
+  E.setBudget(0);
+});
+
+test('Pago Móvil: mensaje de cobro', async () => {
+  const PM = win.YarbisPagoMovil;
+  assert.ok(PM.save({ bank: '0102', idType: 'V', id: '12345678', phone: '0414-123-4567' }));
+  const msg = PM.message({ amountUsd: 10, amountBs: 1000 });
+  assert.match(msg, /0102 - Banco de Venezuela/);
+  assert.match(msg, /V-12\.345\.678/);
+  assert.match(msg, /0414-1234567/);
+  const r = await ask('cóbrale 10 dólares a mamá');
+  assert.match(r.text, /Cobro para/);
+  assert.match(r.actions[0].url, /^https:\/\/wa\.me\/584141234567\?text=/);
+});
+
+test('dictado: puntuación por voz', () => {
+  const p = win.YarbisVoiceTools.punctuate;
+  assert.strictEqual(p('hola coma qué tal punto nos vemos'), 'Hola, qué tal. Nos vemos');
+  assert.strictEqual(p('lista dos puntos pan punto y aparte fin'), 'Lista: pan.\nFin');
+});

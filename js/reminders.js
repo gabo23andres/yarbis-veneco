@@ -1,8 +1,9 @@
 /* ==========================================================================
-   YARBIS - NOTAS, TEMPORIZADORES Y ALARMAS
+   YARBIS - NOTAS, LISTAS, TEMPORIZADORES Y ALARMAS
    Los datos viven en localStorage. Los temporizadores guardan su hora de fin
    (no un contador), así no se desfasan en segundo plano y sobreviven a una
-   recarga. La parte de interfaz sólo se monta si existe el DOM.
+   recarga. Las alarmas pueden repetirse (diario, lunes a viernes, etc.).
+   La parte de interfaz sólo se monta si existe el DOM.
    ========================================================================== */
 
 (function (root) {
@@ -11,6 +12,10 @@
   const U = root.YarbisUtils;
   const S = U.storage;
 
+  const DEFAULT_LISTS = ['Personal', 'Compras', 'Trabajo'];
+  const SHOPPING = 'Compras';
+  const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
   class Emitter {
     constructor() { this.listeners = new Set(); }
     onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
@@ -18,29 +23,37 @@
   }
 
   /* ==========================================
-     NOTAS
+     NOTAS Y LISTAS
      ========================================== */
   class NotesStore extends Emitter {
     constructor() {
       super();
       this.items = this.load();
+      this.customLists = S.get('yarbis_note_lists', []);
+      if (!Array.isArray(this.customLists)) this.customLists = [];
     }
 
     load() {
-      const list = S.get('yarbis_notes', null);
-      if (Array.isArray(list)) return list;
-      // Migración desde v10 (yarbis_notes_list)
-      const old = S.get('yarbis_notes_list', []);
-      const migrated = (Array.isArray(old) ? old : []).map(n => ({
-        id: String(n.id || U.uid()),
-        text: String(n.text || ''),
-        done: !!n.completed,
-        createdAt: typeof n.id === 'number' && n.id > 1e12 ? n.id : Date.now(),
-        updatedAt: Date.now()
-      })).filter(n => n.text);
-      S.set('yarbis_notes', migrated);
-      S.remove('yarbis_notes_list');
-      return migrated;
+      let list = S.get('yarbis_notes', null);
+      if (!Array.isArray(list)) {
+        // Migración desde v10 (yarbis_notes_list)
+        const old = S.get('yarbis_notes_list', []);
+        list = (Array.isArray(old) ? old : []).map(n => ({
+          id: String(n.id || U.uid()),
+          text: String(n.text || ''),
+          done: !!n.completed,
+          createdAt: typeof n.id === 'number' && n.id > 1e12 ? n.id : Date.now(),
+          updatedAt: Date.now()
+        })).filter(n => n.text);
+        S.remove('yarbis_notes_list');
+      }
+      // Migración desde v11: las notas sin lista van a "Personal"
+      let changed = false;
+      list.forEach(n => {
+        if (!n.list) { n.list = 'Personal'; changed = true; }
+      });
+      if (changed || !S.get('yarbis_notes', null)) S.set('yarbis_notes', list);
+      return list;
     }
 
     save() {
@@ -48,13 +61,64 @@
       this.emit(this.items);
     }
 
-    add(text) {
+    lists() {
+      const set = [...DEFAULT_LISTS];
+      [...this.customLists, ...this.items.map(n => n.list)].forEach(l => {
+        if (l && !set.some(x => U.normalize(x) === U.normalize(l))) set.push(l);
+      });
+      return set;
+    }
+
+    // "compras", "lista del mercado", "super" -> "Compras"
+    resolveList(name) {
+      const n = U.normalize(name || '').replace(/^(la\s+)?lista\s+(de\s+|del\s+)?/, '').trim();
+      if (!n) return 'Personal';
+      if (/^(compras?|mercado|super(mercado)?|abasto|bodega|mandado)$/.test(n)) return SHOPPING;
+      const found = this.lists().find(l => U.normalize(l) === n);
+      return found || U.capitalize(n);
+    }
+
+    addList(name) {
+      const clean = String(name || '').trim().slice(0, 24);
+      if (!clean) return null;
+      const resolved = this.resolveList(clean);
+      if (!this.lists().includes(resolved)) {
+        this.customLists.push(resolved);
+        S.set('yarbis_note_lists', this.customLists);
+        this.emit(this.items);
+      }
+      return resolved;
+    }
+
+    add(text, list = 'Personal') {
       const clean = String(text || '').trim();
       if (!clean) return null;
-      const note = { id: U.uid(), text: clean, done: false, createdAt: Date.now(), updatedAt: Date.now() };
+      const target = list ? this.resolveList(list) : 'Personal';
+      const note = { id: U.uid(), text: clean, done: false, list: target, createdAt: Date.now(), updatedAt: Date.now() };
       this.items.unshift(note);
       this.save();
       return note;
+    }
+
+    addMany(texts, list) {
+      const added = [];
+      const target = this.resolveList(list);
+      texts.map(t => String(t || '').trim()).filter(Boolean).forEach(t => {
+        // No duplicar un ítem pendiente que ya está en la lista
+        const exists = this.items.find(n => !n.done && n.list === target && U.normalize(n.text) === U.normalize(t));
+        if (exists) return;
+        added.push({ id: U.uid(), text: U.capitalize(t), done: false, list: target, createdAt: Date.now(), updatedAt: Date.now() });
+      });
+      if (added.length) {
+        this.items.unshift(...added);
+        this.save();
+      }
+      return added;
+    }
+
+    inList(list) {
+      const target = this.resolveList(list);
+      return this.items.filter(n => n.list === target);
     }
 
     update(id, text) {
@@ -82,9 +146,18 @@
       if (this.items.length !== before) this.save();
     }
 
-    clearDone() {
-      this.items = this.items.filter(n => !n.done);
+    clearDone(list) {
+      const target = list ? this.resolveList(list) : null;
+      this.items = this.items.filter(n => !n.done || (target && n.list !== target));
       this.save();
+    }
+
+    clearList(list) {
+      const target = this.resolveList(list);
+      const n = this.items.filter(x => x.list === target).length;
+      this.items = this.items.filter(x => x.list !== target);
+      this.save();
+      return n;
     }
 
     clearAll() {
@@ -107,10 +180,31 @@
         const t = U.normalize(n.text);
         let score = t.includes(q) ? 100 : 0;
         words.forEach(w => { if (t.includes(w)) score += 10; });
+        if (!n.done) score += 1;
         if (score > bestScore) { bestScore = score; best = n; }
       });
-      return bestScore > 0 ? best : null;
+      return bestScore > 1 ? best : null;
     }
+  }
+
+  /* ==========================================
+     REPETICIÓN DE ALARMAS
+     ========================================== */
+  function repeatDays(repeat) {
+    if (repeat === 'daily') return [0, 1, 2, 3, 4, 5, 6];
+    if (repeat === 'weekdays') return [1, 2, 3, 4, 5];
+    if (repeat === 'weekends') return [0, 6];
+    if (Array.isArray(repeat) && repeat.length) return repeat.map(Number).filter(d => d >= 0 && d <= 6);
+    return null;
+  }
+
+  function repeatLabel(repeat) {
+    if (!repeat || repeat === 'none') return '';
+    if (repeat === 'daily') return 'Todos los días';
+    if (repeat === 'weekdays') return 'Lunes a viernes';
+    if (repeat === 'weekends') return 'Fines de semana';
+    const days = repeatDays(repeat);
+    return days ? days.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => DAY_NAMES[d]).join(', ') : '';
   }
 
   /* ==========================================
@@ -132,7 +226,7 @@
         S.remove('yarbis_alarms');
         this.saveAlarms(false);
       }
-      this.onRing = null; // ({ kind, item }) => {}
+      this.onRing = null; // ({ kind, item, late }) => {}
       this.tickTimer = null;
     }
 
@@ -196,10 +290,20 @@
       return n;
     }
 
-    addAlarm(at, label) {
+    addAlarm(at, label, repeat = 'none') {
       const ts = Number(at);
       if (!ts) return null;
-      const alarm = { id: U.uid(), at: ts, label: String(label || '').trim() || 'Alarma' };
+      const d = new Date(ts);
+      const alarm = {
+        id: U.uid(),
+        at: ts,
+        label: String(label || '').trim() || 'Alarma',
+        repeat: repeatDays(repeat) ? repeat : 'none',
+        h: d.getHours(),
+        m: d.getMinutes()
+      };
+      // Si la primera hora no cae en un día válido, mover a la siguiente ocurrencia
+      if (alarm.repeat !== 'none') alarm.at = ScheduleStore.nextOccurrence(alarm.h, alarm.m, alarm.repeat, ts - 1);
       this.alarms.push(alarm);
       this.saveAlarms();
       this.ensureTicking();
@@ -211,12 +315,16 @@
       this.saveAlarms();
     }
 
-    // "HH:MM" -> próxima ocurrencia (hoy o mañana)
-    static nextOccurrence(hours, minutes) {
-      const target = new Date();
-      target.setHours(hours, minutes, 0, 0);
-      if (target.getTime() <= Date.now()) target.setDate(target.getDate() + 1);
-      return target.getTime();
+    // Próxima ocurrencia de HH:MM después de `from`, respetando los días de repetición
+    static nextOccurrence(hours, minutes, repeat = 'none', from = Date.now()) {
+      const days = repeatDays(repeat);
+      const base = new Date(from);
+      for (let add = 0; add <= 8; add++) {
+        const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + add, hours, minutes, 0, 0);
+        if (d.getTime() <= from) continue;
+        if (!days || days.includes(d.getDay())) return d.getTime();
+      }
+      return from + 86400000;
     }
 
     stopTicking() {
@@ -238,12 +346,21 @@
         this.timers = this.timers.filter(t => !dueTimers.includes(t));
         this.saveTimers();
       }
+      const rings = [];
       if (dueAlarms.length) {
-        this.alarms = this.alarms.filter(a => !dueAlarms.includes(a));
+        dueAlarms.forEach(a => {
+          rings.push({ ...a, late: now - a.at > 120000 });
+          if (a.repeat && a.repeat !== 'none') {
+            const h = a.h !== undefined ? a.h : new Date(a.at).getHours();
+            const m = a.m !== undefined ? a.m : new Date(a.at).getMinutes();
+            a.at = ScheduleStore.nextOccurrence(h, m, a.repeat, now);
+          }
+        });
+        this.alarms = this.alarms.filter(a => !dueAlarms.includes(a) || (a.repeat && a.repeat !== 'none'));
         this.saveAlarms();
       }
       dueTimers.forEach(item => this.onRing && this.onRing({ kind: 'timer', item }));
-      dueAlarms.forEach(item => this.onRing && this.onRing({ kind: 'alarm', item, late: now - item.at > 120000 }));
+      rings.forEach(item => this.onRing && this.onRing({ kind: 'alarm', item, late: item.late }));
       this.emit({ type: 'tick' });
 
       const active = this.timers.some(t => t.pausedRemaining === null) || this.alarms.length;
@@ -251,6 +368,14 @@
         clearInterval(this.tickTimer);
         this.tickTimer = null;
       }
+    }
+
+    upcoming(limit = 3) {
+      const items = [
+        ...this.timers.filter(t => t.pausedRemaining === null).map(t => ({ kind: 'timer', at: t.endAt, label: t.label })),
+        ...this.alarms.map(a => ({ kind: 'alarm', at: a.at, label: a.label, repeat: a.repeat }))
+      ];
+      return items.sort((a, b) => a.at - b.at).slice(0, limit);
     }
   }
 
@@ -267,9 +392,9 @@
     }
   }
 
-  async function notify(title, body) {
+  async function notify(title, body, tag = 'yarbis-ring') {
     if (!('Notification' in root) || Notification.permission !== 'granted') return;
-    const options = { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'yarbis-ring', renotify: true, requireInteraction: true, vibrate: [300, 120, 300] };
+    const options = { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag, renotify: true, requireInteraction: tag === 'yarbis-ring', vibrate: [300, 120, 300] };
     try {
       const reg = root.navigator.serviceWorker && await root.navigator.serviceWorker.getRegistration();
       if (reg && reg.showNotification) {
@@ -291,6 +416,7 @@
       this.search = '';
       this.editingId = null;
       this.timerNodes = new Map();
+      this.list = S.getRaw('yarbis_notes_list_sel', 'all');
     }
 
     mount() {
@@ -299,6 +425,7 @@
       this.notesCount = $('#notesCount');
       this.timersList = $('#timersList');
       this.alarmsList = $('#alarmsList');
+      this.listChips = $('#listChips');
       if (!this.notesList) return;
 
       const formNote = $('#formNote');
@@ -306,7 +433,11 @@
         formNote.addEventListener('submit', (e) => {
           e.preventDefault();
           const input = $('#inputNewNote');
-          if (this.notes.add(input.value)) {
+          const target = this.list === 'all' ? 'Personal' : this.list;
+          // En la lista de compras se pueden agregar varios ítems separados por coma
+          const parts = target === SHOPPING ? input.value.split(/\s*,\s*/) : [input.value];
+          const added = parts.length > 1 ? this.notes.addMany(parts, target) : [this.notes.add(input.value, target)].filter(Boolean);
+          if (added.length) {
             input.value = '';
             if (root.audioSynth) root.audioSynth.playClickSound();
           }
@@ -348,11 +479,14 @@
           const val = $('#alarmTime').value;
           const m = String(val).match(/^(\d{1,2}):(\d{2})/);
           if (!m) { U.toast('Elige una hora para la alarma.', { type: 'warn' }); return; }
-          const at = ScheduleStore.nextOccurrence(Number(m[1]), Number(m[2]));
-          this.schedule.addAlarm(at, $('#alarmLabel').value);
+          const repeatSel = $('#alarmRepeat') ? $('#alarmRepeat').value : 'none';
+          const at = ScheduleStore.nextOccurrence(Number(m[1]), Number(m[2]), repeatSel);
+          const alarm = this.schedule.addAlarm(at, $('#alarmLabel').value, repeatSel);
           requestNotificationPermission();
           $('#alarmLabel').value = '';
-          U.toast(`Alarma para las ${U.fmtTime(at)}${new Date(at).getDate() !== new Date().getDate() ? ' (mañana)' : ''}.`, { type: 'ok' });
+          const when = new Date(alarm.at);
+          const rep = repeatLabel(alarm.repeat);
+          U.toast(`Alarma para las ${U.fmtTime(alarm.at)}${rep ? ` · ${rep}` : when.toDateString() !== new Date().toDateString() ? ' (mañana)' : ''}.`, { type: 'ok' });
         });
       }
 
@@ -367,22 +501,65 @@
       this.schedule.ensureTicking();
     }
 
+    setList(list) {
+      this.list = list;
+      S.setRaw('yarbis_notes_list_sel', list);
+      this.renderNotes();
+    }
+
+    renderListChips() {
+      if (!this.listChips) return;
+      const el = U.el;
+      const lists = this.notes.lists();
+      if (this.list !== 'all' && !lists.includes(this.list)) this.list = 'all';
+      const count = (l) => this.notes.items.filter(n => !n.done && (l === 'all' || n.list === l)).length;
+      const chip = (value, label) => {
+        const c = count(value);
+        return el('button', {
+          type: 'button',
+          class: `list-chip${this.list === value ? ' active' : ''}`,
+          'aria-pressed': this.list === value ? 'true' : 'false',
+          onClick: () => this.setList(value)
+        }, label, c ? el('span', { class: 'list-chip-count', text: String(c) }) : null);
+      };
+      this.listChips.replaceChildren(
+        chip('all', 'Todas'),
+        ...lists.map(l => chip(l, `${l === SHOPPING ? '🛒 ' : l === 'Trabajo' ? '💼 ' : l === 'Personal' ? '🙂 ' : ''}${l}`)),
+        el('button', {
+          type: 'button', class: 'list-chip add', title: 'Nueva lista', 'aria-label': 'Nueva lista',
+          onClick: () => {
+            const name = root.prompt('Nombre de la nueva lista:');
+            const created = name && this.notes.addList(name);
+            if (created) this.setList(created);
+          }
+        }, U.icon('plus')));
+      const input = U.$('#inputNewNote');
+      if (input) {
+        input.placeholder = this.list === SHOPPING ? 'Agrega productos (separa con comas)…'
+          : this.list === 'all' ? 'Nueva nota o recordatorio…' : `Nueva nota en ${this.list}…`;
+      }
+    }
+
     renderNotes() {
       if (!this.notesList) return;
       const el = U.el;
+      this.renderListChips();
       const pendingCount = this.notes.pending().length;
       if (this.notesCount) this.notesCount.textContent = `${pendingCount} pendiente${pendingCount === 1 ? '' : 's'}`;
 
       let items = this.notes.items;
+      if (this.list !== 'all') items = items.filter(n => n.list === this.list);
       if (this.filter === 'pending') items = items.filter(n => !n.done);
       if (this.filter === 'done') items = items.filter(n => n.done);
       if (this.search) items = items.filter(n => U.normalize(n.text).includes(this.search));
+      this.notesList.classList.toggle('shopping', this.list === SHOPPING);
 
       this.notesList.replaceChildren();
       if (!items.length) {
         const msg = this.search ? 'Ninguna nota coincide con la búsqueda.'
           : this.filter === 'done' ? 'Todavía no has completado notas.'
           : this.filter === 'pending' ? '¡Nada pendiente! 🎉'
+          : this.list === SHOPPING ? 'La lista de compras está vacía. Dime "agrega leche y huevos a la lista de compras".'
           : 'Sin notas. Escribe una arriba o dime "anota comprar pan".';
         this.notesList.appendChild(el('li', { class: 'empty-state', text: msg }));
         return;
@@ -395,7 +572,10 @@
           class: 'note-check',
           'aria-label': note.done ? 'Marcar como pendiente' : 'Marcar como hecha',
           'aria-pressed': note.done ? 'true' : 'false',
-          onClick: () => this.notes.toggle(note.id)
+          onClick: () => {
+            li.classList.add('checking');
+            setTimeout(() => this.notes.toggle(note.id), 180);
+          }
         });
         li.appendChild(check);
 
@@ -417,9 +597,12 @@
           return;
         }
 
+        const meta = this.list === 'all' && note.list !== 'Personal'
+          ? `${note.list} · ${U.fmtDateTime(note.createdAt)}`
+          : U.fmtDateTime(note.createdAt);
         const body = el('div', { class: 'note-body' },
           el('span', { class: 'note-text', text: note.text }),
-          el('span', { class: 'note-meta', text: U.fmtDateTime(note.createdAt) }));
+          el('span', { class: 'note-meta', text: meta }));
         body.addEventListener('dblclick', () => { this.editingId = note.id; this.renderNotes(); });
         li.appendChild(body);
         li.appendChild(el('button', {
@@ -430,11 +613,14 @@
           type: 'button', class: 'icon-btn small danger', 'aria-label': 'Borrar nota', title: 'Borrar',
           onClick: () => {
             const copy = { ...note };
-            this.notes.remove(note.id);
-            U.toast('Nota borrada', {
-              actionLabel: 'Deshacer',
-              onAction: () => { this.notes.items.unshift(copy); this.notes.save(); }
-            });
+            li.classList.add('leaving');
+            setTimeout(() => {
+              this.notes.remove(note.id);
+              U.toast('Nota borrada', {
+                actionLabel: 'Deshacer',
+                onAction: () => { this.notes.items.unshift(copy); this.notes.save(); }
+              });
+            }, 160);
           }
         }, U.icon('trash')));
         this.notesList.appendChild(li);
@@ -479,12 +665,14 @@
         }
         this.schedule.alarms.forEach(a => {
           const d = new Date(a.at);
-          const isTomorrow = d.toDateString() !== new Date().toDateString();
+          const isToday = d.toDateString() === new Date().toDateString();
+          const rep = repeatLabel(a.repeat);
+          const when = isToday ? 'Hoy' : d.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric' });
           this.alarmsList.appendChild(el('li', { class: 'alarm-item' },
             el('span', { class: 'alarm-time', text: U.fmtTime(a.at) }),
             el('div', { class: 'alarm-info' },
               el('span', { class: 'alarm-label', text: a.label }),
-              el('span', { class: 'note-meta', text: isTomorrow ? d.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric' }) : 'Hoy' })),
+              el('span', { class: 'note-meta' }, rep ? el('span', { class: 'repeat-badge', text: `🔁 ${rep}` }) : null, rep ? ` · próxima: ${when}` : when)),
             el('button', {
               type: 'button', class: 'icon-btn small danger', 'aria-label': 'Borrar alarma', title: 'Borrar',
               onClick: () => this.schedule.removeAlarm(a.id)
@@ -511,6 +699,8 @@
     notes,
     schedule,
     ScheduleStore,
+    SHOPPING,
+    repeatLabel,
     ui: null,
     requestNotificationPermission,
     notify,

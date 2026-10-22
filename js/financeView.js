@@ -106,6 +106,44 @@
         root.YarbisApp.submit(q);
       });
 
+      if (root.YarbisExpenses) root.YarbisExpenses.mountUI();
+
+      // Gráfico
+      this.range = Number(S.getRaw('yarbis_chart_range', '30')) || 30;
+      U.$$('#chartRange [data-range]').forEach(b => {
+        b.classList.toggle('active', Number(b.dataset.range) === this.range);
+        b.addEventListener('click', () => {
+          this.range = Number(b.dataset.range);
+          S.setRaw('yarbis_chart_range', String(this.range));
+          U.$$('#chartRange [data-range]').forEach(x => x.classList.toggle('active', x === b));
+          this.renderChart();
+        });
+      });
+
+      // Alertas
+      $('#formFxAlert').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const value = parseLocaleNumber($('#alertValue').value);
+        const alert = this.finance.addAlert($('#alertRate').value, $('#alertDir').value, value);
+        if (!alert) { U.toast('Escribe el valor en bolívares.', { type: 'warn' }); return; }
+        $('#alertValue').value = '';
+        if (root.YarbisReminders) root.YarbisReminders.requestNotificationPermission();
+        U.toast(`Te aviso cuando el ${this.finance.describeAlert(alert, true)}.`, { type: 'ok' });
+      });
+
+      // Lista de precios
+      const savedPl = S.get('yarbis_price_list', null);
+      const plConf = (savedPl && savedPl.conf) || {};
+      if (plConf.rate) $('#plRate').value = plConf.rate;
+      if (plConf.margin !== undefined) $('#plMargin').value = plConf.margin;
+      if (plConf.iva !== undefined) $('#plIva').value = String(plConf.iva);
+      ((savedPl && savedPl.items) || [{ name: 'Harina PAN', usd: 1.2 }, { name: 'Refresco 2L', usd: 2.5 }]).forEach(it => this.addPriceRow(it.name, it.usd));
+      ['plRate', 'plMargin', 'plIva'].forEach(id => $(`#${id}`).addEventListener('input', () => this.renderPriceList()));
+      $('#plAdd').addEventListener('click', () => { this.addPriceRow('', ''); this.renderPriceList(); });
+      $('#plCopy').addEventListener('click', async () => {
+        U.toast(await U.copyText(this.priceListText()) ? 'Lista copiada. Pégala en WhatsApp.' : 'No se pudo copiar.', { type: 'ok' });
+      });
+
       this.finance.onChange((rates) => {
         this.rates = rates;
         this.renderAll();
@@ -138,6 +176,7 @@
         this.renderAll();
       });
       this.finance.startAutoRefresh(60000);
+      this.finance.loadRemoteHistory().catch(() => {});
     }
 
     onHide() {
@@ -169,6 +208,96 @@
       this.renderLoan();
       this.renderDeval();
       this.renderSpread();
+      this.renderChart();
+      this.renderAlerts();
+      this.renderPriceList();
+    }
+
+    renderChart() {
+      const box = U.$('#fxChart');
+      if (!box || !root.YarbisCharts) return;
+      const pts = this.finance.getHistory(this.range || 30);
+      const series = [
+        { name: 'BCV', color: 'var(--accent)', points: pts.map(p => ({ t: p.t, v: p.bcv })) },
+        { name: 'Paralelo', color: 'var(--chart-2)', points: pts.filter(p => p.paralelo > 0).map(p => ({ t: p.t, v: p.paralelo })) }
+      ];
+      box.replaceChildren(root.YarbisCharts.lineChart(series, { label: 'Historial del dólar', format: (v) => U.fmtBs(v) }));
+      const legend = U.$('#fxChartLegend');
+      const item = (name, color, rate) => {
+        const ch = this.finance.change(rate, this.range || 30);
+        return U.el('span', { class: 'legend-item' },
+          U.el('span', { class: 'chart-swatch', style: { background: color } }), name,
+          ch === null ? null : U.el('strong', { class: ch >= 0 ? 'down' : 'up', text: ` ${ch >= 0 ? '▲' : '▼'} ${U.fmtNumber(Math.abs(ch), 2)} %` }));
+      };
+      legend.replaceChildren(item('BCV', 'var(--accent)', 'bcv'), item('Paralelo', 'var(--chart-2)', 'paralelo'),
+        U.el('span', { class: 'muted small', text: `${pts.length} registro${pts.length === 1 ? '' : 's'}` }));
+    }
+
+    renderAlerts() {
+      const list = U.$('#alertsList');
+      if (!list) return;
+      list.replaceChildren();
+      if (!this.finance.alerts.length) {
+        list.appendChild(U.el('li', { class: 'empty-state small', text: 'Sin alertas. Crea una arriba.' }));
+        return;
+      }
+      this.finance.alerts.forEach(a => {
+        const current = a.rate === 'paralelo' ? this.rates.paralelo : this.rates.bcv;
+        const dist = ((a.value - current) / current) * 100;
+        list.appendChild(U.el('li', { class: 'alarm-item' },
+          U.el('span', { class: 'alarm-time', text: a.dir === 'above' ? '▲' : '▼' }),
+          U.el('div', { class: 'alarm-info' },
+            U.el('span', { class: 'alarm-label', text: U.capitalize(this.finance.describeAlert(a)) }),
+            U.el('span', { class: 'note-meta', text: `Ahora ${U.fmtBs(current)} · faltan ${U.fmtNumber(Math.abs(dist), 1)} %` })),
+          U.el('button', {
+            type: 'button', class: 'icon-btn small danger', title: 'Borrar', 'aria-label': 'Borrar alerta',
+            onClick: () => this.finance.removeAlert(a.id)
+          }, U.icon('x'))));
+      });
+    }
+
+    addPriceRow(name, usd) {
+      const el = U.el;
+      const row = el('div', { class: 'pl-row' },
+        el('input', { type: 'text', class: 'pl-name', value: name, placeholder: 'Producto', 'aria-label': 'Producto' }),
+        el('input', { type: 'text', inputmode: 'decimal', class: 'pl-usd', value: usd, placeholder: 'Precio $', 'aria-label': 'Precio en dólares' }),
+        el('span', { class: 'pl-bs', text: '' }),
+        el('button', {
+          type: 'button', class: 'icon-btn small danger', title: 'Quitar', 'aria-label': 'Quitar producto',
+          onClick: () => { row.remove(); this.renderPriceList(); }
+        }, U.icon('x')));
+      row.addEventListener('input', () => this.renderPriceList());
+      U.$('#plRows').appendChild(row);
+    }
+
+    priceListData() {
+      const rows = U.$$('#plRows .pl-row');
+      const items = rows.map(r => ({ name: r.querySelector('.pl-name').value, usd: r.querySelector('.pl-usd').value }));
+      const conf = { rate: U.$('#plRate').value, margin: U.$('#plMargin').value, iva: U.$('#plIva').value };
+      const rate = conf.rate === 'paralelo' ? this.rates.paralelo : this.rates.bcv;
+      return { rows, items, conf, rate, res: this.finance.priceList(items, rate, conf.margin, conf.iva) };
+    }
+
+    renderPriceList() {
+      if (!U.$('#plRows')) return;
+      const { rows, items, conf, rate, res } = this.priceListData();
+      S.set('yarbis_price_list', { conf, items });
+      let k = 0;
+      rows.forEach((r, i) => {
+        const it = items[i];
+        const out = (it.name || it.usd) ? res.rows[k++] : null;
+        r.querySelector('.pl-bs').textContent = out && out.usd ? U.fmtBs(out.bs) : '';
+      });
+      U.$('#plResult').replaceChildren(
+        line(`Tasa ${conf.rate === 'paralelo' ? 'paralela' : 'BCV'}`, U.fmtBs(rate)),
+        line('Total', `${U.fmtUsd(res.totalUsd)} · ${U.fmtBs(res.totalBs)}`, true));
+    }
+
+    priceListText() {
+      const { conf, rate, res } = this.priceListData();
+      const head = `🏷️ *Lista de precios* (${new Date().toLocaleDateString('es-VE')})\nTasa ${conf.rate === 'paralelo' ? 'paralela' : 'BCV'}: ${U.fmtBs(rate)}${Number(conf.iva) ? ' · IVA incluido' : ''}`;
+      const body = res.rows.filter(r => r.usd).map(r => `• ${r.name || 'Producto'}: ${U.fmtUsd(r.finalUsd)} = *${U.fmtBs(r.bs)}*`).join('\n');
+      return `${head}\n\n${body}`;
     }
 
     renderStatus() {
@@ -189,8 +318,11 @@
         el('span', { class: 'rate-foot' }, statusDot(r.fx), foot));
 
       const cards = U.$('#rateCards');
+      const bcvCard = card('💵 Dólar BCV', U.fmtBs(r.bcv), 'Oficial', true);
+      const hist = this.finance.getHistory(30).map(p => p.bcv);
+      if (hist.length > 1 && root.YarbisCharts) bcvCard.appendChild(root.YarbisCharts.sparkline(hist, { width: 140, height: 30 }));
       cards.replaceChildren(
-        card('💵 Dólar BCV', U.fmtBs(r.bcv), 'Oficial', true),
+        bcvCard,
         card('📈 Dólar paralelo', U.fmtBs(r.paralelo), `Brecha ${U.fmtNumber(r.spread, 1)} %`),
         card('💶 Euro BCV', U.fmtBs(r.eur), 'Oficial'),
         card('🪙 USDT ≈', U.fmtBs(r.paralelo), 'Referencia P2P')

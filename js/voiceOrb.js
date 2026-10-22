@@ -55,8 +55,9 @@
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    setTheme(colorHex) {
+    setTheme(colorHex, secondHex) {
       this.color = hexToRgb(colorHex);
+      this.color2 = secondHex ? hexToRgb(secondHex) : null;
     }
 
     setState(state) {
@@ -132,7 +133,14 @@
       ctx.closePath();
       const fill = ctx.createLinearGradient(cx - base, cy - base, cx + base, cy + base);
       fill.addColorStop(0, `rgba(${Math.min(255, r + 70)},${Math.min(255, g + 70)},${Math.min(255, b + 70)},1)`);
-      fill.addColorStop(1, `rgba(${Math.max(0, r - 30)},${Math.max(0, g - 30)},${Math.max(0, b - 30)},1)`);
+      if (this.color2) {
+        const c2 = this.color2;
+        // El segundo color gira lentamente para dar sensación de vida
+        fill.addColorStop(0.55 + Math.sin(this.t * 0.6) * 0.1, `rgba(${r},${g},${b},1)`);
+        fill.addColorStop(1, `rgba(${c2.r},${c2.g},${c2.b},1)`);
+      } else {
+        fill.addColorStop(1, `rgba(${Math.max(0, r - 30)},${Math.max(0, g - 30)},${Math.max(0, b - 30)},1)`);
+      }
       ctx.fillStyle = fill;
       ctx.fill();
 

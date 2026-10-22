@@ -175,6 +175,18 @@
     return parts.slice(0, -1).join(', ') + ' y ' + parts[parts.length - 1];
   }
 
+  // "1.234,56" / "1,234.56" / "12,5" / "12.5" -> número (o null)
+  function parseNumber(raw) {
+    let t = String(raw === undefined || raw === null ? '' : raw).trim().replace(/\s|\$|€|bs\.?/gi, '');
+    if (!t) return null;
+    if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) t = t.replace(/,/g, '');
+    else t = t.replace(',', '.');
+    if (!/^-?\d*\.?\d+$/.test(t)) return null;
+    const n = parseFloat(t);
+    return isFinite(n) ? n : null;
+  }
+
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -441,6 +453,7 @@
     describeDuration,
     timeAgo,
     uid,
+    parseNumber,
     el,
     icon,
     $,

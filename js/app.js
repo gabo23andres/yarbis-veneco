@@ -67,6 +67,45 @@
       this.refreshProfile();
       this.updateAiChip();
       this.showView(HASH_VIEW[root.location.hash] || 'assistant', { replace: true });
+      if (root.YarbisHome) root.YarbisHome.mount(this);
+      if (root.YarbisPagoMovil) root.YarbisPagoMovil.mount();
+      if (root.YarbisVoiceTools) root.YarbisVoiceTools.mount(this);
+      this.handleLaunchParams();
+    },
+
+    // Abre YARBIS desde "Compartir" de otra app o desde un atajo del ícono
+    handleLaunchParams() {
+      const params = new URLSearchParams(root.location.search);
+      const shared = [params.get('title'), params.get('text'), params.get('url')].filter(Boolean).join('\n').trim();
+      const accion = params.get('accion');
+      if (!shared && !accion) return;
+      root.history.replaceState(null, '', root.location.pathname + root.location.hash);
+      if (shared) {
+        this.showView('assistant');
+        this.addMessage({ role: 'user', text: `📥 Compartido:\n${shared}` });
+        this.addMessage({
+          role: 'assistant',
+          text: '¿Qué hago con esto?',
+          actions: [
+            { label: '📝 Guardar como nota', command: 'save-note', value: shared },
+            { label: '🤖 Preguntarle a la IA', command: 'ask', value: `Explícame o resume esto: ${shared}` },
+            { label: '🌐 Traducir', command: 'translate-text', value: shared },
+            { label: '🧹 Limpiar texto', command: 'clean-text', value: shared }
+          ]
+        });
+        return;
+      }
+      const go = {
+        dolar: () => this.submit('¿A cómo está el dólar?'),
+        nota: () => { this.showView('notes'); setTimeout(() => U.$('#inputNewNote') && U.$('#inputNewNote').focus(), 100); },
+        compras: () => this.runCommand('open-list', 'Compras'),
+        qr: () => root.YarbisCamera.open('qr'),
+        gasto: () => this.openTool('expense'),
+        dictado: () => this.openTool('dictation'),
+        traductor: () => this.openTool('translate'),
+        pagomovil: () => this.openTool('pagomovil')
+      };
+      if (go[accion]) go[accion]();
     },
 
     /* ==========================================
@@ -147,33 +186,96 @@
       return this.queue;
     },
 
-    async handle(text, { fromVoice = false } = {}) {
+    async handle(text, { fromVoice = false, skipUser = false } = {}) {
       if (this.view !== 'assistant') this.showView('assistant');
-      this.addMessage({ role: 'user', text });
+      if (!skipUser) this.addMessage({ role: 'user', text });
       const typing = this.showTyping();
+
+      // Respuesta en tiempo real: el mensaje se va escribiendo mientras llega
+      let live = null;
+      let latest = '';
+      let renderTimer = null;
+      const flush = () => {
+        renderTimer = null;
+        if (live) {
+          live.body.innerHTML = U.renderMarkdown(latest);
+          this.scrollChat();
+        }
+      };
+      const onChunk = (full) => {
+        latest = full;
+        if (!live) {
+          typing.remove();
+          live = this.addLiveMessage();
+        }
+        if (!renderTimer) renderTimer = setTimeout(flush, 80);
+      };
+
       let res;
       try {
-        res = await this.brain.process(text);
+        res = await this.brain.process(text, { onChunk });
       } catch (e) {
         console.error(e);
         res = { text: '⚠️ Algo falló procesando eso. Inténtalo de nuevo.', error: true };
       }
+      clearTimeout(renderTimer);
       typing.remove();
-      this.addMessage({ role: 'assistant', text: res.text, actions: res.actions, error: res.error });
+      const msg = { role: 'assistant', text: res.text, actions: res.actions, error: res.error, ai: !!res.ai, prompt: text };
+      if (live) this.finishLiveMessage(live, msg);
+      else this.addMessage(msg);
 
       if (res.sound === 'success') this.audio.playSuccessChime();
-      try {
-        await this.runEffect(res.effect, res);
-      } catch (e) {
-        console.warn('Efecto falló:', e);
+      const effects = res.effects || (res.effect ? [res.effect] : []);
+      for (const eff of effects) {
+        try {
+          await this.runEffect(eff, res);
+        } catch (e) {
+          console.warn('Efecto falló:', e);
+        }
       }
       this.speakReply(res, fromVoice);
+    },
+
+    addLiveMessage() {
+      const body = U.el('div', { class: 'msg-body' });
+      const node = U.el('div', { class: 'msg assistant streaming' },
+        U.el('div', { class: 'msg-avatar', 'aria-hidden': 'true' }),
+        U.el('div', { class: 'msg-content' }, body));
+      U.$('#messages').appendChild(node);
+      this.updateWelcome(true);
+      this.scrollChat();
+      return { node, body };
+    },
+
+    finishLiveMessage(live, msg) {
+      const m = { id: U.uid(), ts: Date.now(), ...msg };
+      this.log.push(m);
+      if (this.log.length > MAX_LOG) this.log = this.log.slice(-MAX_LOG);
+      this.saveChat();
+      live.node.replaceWith(this.renderMessage(m));
+      this.scrollChat();
+    },
+
+    // Vuelve a pedir la última respuesta de la IA
+    regenerate(m) {
+      const last = this.log[this.log.length - 1];
+      if (!m.prompt) return;
+      if (last && last.id === m.id) {
+        this.log.pop();
+        this.saveChat();
+        const node = U.$(`#messages [data-id="${m.id}"]`);
+        if (node) node.remove();
+        this.brain.popLastExchange();
+        this.queue = this.queue.then(() => this.handle(m.prompt, { skipUser: true })).catch(err => console.error(err));
+      } else {
+        this.submit(m.prompt);
+      }
     },
 
     speakReply(res, fromVoice) {
       const mode = S.getRaw('yarbis_speak_mode', 'voice');
       const should = !res.silent && (mode === 'always' || (mode === 'voice' && (fromVoice || this.speech.continuousMode)));
-      if (should) this.speech.speak(res.speak || res.text, { force: true });
+      if (should) this.speech.speak(res.speak || res.text, { force: true, lang: res.speakLang });
       else this.speech.doneProcessing();
     },
 
@@ -209,13 +311,15 @@
       this.updateWelcome();
     },
 
-    updateWelcome() {
-      U.$('#welcome').hidden = this.log.length > 0;
+    updateWelcome(force) {
+      U.$('#welcome').hidden = force === true || this.log.length > 0;
+      if (U.$('#welcome').hidden === false && root.YarbisHome) root.YarbisHome.render();
     },
 
     scrollChat() {
       const sc = U.$('#chatScroll');
-      requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
+      const empty = !U.$('#welcome').hidden;
+      requestAnimationFrame(() => { sc.scrollTop = empty ? 0 : sc.scrollHeight; });
     },
 
     showTyping() {
@@ -253,10 +357,16 @@
           type: 'button', class: 'icon-btn', title: 'Leer en voz alta', 'aria-label': 'Leer en voz alta',
           onClick: () => { this.speech.primeSpeechSynthesis(); this.speech.speak(m.text, { force: true }); }
         }, U.icon('volume')));
+        if ((m.ai || m.error) && m.prompt) {
+          meta.appendChild(el('button', {
+            type: 'button', class: 'icon-btn', title: 'Regenerar respuesta', 'aria-label': 'Regenerar respuesta',
+            onClick: () => this.regenerate(m)
+          }, U.icon('refresh')));
+        }
       }
       content.appendChild(meta);
 
-      return el('div', { class: `msg ${isUser ? 'user' : 'assistant'}${m.error ? ' error' : ''}` },
+      return el('div', { class: `msg ${isUser ? 'user' : 'assistant'}${m.error ? ' error' : ''}`, dataset: { id: m.id } },
         isUser ? null : el('div', { class: 'msg-avatar', 'aria-hidden': 'true' }),
         content);
     },
@@ -280,6 +390,21 @@
       }, a.label);
     },
 
+    openTool(tool, value) {
+      if (tool === 'pagomovil' && root.YarbisPagoMovil) root.YarbisPagoMovil.open(value);
+      else if (tool === 'translate' && root.YarbisVoiceTools) root.YarbisVoiceTools.openTranslator(value);
+      else if (tool === 'dictation' && root.YarbisVoiceTools) root.YarbisVoiceTools.openDictation();
+      else if (tool === 'expense') {
+        this.showView('finance');
+        setTimeout(() => {
+          const card = U.$('#expensesCard');
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const input = U.$('#expAmount');
+          if (input) input.focus();
+        }, 150);
+      }
+    },
+
     runCommand(command, value, button) {
       const notes = this.reminders.notes;
       if (command === 'notes-clear-all-confirmed') {
@@ -288,6 +413,25 @@
         U.toast('Notas borradas.');
       } else if (command === 'copy') {
         U.copyText(value).then(ok => U.toast(ok ? 'Copiado.' : 'No se pudo copiar.'));
+      } else if (command === 'open-tool') {
+        this.openTool(value);
+      } else if (command === 'pm-share') {
+        root.YarbisPagoMovil && root.YarbisPagoMovil.share(value);
+      } else if (command === 'clean-text') {
+        U.$('#txtCleanInput').value = value;
+        U.$('#txtCleanInput').dispatchEvent(new Event('input'));
+        U.$('#dlgCleaner').showModal();
+      } else if (command === 'ask') {
+        this.submit(value);
+      } else if (command === 'translate-text') {
+        this.openTool('translate', value);
+      } else if (command === 'list-clear-confirmed') {
+        const n = notes.clearList(value);
+        if (button) button.disabled = true;
+        U.toast(`Lista vaciada (${n}).`);
+      } else if (command === 'open-list') {
+        this.showView('notes');
+        if (this.reminders.ui) this.reminders.ui.setList(notes.resolveList(value));
       } else if (command === 'save-contact' && value) {
         this.brain.saveContact(value.name, value.tel);
         if (button) button.disabled = true;
@@ -335,6 +479,9 @@
           break;
         case 'PROFILE':
           this.refreshProfile();
+          break;
+        case 'OPEN_TOOL':
+          this.openTool(effect.tool, effect.value);
           break;
         default:
           break;
@@ -428,7 +575,12 @@
         }
       };
       sp.onInterimResult = (text) => { interimEl.textContent = text; };
-      sp.onAudioLevel = (level) => { this.orb.setAudioLevel(level); this.orbMini.setAudioLevel(level); };
+      const wave = U.$('#voiceWave');
+      sp.onAudioLevel = (level) => {
+        this.orb.setAudioLevel(level);
+        this.orbMini.setAudioLevel(level);
+        if (wave) wave.style.setProperty('--lvl', String(level));
+      };
       sp.onSpeechResult = (text) => this.submit(text, { fromVoice: true });
       sp.onError = (msg, { fatal }) => U.toast(msg, { type: fatal ? 'error' : 'warn', duration: fatal ? 6000 : 3500 });
 
@@ -442,8 +594,9 @@
 
     applyOrbColor() {
       const c = root.YarbisTheme.orbColor();
-      this.orb.setTheme && this.orb.setTheme(c);
-      this.orbMini.setTheme && this.orbMini.setTheme(c);
+      const c2 = root.YarbisTheme.secondColor();
+      this.orb.setTheme && this.orb.setTheme(c, c2);
+      this.orbMini.setTheme && this.orbMini.setTheme(c, c2);
     },
 
     /* ==========================================
@@ -470,6 +623,7 @@
         if (name === 'open-settings') root.YarbisSettings.open();
         else if (name === 'open-camera') root.YarbisCamera.open(action.dataset.mode || 'general');
         else if (name === 'open-cleaner') U.$('#dlgCleaner').showModal();
+        else if (name === 'open-tool') this.openTool(action.dataset.tool);
         else if (name === 'install') this.install();
         else if (name === 'new-chat') {
           this.brain.resetConversation();
@@ -477,7 +631,8 @@
           this.speech.stopSpeaking();
           U.toast('Conversación nueva.');
         } else if (name === 'notes-clear-done') {
-          this.reminders.notes.clearDone();
+          const ui = this.reminders.ui;
+          this.reminders.notes.clearDone(ui && ui.list !== 'all' ? ui.list : null);
         } else if (name === 'notes-clear-all') {
           if (this.reminders.notes.items.length && root.confirm('¿Borrar todas las notas? No se puede deshacer.')) {
             this.reminders.notes.clearAll();
@@ -588,6 +743,20 @@
       };
       this.finance.onChange(render);
       render(this.finance.getRates());
+
+      // Alertas de tasa: aviso en el chat, sonido y notificación
+      this.finance.onAlert((a) => {
+        const title = '🔔 Alerta del dólar';
+        const text = `El ${a.rate === 'paralelo' ? 'paralelo' : 'dólar BCV'} ya está en **${U.fmtBs(a.current)}** (${a.dir === 'above' ? 'pasó de' : 'bajó de'} ${U.fmtBs(a.value)}).`;
+        this.addMessage({ role: 'assistant', text: `${title}: ${text}`, actions: [{ label: 'Ver Finanzas', view: 'finance' }] });
+        this.audio.playProtocolAlert();
+        U.toast(U.toSpeech(text), { type: 'warn', duration: 7000 });
+        if (root.document.hidden) this.reminders.notify(title, U.toSpeech(text), 'yarbis-fx');
+      });
+      // Con alertas activas se revisa la tasa cada 15 minutos aunque no estés en Finanzas
+      setInterval(() => {
+        if (this.finance.alerts.length && !root.document.hidden && this.view !== 'finance') this.finance.refresh().catch(() => {});
+      }, 15 * 60 * 1000);
       // Una sola carga inicial (las actualizaciones periódicas sólo ocurren en la pestaña Finanzas)
       this.finance.ensureFresh(10 * 60 * 1000).catch(() => {});
     },

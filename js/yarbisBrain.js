@@ -81,6 +81,9 @@
     hulkbuster: ['hulkbuster', 'dorado', 'amarillo', 'naranja']
   };
 
+  const LANGS = { 'es-ES': 'español', 'en-US': 'inglés', 'pt-BR': 'portugués', 'fr-FR': 'francés', 'it-IT': 'italiano', 'de-DE': 'alemán' };
+  const LANG_WORDS = { ingles: 'en-US', espanol: 'es-ES', portugues: 'pt-BR', frances: 'fr-FR', italiano: 'it-IT', aleman: 'de-DE' };
+
   const ACCENT_NAMES = {
     neon: 'Neón', mark85: 'Mark 85', warmachine: 'War Machine', spideriron: 'Spider-Iron',
     wakanda: 'Wakanda', stealth: 'Sigilo', hulkbuster: 'Hulkbuster'
@@ -200,6 +203,22 @@
     return { h, m: min, explicit, before: s.slice(0, m.index), after: s.slice(m.index + m[0].length) };
   }
 
+  const DAY_WORDS = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
+  const REPEAT_WORDS_RE = /\b(todos los dias|todo los dias|diariamente|diario|a diario|cada dia|de lunes a viernes|entre semana|dias de semana|dias laborables|dias habiles|los fines? de semana|fines? de semana|sabados y domingos|(todos los|cada)\s+(lunes|martes|miercoles|jueves|viernes|sabados?|domingos?)((\s*,\s*|\s+y\s+)(lunes|martes|miercoles|jueves|viernes|sabados?|domingos?))*)\b/g;
+
+  // "todos los días", "de lunes a viernes", "cada martes y jueves" -> repetición
+  function parseRepeat(n) {
+    if (/\b(todos los dias|todo los dias|diariamente|diario|a diario|cada dia)\b/.test(n)) return 'daily';
+    if (/\b(de lunes a viernes|entre semana|dias de semana|dias laborables|dias habiles)\b/.test(n)) return 'weekdays';
+    if (/\b(fines? de semana|sabados y domingos)\b/.test(n)) return 'weekends';
+    const m = n.match(/\b(?:todos los|cada)\s+((?:lunes|martes|miercoles|jueves|viernes|sabados?|domingos?)(?:(?:\s*,\s*|\s+y\s+)(?:lunes|martes|miercoles|jueves|viernes|sabados?|domingos?))*)/);
+    if (m) {
+      const days = m[1].split(/\s*,\s*|\s+y\s+/).map(d => DAY_WORDS[d.replace(/^(sabado|domingo)s$/, '$1')]).filter(d => d !== undefined);
+      if (days.length) return [...new Set(days)];
+    }
+    return 'none';
+  }
+
   // Próxima hora válida. Sin "am/pm": si la hora ya pasó, prueba la versión de la
   // tarde antes que mañana (salvo para despertar). "mañana" fuerza el día siguiente.
   function nextAlarmTime({ h, m, explicit }, opts = {}) {
@@ -228,6 +247,10 @@
   // Agrega punto final salvo que ya termine en uno (p. ej. "8:00 p. m.")
   function sentence(text) {
     return /[.!?…](\*\*|_)?$/.test(text) ? text : `${text}.`;
+  }
+
+  function has(text, re) {
+    return re.test(text);
   }
 
   function pick(list) {
@@ -309,9 +332,50 @@
     /* ------------------------------------------
        ENTRADA PRINCIPAL
        ------------------------------------------ */
-    async process(userText) {
+    // Divide "pon un timer de 5 minutos y anota comprar pan" en órdenes separadas.
+    // Sólo corta en " y " cuando lo que sigue empieza con un verbo de orden.
+    splitChain(text) {
+      const parts = [];
+      let rest = String(text);
+      const re = /\s*(?:;|,?\s+y\s+luego|,?\s+y\s+despu[eé]s|,?\s+luego|,?\s+despu[eé]s|,?\s+y\s+tambi[eé]n|,?\s+y)\s+(?=(?:pon(?:me)?|anota(?:me)?|apunta|agrega|a[ñn]ade|crea|recu[eé]rdame|av[ií]same|abre|ll[aá]ma(?:me)?|manda(?:le)?|env[ií]a|dime|gast[eé]|pagu[eé]|busca|activa|apaga|cancela|borra|programa|despi[eé]rtame|convierte|calcula|mu[eé]strame|lee(?:me)?)\b)/gi;
+      let last = 0;
+      let m;
+      while ((m = re.exec(rest))) {
+        const chunk = rest.slice(last, m.index).trim();
+        if (chunk) parts.push(chunk);
+        last = m.index + m[0].length;
+      }
+      const tail = rest.slice(last).trim();
+      if (tail) parts.push(tail);
+      return parts;
+    }
+
+    async process(userText, opts = {}) {
       const original = String(userText || '').trim();
       if (!original) return { text: '¿Qué necesitas?' };
+
+      const parts = this.splitChain(original);
+      if (parts.length > 1 && parts.length <= 5) {
+        const results = [];
+        for (const part of parts) {
+          let r = null;
+          try { r = await this.localIntent(part); } catch (e) { console.warn(e); }
+          if (!r) r = await this.askAI(part);
+          else {
+            this.remember('user', part);
+            this.remember('assistant', r.text);
+          }
+          results.push(r);
+        }
+        return {
+          text: results.map(r => r.text).join('\n\n'),
+          speak: results.map(r => U.toSpeech(r.speak || r.text)).join(' '),
+          actions: results.flatMap(r => r.actions || []).slice(0, 4),
+          effects: results.map(r => r.effect).filter(Boolean),
+          sound: results.some(r => r.sound === 'success') ? 'success' : undefined,
+          error: results.every(r => r.error)
+        };
+      }
 
       let response = null;
       try {
@@ -321,7 +385,7 @@
       }
 
       if (!response) {
-        response = await this.askAI(original);
+        response = await this.askAI(original, opts);
       } else {
         // Los comandos locales también quedan en el historial para dar contexto a la IA
         this.remember('user', original);
@@ -400,6 +464,34 @@
         return { text: 'Conversación nueva. ¿En qué te ayudo?', effect: { type: 'CLEAR_CHAT' } };
       }
 
+      /* ---------- Gastos ---------- */
+      const exp = this.expenseIntent(text, a, n);
+      if (exp) return exp;
+
+      /* ---------- Alertas del dólar ---------- */
+      const fxAlert = n.match(/\b(?:avisame|alertame|alerta|notificame|aviso)\b.*\b(dolar|bcv|paralelo|tasa|usdt|binance|euro)\b.*?\b(pase|pasa|supere|supera|suba|sube|llegue|llega|este por encima|este sobre|baje|baja|caiga|cae|este por debajo|bajo)\s+(?:de\s+|a\s+|los\s+)*(?:bs\s*)?(\d[\d.,]*)/);
+      if (fxAlert) {
+        const rate = /paralelo|usdt|binance/.test(n) ? 'paralelo' : 'bcv';
+        const dir = /baj|cae|caiga|debajo/.test(fxAlert[2]) ? 'below' : 'above';
+        const value = parseAmount(fxAlert[3]);
+        const alert = this.finance.addAlert(rate, dir, value);
+        if (alert) {
+          const r = this.finance.getRates();
+          const current = rate === 'paralelo' ? r.paralelo : r.bcv;
+          return {
+            text: `🔔 Listo: te aviso cuando el **${this.finance.describeAlert(alert, true)}**. Ahora está en ${U.fmtBs(current)}.`,
+            effect: { type: 'REMINDER' },
+            actions: [{ label: 'Ver alertas', view: 'finance' }],
+            sound: 'success'
+          };
+        }
+      }
+      if (has(/\b(mis|que|cuales)\s+alertas\b/)) {
+        const list = this.finance.alerts;
+        if (!list.length) return { text: 'No tienes alertas del dólar. Dime por ejemplo "avísame cuando el dólar pase de 250".' };
+        return { text: '🔔 Tus alertas:\n' + list.map(x => `- ${U.capitalize(this.finance.describeAlert(x))}`).join('\n'), actions: [{ label: 'Ver alertas', view: 'finance' }] };
+      }
+
       /* ---------- Temporizadores ---------- */
       const isTimerWord = has(/\b(temporizador|temporizadores|timer|timers|cuenta regresiva|cronometro)\b/);
       if (isTimerWord && has(/\b(cancela|cancelar|quita|quitar|borra|borrar|elimina|deten|detener|para|parar|apaga|apagar)\b/)) {
@@ -442,17 +534,23 @@
         const list = this.reminders.schedule.alarms;
         if (!list.length) return { text: 'No tienes alarmas programadas.' };
         return {
-          text: `Tienes ${list.length === 1 ? 'una alarma' : `${list.length} alarmas`}:\n` + list.map(x => `- **${U.fmtTime(x.at)}** · ${x.label}`).join('\n'),
+          text: `Tienes ${list.length === 1 ? 'una alarma' : `${list.length} alarmas`}:\n` + list.map(x => `- **${U.fmtTime(x.at)}** · ${x.label}${x.repeat && x.repeat !== 'none' ? ` (🔁 ${this.reminders.repeatLabel(x.repeat)})` : ''}`).join('\n'),
           actions: [{ label: 'Ver alarmas', view: 'notes' }]
         };
       }
-      if (isAlarmWord) {
+      const repeat = parseRepeat(n);
+      if (isAlarmWord || (repeat !== 'none' && parseClock(n))) {
         const clock = parseClock(n);
         if (clock) {
-          const tomorrow = /\bmanana\b/.test(n.replace(/de la manana/g, ''));
-          const at = nextAlarmTime(clock, { tomorrow, wake: has(/\b(despiertame|despertador|levantame)\b/) });
+          const tomorrow = repeat === 'none' && /\bmanana\b/.test(n.replace(/de la manana/g, ''));
+          const at = repeat !== 'none'
+            ? this.reminders.ScheduleStore.nextOccurrence(clock.h, clock.m, repeat)
+            : nextAlarmTime(clock, { tomorrow, wake: has(/\b(despiertame|despertador|levantame)\b/) });
           // Etiqueta: lo que viene después de la hora, o lo que hay entre el verbo y la hora
-          const stripDay = (x) => x.replace(/\b(para\s+)?(hoy|manana|en la manana|en la noche|en la tarde)\b/g, ' ').replace(/\s+/g, ' ').trim();
+          const stripDay = (x) => x
+            .replace(REPEAT_WORDS_RE, ' ')
+            .replace(/\b(para\s+)?(hoy|manana|en la manana|en la noche|en la tarde)\b/g, ' ')
+            .replace(/\s+/g, ' ').trim();
           let label = stripDay(clock.after).replace(/^(para|que|de|y|a)\s+/, '').trim();
           if (!label) {
             label = stripDay(clock.before
@@ -467,11 +565,12 @@
             label = grab(new RegExp(`(${escaped})`, 'd')) || label;
           }
           label = label ? U.capitalize(label) : 'Alarma';
-          const alarm = this.reminders.schedule.addAlarm(at, label);
+          const alarm = this.reminders.schedule.addAlarm(at, label, repeat);
           const isTomorrow = new Date(at).toDateString() !== new Date().toDateString();
+          const repText = this.reminders.repeatLabel(repeat);
           return {
-            text: sentence(`⏰ Alarma para las **${U.fmtTime(at)}**${isTomorrow ? ' (mañana)' : ''}${label !== 'Alarma' ? ` · ${label}` : ''}`),
-            speak: sentence(`Alarma programada para las ${U.fmtTime(at)}${isTomorrow ? ' de mañana' : ''}`),
+            text: sentence(`⏰ Alarma para las **${U.fmtTime(at)}**${repText ? ` · 🔁 ${repText}` : isTomorrow ? ' (mañana)' : ''}${label !== 'Alarma' ? ` · ${label}` : ''}`),
+            speak: sentence(`Alarma programada para las ${U.fmtTime(at)}${repText ? `, ${repText.toLowerCase()}` : isTomorrow ? ' de mañana' : ''}`),
             effect: { type: 'REMINDER', id: alarm && alarm.id },
             actions: [{ label: 'Ver alarmas', view: 'notes' }],
             sound: 'success'
@@ -482,8 +581,47 @@
         }
       }
 
-      /* ---------- Notas ---------- */
+      /* ---------- Listas (compras, trabajo...) ---------- */
       const notes = this.reminders.notes;
+      const listAdd = /^(?:agrega(?:me)?|agregar|anade|anademe|pon(?:me)?|mete|anota|apunta|suma|incluye)\s+(.+?)\s+(?:a|en)\s+(?:la\s+|mi\s+)?lista(?:\s+(?:de\s+(?:las\s+|la\s+|los\s+)?|del\s+)(.+))?$/d.exec(a);
+      if (listAdd) {
+        const raw = text.slice(listAdd.indices[1][0], listAdd.indices[1][1]);
+        const listName = listAdd[2] ? text.slice(listAdd.indices[2][0], listAdd.indices[2][1]) : 'compras';
+        const items = raw.split(/\s*,\s*|\s+y\s+|\s+e\s+/i).map(x => x.replace(/^(un|una|unos|unas|el|la|los|las)\s+/i, '').trim()).filter(Boolean);
+        const target = notes.resolveList(listName);
+        const added = notes.addMany(items, target);
+        const already = items.length - added.length;
+        return {
+          text: added.length
+            ? `🛒 Agregué a **${target}**: ${added.map(x => x.text).join(', ')}.${already ? ` (${already} ya estaba${already === 1 ? '' : 'n'})` : ''}`
+            : `Eso ya está en la lista ${target}.`,
+          actions: [{ label: `Ver lista ${target}`, command: 'open-list', value: target }],
+          sound: 'success'
+        };
+      }
+      const listRead = /(?:^|\b)(?:que\s+(?:hay|tengo|falta)\s+en|lee(?:me)?|dime|muestrame|ver|abre|revisa)?\s*(?:la\s+|mi\s+)?lista\s+(?:de\s+(?:las\s+|la\s+)?|del\s+)(.+)$/.exec(n);
+      const listClear = has(/^(borra|vacia|limpia|elimina)\s+(toda\s+)?(la\s+|mi\s+)?lista\b/);
+      if (listRead && (listClear || has(/^(que\s+(hay|tengo|falta)|lee|leeme|dime|muestrame|ver|abre|revisa|mi\s+lista|la\s+lista|lista)\b/))) {
+        const target = notes.resolveList(listRead[1]);
+        const items = notes.inList(target);
+        if (listClear) {
+          return {
+            text: items.length ? `¿Borro los ${items.length} elementos de la lista **${target}**?` : `La lista ${target} ya está vacía.`,
+            actions: items.length ? [{ label: 'Sí, vaciar lista', command: 'list-clear-confirmed', value: target, danger: true }] : []
+          };
+        }
+        const pendingItems = items.filter(x => !x.done);
+        if (!pendingItems.length) {
+          return { text: `La lista **${target}** está vacía. Dime "agrega leche a la lista de ${target.toLowerCase()}".`, actions: [{ label: `Abrir ${target}`, command: 'open-list', value: target }] };
+        }
+        return {
+          text: `🛒 **${target}** (${pendingItems.length}):\n` + pendingItems.slice(0, 15).map(x => `- ${x.text}`).join('\n'),
+          speak: `En ${target} tienes: ${pendingItems.slice(0, 15).map(x => x.text).join(', ')}.`,
+          actions: [{ label: `Abrir ${target}`, command: 'open-list', value: target }]
+        };
+      }
+
+      /* ---------- Notas ---------- */
       if (has(/\b(lee|leeme|dime|cuales son|muestrame|ensename|ver|mostrar|abre|abrir)\s+(mis\s+|las\s+)?(notas|pendientes|recordatorios)\b/) || has(/\bque\s+(notas|pendientes|tareas)\s+tengo\b/) || has(/^mis (notas|pendientes)$/)) {
         const pending = notes.pending();
         const openIt = has(/^(abre|abrir|ver|mostrar|muestrame|ensename)\b/);
@@ -569,6 +707,71 @@
       /* ---------- WhatsApp ---------- */
       if (has(/\b(whatsapp|wasap|guasap|whats|wsp)\b/)) {
         return this.whatsappIntent(text, a, n);
+      }
+
+      /* ---------- Traductor y dictado ---------- */
+      const tr = /^(?:traduce(?:me)?|traducir|como\s+se\s+dice)\s+(?:(?:esto|esta\s+frase|lo\s+siguiente)\s+)?(?:al?\s+)?(ingles|espanol|portugues|frances|italiano|aleman)\s*:?\s+([\s\S]{2,})$/d.exec(a) ||
+        /^(?:como\s+se\s+dice|traduce(?:me)?)\s+([\s\S]{2,}?)\s+(?:en|al)\s+(ingles|espanol|portugues|frances|italiano|aleman)$/d.exec(a);
+      if (tr) {
+        const langFirst = LANG_WORDS[tr[1]] !== undefined;
+        const lang = LANG_WORDS[langFirst ? tr[1] : tr[2]];
+        const g = langFirst ? 2 : 1;
+        const phrase = text.slice(tr.indices[g][0], tr.indices[g][1]).trim().replace(/^["“]+|["”]+$/g, '');
+        const out = await this.translate(phrase, lang);
+        if (!out) return { text: '⚠️ No pude traducir ahora mismo. Revisa tu conexión.', error: true };
+        return {
+          text: `🌐 **${LANGS[lang][0].toUpperCase() + LANGS[lang].slice(1)}:** ${out}`,
+          speak: out,
+          speakLang: lang,
+          actions: [{ label: 'Copiar', command: 'copy', value: out }, { label: 'Abrir traductor', command: 'open-tool', value: 'translate' }]
+        };
+      }
+      if (has(/\b(abre|abrir|activa|usa)?\s*(el\s+)?(traductor|modo traductor|traductor de voz)\b/) && n.split(' ').length <= 5) {
+        return { text: 'Abriendo el traductor de voz.', effect: { type: 'OPEN_TOOL', tool: 'translate' } };
+      }
+      if (has(/\b(modo dictado|quiero dictar|voy a dictar|dictado|dictar un texto|abre el dictado)\b/)) {
+        return { text: 'Abriendo el dictado. Habla y yo escribo; di "punto", "coma" o "nueva línea".', effect: { type: 'OPEN_TOOL', tool: 'dictation' } };
+      }
+
+      /* ---------- Pago Móvil ---------- */
+      const PM = root.YarbisPagoMovil;
+      if (PM && has(/\b(pago movil|mis datos de pago|datos bancarios|mis datos para que me paguen)\b/) && !has(/^(abre|abrir)\s+pago movil$/) || PM && has(/^(cobrale|cobra|cobrar|cobrarle|pidele|pedirle)\b/)) {
+        const data = PM.get();
+        if (!data) {
+          return { text: 'Todavía no has guardado tus datos de Pago Móvil. Ábrelo y guárdalos una vez.', actions: [{ label: 'Configurar Pago Móvil', command: 'open-tool', value: 'pagomovil' }] };
+        }
+        const charge = n.match(/^(?:cobrale|cobra|cobrar|cobrarle|pidele|pedirle)\s+(\$?\s?\d[\d.,]*)\s*(dolares?|usd|\$|bolivares?|bs|bolos?)?\s*(?:a|al)\s+(?:mi\s+)?([a-z ]{2,40})$/) ||
+          n.match(/^(?:cobrale|cobra|cobrar|cobrarle|pidele|pedirle)\s+(?:a|al)\s+(?:mi\s+)?([a-z ]{2,40}?)\s+(\$?\s?\d[\d.,]*)\s*(dolares?|usd|\$|bolivares?|bs|bolos?)?$/);
+        let amountUsd = null;
+        let amountBs = null;
+        let who = '';
+        if (charge) {
+          const first = /\d/.test(charge[1]);
+          const num = U.parseNumber((first ? charge[1] : charge[2]).replace('$', ''));
+          const cur = first ? charge[2] : charge[3];
+          who = (first ? charge[3] : charge[1]).trim();
+          const rate = this.finance.getRates().bcv;
+          if (cur && /^(bolivares?|bs|bolos?)$/.test(cur)) { amountBs = num; amountUsd = num / rate; }
+          else { amountUsd = num; amountBs = num * rate; }
+        }
+        const message = PM.message({ amountUsd, amountBs });
+        let url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+        if (who) {
+          const found = this.findContacts(who);
+          if (found.length) url = `https://wa.me/${venezuelanPhone(found[0].phone)}?text=${encodeURIComponent(message)}`;
+        }
+        return {
+          text: `${who ? `💰 Cobro para **${U.capitalize(who)}**:` : '📲 Tus datos de Pago Móvil:'}\n\n${message.replace(/\*/g, '**')}`,
+          speak: who ? `Listo, mensaje de cobro para ${who}${amountBs ? ` por ${U.fmtNumber(amountBs, 2)} bolívares` : ''}.` : 'Aquí tienes tus datos de Pago Móvil.',
+          actions: [
+            { label: '💬 Enviar por WhatsApp', url },
+            { label: 'Compartir', command: 'pm-share', value: { amountUsd, amountBs } },
+            { label: 'Copiar', command: 'copy', value: message.replace(/\*/g, '') }
+          ]
+        };
+      }
+      if (has(/^(abre|abrir|configura|configurar)\s+(el\s+)?pago movil$/)) {
+        return { text: 'Abriendo Pago Móvil.', effect: { type: 'OPEN_TOOL', tool: 'pagomovil' } };
       }
 
       /* ---------- Dinero: conversiones ---------- */
@@ -731,7 +934,13 @@
           '- 💵 "¿A cómo está el dólar?" · "100 dólares a bolívares" · "5000 bs a dólares a tasa paralela"',
           '- 🧮 "¿Cuánto es 15% de 340?" · "raíz cuadrada de 81"',
           '- ⏱️ "Temporizador de 10 minutos" · "Recuérdame en 20 minutos sacar la pizza"',
-          '- ⏰ "Alarma a las 6:30 de la mañana" · "¿Qué alarmas tengo?"',
+          '- ⏰ "Alarma a las 6:30 de la mañana" · "Despiértame de lunes a viernes a las 6"',
+          '- 🛒 "Agrega leche y huevos a la lista de compras" · "¿Qué hay en la lista de compras?"',
+          '- 💸 "Gasté 20 dólares en comida" · "¿Cuánto he gastado este mes?"',
+          '- 🔔 "Avísame cuando el dólar pase de 250"',
+          '- 📲 "Comparte mis datos de pago móvil" · "Cóbrale 10 dólares a Carlos"',
+          '- 🌐 "Traduce al inglés: ¿dónde queda el baño?" · 🎙️ "Modo dictado"',
+          '- 🔗 Puedes encadenar: "pon un timer de 5 minutos y anota comprar pan"',
           '- 📝 "Anota comprar harina PAN" · "Lee mis notas" · "Marca como hecha la de harina"',
           '- 🌦️ "¿Cómo está el clima en Maracaibo?" · "¿Va a llover mañana?"',
           '- 📞 "Llama a mamá" · "Manda un WhatsApp a Carlos que diga ya voy"',
@@ -811,6 +1020,64 @@
         text,
         speak: speak.replace(/\s+/g, ' ').trim(),
         actions: [{ label: 'Abrir convertidor', view: 'finance' }]
+      };
+    }
+
+    /* ------------------------------------------
+       GASTOS
+       ------------------------------------------ */
+    expenseIntent(text, a, n) {
+      const E = root.YarbisExpenses && root.YarbisExpenses.store;
+      if (!E) return null;
+
+      // Consultas: "¿cuánto he gastado este mes?", "¿cuánto llevo en comida?"
+      const q = n.match(/\bcuanto\s+(?:he\s+gastado|llevo(?:\s+gastado)?|gaste|me\s+he\s+gastado|va\s+de\s+gastos|van\s+de\s+gastos)(?:\s+(?:en|de)\s+([a-z ]+?))?(?:\s+(?:este|esta|el)\s+(mes|semana))?$/);
+      if (q || has(n, /\b(mis gastos|resumen de gastos|gastos del mes)\b/)) {
+        const s = E.summary();
+        const catName = q && q[1] && !/^(este|esta|el)\b/.test(q[1]) ? E.category(E.guessCategory(q[1]) !== 'Otros' ? E.guessCategory(q[1]) : q[1]).name : null;
+        const b = E.budgetStatus();
+        if (catName) {
+          const c = s.byCategory.find(x => x.name === catName);
+          const usd = c ? c.usd : 0;
+          return { text: `${E.category(catName).emoji} Este mes llevas **${U.fmtUsd(usd)}** en ${catName} (≈ ${U.fmtBs(usd * E.bcv())}).`, actions: [{ label: 'Ver gastos', view: 'finance' }] };
+        }
+        if (!s.count) return { text: 'Este mes no has registrado gastos. Dime por ejemplo "gasté 10 dólares en comida".' };
+        const top = s.byCategory.slice(0, 4).map(c => `- ${c.emoji} ${c.name}: ${U.fmtUsd(c.usd)}`).join('\n');
+        return {
+          text: `💸 Este mes llevas **${U.fmtUsd(s.totalUsd)}** (≈ ${U.fmtBs(s.totalBs)}) en ${s.count} gasto${s.count === 1 ? '' : 's'}:\n${top}` +
+            (b.budget ? `\n\nPresupuesto: ${U.fmtNumber(b.pct, 0)} % usado de ${U.fmtUsd(b.budget)}.` : ''),
+          speak: `Este mes llevas ${U.fmtNumber(s.totalUsd, 2)} dólares en gastos.`,
+          actions: [{ label: 'Ver gastos', view: 'finance' }]
+        };
+      }
+
+      // Registro: "gasté 20 dólares en comida", "pagué 500 bs de luz", "registra un gasto de 5$ en taxi"
+      const m = /^(?:gaste|pague|me\s+gaste|(?:registra|anota|apunta|agrega)(?:r)?\s+(?:un\s+)?gasto(?:\s+de)?)\s+(.+)$/d.exec(a.trim());
+      if (!m) return null;
+      const rest = wordsToDigits(U.normalize(m[1]));
+      const am = rest.match(/(\$\s?)?(\d[\d.,]*)\s*(mil\b)?\s*(dolares?|usd|\$|verdes|bolivares?|bs|bolos?|ves)?/);
+      if (!am) return null;
+      let amount = U.parseNumber(am[2]);
+      if (amount === null) return null;
+      if (am[3]) amount *= 1000;
+      const currency = am[4] && /^(bolivares?|bs|bolos?|ves)$/.test(am[4]) ? 'VES' : 'USD';
+      const original = text.slice(m.indices[1][0]);
+      // Detalle: lo que va después de "en", "de", "para", "por" (con acentos originales)
+      const detailM = original.match(/\b(?:en|de|para|por)\s+(?:el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.+)$/i);
+      const note = detailM ? U.capitalize(detailM[1].replace(/^(d[oó]lares?|bol[ií]vares?|bs|usd)\s+(en|de|para|por)\s+/i, '').trim()) : '';
+      const e = E.add({ amount, currency, note, category: E.guessCategory(note || original) });
+      if (!e) return null;
+      const cat = E.category(e.category);
+      const b = E.budgetStatus();
+      let warn = '';
+      if (e.budgetCrossed === 100) warn = '\n\n⚠️ Con esto te pasaste del presupuesto del mes.';
+      else if (e.budgetCrossed === 80) warn = '\n\n⚠️ Ya usaste el 80 % del presupuesto del mes.';
+      const amountTxt = currency === 'USD' ? U.fmtUsd(amount) : `${U.fmtBs(amount)} (≈ ${U.fmtUsd(e.usd)})`;
+      return {
+        text: `${cat.emoji} Gasto registrado: **${amountTxt}** en ${cat.name}${note && U.normalize(note) !== U.normalize(cat.name) ? ` · ${note}` : ''}.` +
+          (b.budget ? ` Llevas ${U.fmtNumber(b.pct, 0)} % del presupuesto.` : '') + warn,
+        actions: [{ label: 'Ver gastos', view: 'finance' }],
+        sound: 'success'
       };
     }
 
@@ -1129,6 +1396,37 @@
     /* ==========================================
        INTELIGENCIA ARTIFICIAL
        ========================================== */
+    // Lo que la IA debe saber del usuario: pendientes, alarmas, gastos, ciudad...
+    personalContext() {
+      const lines = [];
+      try {
+        const R = this.reminders;
+        const pending = R.notes.pending().slice(0, 10);
+        if (pending.length) lines.push(`Pendientes del usuario: ${pending.map(n => `${n.text}${n.list && n.list !== 'Personal' ? ` (${n.list})` : ''}`).join('; ')}.`);
+        const up = R.schedule.upcoming(4);
+        if (up.length) lines.push(`Próximos avisos: ${up.map(x => `${x.kind === 'timer' ? 'temporizador' : 'alarma'} ${U.fmtTime(x.at)} "${x.label}"`).join('; ')}.`);
+      } catch (e) { /* sin recordatorios */ }
+      try {
+        const E = root.YarbisExpenses && root.YarbisExpenses.store;
+        if (E) {
+          const s = E.summary();
+          if (s.count) lines.push(`Gastos de este mes: ${U.fmtUsd(s.totalUsd)} (${s.byCategory.slice(0, 3).map(c => `${c.name} ${U.fmtUsd(c.usd)}`).join(', ')})${E.budget ? `, presupuesto ${U.fmtUsd(E.budget)}` : ''}.`);
+        }
+      } catch (e) { /* sin gastos */ }
+      const city = S.getRaw('yarbis_weather_city', '');
+      if (city) lines.push(`Ciudad del usuario: ${city}.`);
+      if (!lines.length) return '';
+      return `\nContexto personal (úsalo sólo si es relevante, no lo repitas sin motivo):\n- ${lines.join('\n- ')}`;
+    }
+
+    popLastExchange() {
+      const last = this.history[this.history.length - 1];
+      if (last && last.role === 'assistant') this.history.pop();
+      const prev = this.history[this.history.length - 1];
+      if (prev && prev.role === 'user') this.history.pop();
+      S.set(HISTORY_KEY, this.history);
+    }
+
     systemPrompt() {
       let fxLine = '';
       try {
@@ -1137,7 +1435,7 @@
       } catch (e) { /* sin datos */ }
       const today = new Date().toLocaleString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
       return `Eres ${this.assistantName}, un asistente personal venezolano: amable, claro, útil y con un toque criollo natural (sin exagerar ni ser vulgar).
-${this.userName ? `El usuario se llama ${this.userName}.` : ''} Hoy es ${today} (hora de Venezuela).${fxLine}
+${this.userName ? `El usuario se llama ${this.userName}.` : ''} Hoy es ${today} (hora de Venezuela).${fxLine}${this.personalContext()}
 Reglas:
 - Responde en español, de forma breve y directa (2 a 6 frases) salvo que te pidan detalle. Tus respuestas también se leen en voz alta.
 - Usa Markdown simple (negritas, listas, tablas pequeñas) cuando ayude.
@@ -1145,13 +1443,27 @@ Reglas:
 - Si no sabes algo o necesitas datos en tiempo real que no tienes, dilo con honestidad; nunca inventes precios ni cifras.`;
     }
 
-    async askAI(userText) {
+    async askAI(userText, opts = {}) {
       const prior = this.history.slice(-12);
       const messages = [...prior, { role: 'user', text: userText }];
       let answer = null;
       let lastError = '';
 
-      if (this.geminiApiKey) {
+      // Respuesta en tiempo real: se va pintando mientras llega
+      if (typeof opts.onChunk === 'function') {
+        try {
+          answer = this.geminiApiKey
+            ? await this.streamGemini(messages, opts.onChunk)
+            : await this.streamFreeAI(messages, opts.onChunk);
+          this.lastAiEngine = this.geminiApiKey ? 'gemini' : 'free';
+        } catch (e) {
+          lastError = this.geminiApiKey ? e.message : '';
+          console.warn('Streaming falló, se usa respuesta normal:', e.message);
+          answer = null;
+        }
+      }
+
+      if (!answer && this.geminiApiKey) {
         try {
           answer = await this.queryGemini(messages);
           this.lastAiEngine = 'gemini';
@@ -1189,7 +1501,163 @@ Reglas:
 
       this.remember('user', userText);
       this.remember('assistant', answer);
-      return { text: answer };
+      return { text: answer, ai: true };
+    }
+
+    // Una consulta suelta a la IA (sin historial) con instrucciones propias
+    async completeOnce(system, userText) {
+      const messages = [{ role: 'user', text: userText }];
+      if (this.geminiApiKey) {
+        try { return await this.geminiRequest(this.geminiChatBody(messages, system)); } catch (e) { console.warn('Gemini:', e.message); }
+      }
+      return this.queryFreeAI(messages, system);
+    }
+
+    async translate(text, langCode) {
+      const name = LANGS[langCode] || langCode;
+      const out = await this.completeOnce(
+        `Eres un traductor profesional. Traduce el texto del usuario al ${name}. Responde SOLO con la traducción, sin comillas ni explicaciones. Mantén el tono y el formato.`,
+        text);
+      return out ? out.trim().replace(/^["“]|["”]$/g, '') : null;
+    }
+
+    /* ---------- Streaming (SSE) ---------- */
+    // Lee un cuerpo "text/event-stream" y llama onData con cada línea "data:"
+    async readSSE(res, onData) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, idx).trim();
+          buffer = buffer.slice(idx + 1);
+          if (line.startsWith('data:')) {
+            const payload = line.slice(5).trim();
+            if (payload && payload !== '[DONE]') onData(payload);
+          }
+        }
+      }
+      const rest = buffer.trim();
+      if (rest.startsWith('data:') && rest.slice(5).trim() !== '[DONE]') onData(rest.slice(5).trim());
+    }
+
+    // Petición con señal externa + tiempo límite hasta recibir la primera respuesta
+    async streamFetch(url, options, signal, firstByteMs = 25000) {
+      const ctrl = new AbortController();
+      const onAbort = () => ctrl.abort();
+      if (signal) signal.addEventListener('abort', onAbort);
+      const timer = setTimeout(() => ctrl.abort(), firstByteMs);
+      try {
+        const res = await root.fetch(url, { ...options, signal: ctrl.signal });
+        clearTimeout(timer);
+        return res;
+      } catch (e) {
+        clearTimeout(timer);
+        throw e;
+      }
+    }
+
+    // Proveedor compatible con OpenAI. Acepta respuesta en streaming o JSON normal.
+    async streamOpenAI(url, body, chat, onText, signal) {
+      const res = await this.streamFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, messages: chat, stream: true })
+      }, signal);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const type = res.headers.get('content-type') || '';
+      let full = '';
+      if (!/event-stream/.test(type)) {
+        const data = await res.json();
+        full = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+        if (full.trim()) onText(full.trim());
+        return full.trim();
+      }
+      await this.readSSE(res, (payload) => {
+        try {
+          const data = JSON.parse(payload);
+          const delta = data.choices && data.choices[0] && ((data.choices[0].delta && data.choices[0].delta.content) || (data.choices[0].message && data.choices[0].message.content));
+          if (delta) {
+            full += delta;
+            onText(full);
+          }
+        } catch (e) { /* línea no JSON */ }
+      });
+      return full.trim();
+    }
+
+    // Lanza varios proveedores a la vez; gana el primero que empiece a escribir
+    raceStreams(starters, onChunk) {
+      return new Promise((resolve, reject) => {
+        let winner = -1;
+        let failed = 0;
+        const ctrls = starters.map(() => new AbortController());
+        const fail = (err) => {
+          failed++;
+          if (failed >= starters.length && winner === -1) reject(err);
+        };
+        starters.forEach((start, i) => {
+          start(ctrls[i].signal, (full) => {
+            if (winner === -1) {
+              winner = i;
+              ctrls.forEach((c, j) => { if (j !== i) c.abort(); });
+            }
+            if (winner === i) onChunk(full);
+          }).then((full) => {
+            if (winner === i || (winner === -1 && full)) {
+              winner = i;
+              if (full) resolve(full);
+              else reject(new Error('respuesta vacía'));
+            } else if (winner === -1) fail(new Error('respuesta vacía'));
+          }).catch((err) => {
+            if (winner === i) reject(err);
+            else if (winner === -1) fail(err);
+          });
+        });
+      });
+    }
+
+    streamFreeAI(messages, onChunk) {
+      const chat = [
+        { role: 'system', content: this.systemPrompt() },
+        ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }))
+      ];
+      return this.raceStreams([
+        (signal, onText) => this.streamOpenAI('https://text.pollinations.ai/openai', { model: 'openai', referrer: 'yarbis-veneco' }, chat, onText, signal),
+        (signal, onText) => this.streamOpenAI('https://api.llm7.io/v1/chat/completions', { model: 'gpt-oss:20b' }, chat, onText, signal)
+      ], onChunk);
+    }
+
+    async streamGemini(messages, onChunk) {
+      const key = this.geminiApiKey;
+      const model = await this.resolveGeminiModel(key);
+      const res = await this.streamFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify(this.geminiChatBody(messages))
+      }, null, 30000);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
+      }
+      let full = '';
+      await this.readSSE(res, (payload) => {
+        try {
+          const data = JSON.parse(payload);
+          const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+          const t = parts ? parts.map(p => p.text || '').join('') : '';
+          if (t) {
+            full += t;
+            onChunk(full);
+          }
+        } catch (e) { /* línea no JSON */ }
+      });
+      if (!full.trim()) throw new Error('respuesta vacía');
+      return full.trim();
     }
 
     /* ---------- Google Gemini ---------- */
@@ -1248,6 +1716,10 @@ Reglas:
     }
 
     queryGemini(messages) {
+      return this.geminiRequest(this.geminiChatBody(messages));
+    }
+
+    geminiChatBody(messages, system) {
       const contents = [];
       messages.forEach(m => {
         const role = m.role === 'assistant' ? 'model' : 'user';
@@ -1256,11 +1728,11 @@ Reglas:
         else contents.push({ role, parts: [{ text: m.text }] });
       });
       if (contents.length && contents[0].role === 'model') contents.shift();
-      return this.geminiRequest({
-        system_instruction: { parts: [{ text: this.systemPrompt() }] },
+      return {
+        system_instruction: { parts: [{ text: system || this.systemPrompt() }] },
         contents,
         generationConfig: { temperature: 0.6, maxOutputTokens: 1200 }
-      });
+      };
     }
 
     async testGeminiApiKey(rawKey) {
@@ -1290,9 +1762,9 @@ Reglas:
     // Pregunta a dos servicios gratuitos a la vez y usa la primera respuesta válida.
     // Pollinations sólo acepta peticiones desde páginas publicadas (en localhost pide
     // un captcha), LLM7 funciona en ambos casos.
-    async queryFreeAI(messages) {
+    async queryFreeAI(messages, system) {
       const chat = [
-        { role: 'system', content: this.systemPrompt() },
+        { role: 'system', content: system || this.systemPrompt() },
         ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }))
       ];
       const valid = (t) => t && typeof t === 'string' && t.trim().length > 0 && !/<!doctype|<html/i.test(t) && !/^\s*\{\s*"error"/.test(t);
@@ -1383,6 +1855,7 @@ Reglas:
   YARBISBrain.parseDuration = parseDuration;
   YARBISBrain.parseClock = parseClock;
   YARBISBrain.parseAmount = parseAmount;
+  YARBISBrain.parseRepeat = parseRepeat;
   YARBISBrain.venezuelanPhone = venezuelanPhone;
   YARBISBrain.align = align;
 

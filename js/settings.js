@@ -12,7 +12,7 @@
   const html = root.document.documentElement;
 
   const Theme = {
-    mode() { return S.getRaw('yarbis_theme_mode', 'system'); },
+    mode() { return S.getRaw('yarbis_theme_mode', 'dark'); },
     accent() { return S.getRaw('yarbis_accent', 'neon'); },
     setMode(mode) {
       const m = ['system', 'light', 'dark'].includes(mode) ? mode : 'system';
@@ -33,6 +33,9 @@
     },
     orbColor() {
       return getComputedStyle(html).getPropertyValue('--orb').trim() || '#0ea5e9';
+    },
+    secondColor() {
+      return getComputedStyle(html).getPropertyValue('--accent-2').trim() || '';
     },
     listeners: new Set(),
     onChange(fn) { this.listeners.add(fn); },

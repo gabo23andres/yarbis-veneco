@@ -19,6 +19,7 @@ const ROOT = path.join(__dirname, '..');
 const PORT = 8000 + Math.floor(Math.random() * 900);
 const BASE = `http://localhost:${PORT}/index.html`;
 const SHOTS = process.env.SCREENSHOT_DIR || path.join(__dirname, 'screenshots');
+let MOCK_BCV = 200.5; // se cambia durante la prueba para disparar una alerta
 
 // Micrófono y voz simulados: cuenta las llamadas a start()
 const FAKE_SPEECH = () => {
@@ -48,6 +49,7 @@ const FAKE_SPEECH = () => {
     cancel() {},
     speak(u) {
       window.__spoken.push(u.text);
+      window.__spokenLangs = (window.__spokenLangs || []).concat(u.lang);
       setTimeout(() => { u.onstart && u.onstart(); setTimeout(() => u.onend && u.onend(), 30); }, 10);
     }
   };
@@ -61,7 +63,7 @@ async function mockNetwork(context) {
     const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     if (url.includes('dolarapi.com/v1/dolares')) {
       return json([
-        { fuente: 'oficial', nombre: 'Oficial', promedio: 200.5, fechaActualizacion: new Date().toISOString() },
+        { fuente: 'oficial', nombre: 'Oficial', promedio: MOCK_BCV, fechaActualizacion: new Date().toISOString() },
         { fuente: 'paralelo', nombre: 'Paralelo', promedio: 250 }
       ]);
     }
@@ -71,7 +73,19 @@ async function mockNetwork(context) {
       return json(['BTC', 'ETH', 'SOL', 'BNB', 'XRP'].map((c, i) => ({ symbol: `${c}USDT`, lastPrice: String(1000 * (5 - i)), priceChangePercent: '1.5' })));
     }
     if (url.includes('pollinations.ai')) {
+      const body = route.request().postData() || '';
+      if (body.includes('"stream":true')) {
+        // Respuesta en tiempo real (SSE) en tres pedazos
+        const parts = ['Respuesta ', '**IA** de ', 'prueba.'];
+        const sse = parts.map(p => `data: ${JSON.stringify({ choices: [{ delta: { content: p } }] })}\n\n`).join('') + 'data: [DONE]\n\n';
+        return route.fulfill({ status: 200, contentType: 'text/event-stream', body: sse });
+      }
       return json({ choices: [{ message: { content: 'Respuesta **IA** de prueba.' } }] });
+    }
+    if (url.includes('llm7.io')) return route.fulfill({ status: 503, body: '' });
+    if (url.includes('dolarapi.com/v1/historicos')) return json([]);
+    if (url.includes('qrcode-generator')) {
+      return route.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.qrcode=function(){return{addData:function(){},make:function(){},getModuleCount:function(){return 21},isDark:function(r,c){return (r*c+r)%3===0}}};' });
     }
     if (url.includes('geocoding-api.open-meteo.com')) return json({ results: [{ name: 'Maracaibo', latitude: 10.6, longitude: -71.6, admin1: 'Zulia' }] });
     if (url.includes('api.open-meteo.com')) {
@@ -171,6 +185,7 @@ async function run() {
       assert.strictEqual(await page.$$eval('#notesList .note-item', n => n.length), 0);
       await page.click('[data-filter="all"]');
       await page.click('#notesList .note-check');
+      await page.waitForTimeout(350); // animación de marcar
       await page.click('[data-filter="done"]');
       assert.strictEqual(await page.$$eval('#notesList .note-item', n => n.length), 1);
       await page.click('[data-filter="pending"]');
@@ -290,6 +305,119 @@ async function run() {
       assert.ok(!(await page.$eval('#dlgCamera', d => d.open)));
       await page.waitForSelector('#messages .msg-image');
       await page.waitForFunction(() => document.querySelector('#messages').textContent.includes('Respuesta IA de prueba'));
+    });
+
+    await check('panel Hoy: tasa, clima y accesos rápidos', async () => {
+      await page.click('.topbar [data-action="new-chat"]');
+      await page.waitForFunction(() => document.querySelector('#homeGrid').textContent.includes('200,50'));
+      await page.waitForFunction(() => document.querySelector('#homeGrid').textContent.includes('33°'), null, { timeout: 8000 });
+      assert.ok((await page.$$('#homeGrid .quick-btn')).length >= 8);
+      await page.screenshot({ path: path.join(SHOTS, 'mobile-home.png') });
+    });
+
+    const say = async (text, expect) => {
+      await page.fill('#chatInput', text);
+      await page.press('#chatInput', 'Enter');
+      await page.waitForFunction((e) => document.querySelector('#messages').textContent.includes(e), expect, { timeout: 8000 });
+    };
+
+    await check('lista de compras y alarma repetitiva por voz', async () => {
+      await say('agrega leche y huevos a la lista de compras', 'Agregué a Compras');
+      await say('despiértame de lunes a viernes a las 6:30', 'Lunes a viernes');
+      await page.click('#messages .msg:last-child .btn, #messages .msg-actions .btn >> nth=-1').catch(() => {});
+      await page.click('.tab[data-view="notes"]');
+      await page.click('.list-chip:has-text("Compras")');
+      assert.match(await page.textContent('#notesList'), /Leche/);
+      assert.ok(await page.$eval('#notesList', n => n.classList.contains('shopping')));
+      assert.match(await page.textContent('#alarmsList'), /Lunes a viernes/);
+      await page.screenshot({ path: path.join(SHOTS, 'mobile-notes-lists.png') });
+      await page.click('.list-chip:has-text("Todas")');
+    });
+
+    await check('comandos encadenados', async () => {
+      await page.click('.tab[data-view="assistant"]');
+      await say('pon un timer de 1 minuto y anota revisar el aceite', 'Anotado');
+      assert.match(await page.textContent('#messages'), /Temporizador de 1 minuto/);
+    });
+
+    await check('gasto por voz aparece en Finanzas', async () => {
+      await say('gasté 20 dólares en comida', 'Gasto registrado');
+      await page.click('.tab[data-view="finance"]');
+      await page.waitForFunction(() => document.querySelector('#expSummary').textContent.includes('$20,00'));
+      assert.match(await page.textContent('#expBars'), /Comida/);
+    });
+
+    await check('gráfico del dólar y lista de precios', async () => {
+      await page.evaluate(() => {
+        const F = window.YarbisFinance;
+        [6, 4, 2].forEach((d, i) => F.recordHistory(190 + i * 3, 240 + i * 2, Date.now() - d * 86400000));
+        F.emit();
+      });
+      await page.waitForSelector('#fxChart path.chart-line');
+      assert.match(await page.textContent('#plResult'), /Bs\./);
+      await page.locator('#fxChart').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: path.join(SHOTS, 'mobile-finance-chart.png') });
+    });
+
+    await check('alerta del dólar salta al subir la tasa', async () => {
+      await page.fill('#alertValue', '210');
+      await page.click('#formFxAlert button[type="submit"]');
+      assert.match(await page.textContent('#alertsList'), /sube de Bs\. 210/);
+      MOCK_BCV = 215;
+      await page.click('#btnFxRefresh');
+      await page.waitForFunction(() => window.YarbisApp.log.some(m => /Alerta del dólar/.test(m.text)), null, { timeout: 8000 });
+      assert.match(await page.textContent('#alertsList'), /Sin alertas/);
+      MOCK_BCV = 200.5;
+    });
+
+    await check('IA en tiempo real (streaming)', async () => {
+      await page.click('.tab[data-view="assistant"]');
+      await say('cuéntame algo interesante sobre Venezuela', 'Respuesta IA de prueba.');
+      assert.ok(await page.$('#messages .msg.assistant:last-child button[aria-label="Regenerar respuesta"]'));
+      assert.ok(!(await page.$('#messages .msg.streaming')));
+    });
+
+    await check('traductor por voz lee en inglés', async () => {
+      await say('traduce al inglés: buenos días', 'Inglés:');
+      // En el traductor, la traducción se lee con una voz del idioma destino
+      await page.evaluate(() => window.YarbisApp.openTool('translate', 'buenos días'));
+      await page.waitForFunction(() => document.querySelector('#trOutput').value.includes('prueba'), null, { timeout: 5000 });
+      await page.waitForFunction(() => (window.__spokenLangs || []).includes('en-US'), null, { timeout: 5000 });
+      await page.keyboard.press('Escape');
+    });
+
+    await check('dictado con puntuación por voz', async () => {
+      await page.evaluate(() => window.YarbisApp.openTool('dictation'));
+      await page.click('#dcToggle');
+      await page.waitForTimeout(100);
+      await page.evaluate(() => window.__lastRec.say('hola coma qué tal punto nos vemos mañana'));
+      assert.strictEqual(await page.inputValue('#dcText'), 'Hola, qué tal. Nos vemos mañana');
+      await page.click('#dcToggle');
+      await page.keyboard.press('Escape');
+    });
+
+    await check('Pago Móvil: guardar, vista previa y QR', async () => {
+      await page.evaluate(() => window.YarbisApp.openTool('pagomovil'));
+      await page.selectOption('#pmBank', '0134');
+      await page.fill('#pmId', '12345678');
+      await page.fill('#pmPhone', '04141234567');
+      await page.click('#formPagoMovil button[type="submit"]');
+      await page.fill('#pmAmount', '10');
+      assert.match(await page.textContent('#pmPreview'), /0134 - Banesco[\s\S]*V-12\.345\.678[\s\S]*0414-1234567[\s\S]*Bs\. 2\.\d{3},00 \(\$10,00 a tasa BCV\)/);
+      await page.click('#btnPmQr');
+      await page.waitForSelector('#pmQr svg.qr-svg');
+      await page.screenshot({ path: path.join(SHOTS, 'mobile-pagomovil.png') });
+      await page.keyboard.press('Escape');
+      await say('cóbrale 5 dólares a mamá', 'Cobro para');
+    });
+
+    await check('compartir hacia YARBIS y atajos del ícono', async () => {
+      await page.goto(`${BASE}?text=${encodeURIComponent('Reunión mañana a las 3')}`);
+      await page.waitForFunction(() => document.querySelector('#messages').textContent.includes('Compartido'));
+      assert.match(await page.textContent('#messages'), /Guardar como nota/);
+      assert.ok(!(await page.evaluate(() => location.search)));
+      await page.goto(`${BASE}?accion=gasto`);
+      await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'expAmount', null, { timeout: 5000 });
     });
 
     await check('sin errores de JavaScript al final', async () => {

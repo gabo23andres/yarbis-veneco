@@ -5,17 +5,28 @@ Asistente por voz en el navegador, hecho para Venezuela. Es una página estátic
 
 ## Qué hace
 
-- **Voz y chat con IA**: toca el micrófono o escribe. La IA recuerda la conversación.
-  Funciona sin clave (IA gratuita) o con tu clave gratis de
-  [Google AI Studio](https://aistudio.google.com/app/apikey) para respuestas y visión más estables.
-- **Dólar y finanzas**: tasa BCV, paralelo y euro en vivo (DolarApi), criptomonedas,
-  convertidor, y calculadoras de DCA, interés compuesto, préstamo, devaluación y spread.
-  Cada tasa dice si está en vivo, guardada o sin conexión.
-- **Notas, temporizadores y alarmas**: se guardan en el teléfono, sobreviven a recargas,
-  suenan con vibración y pueden avisar con notificación.
+- **Voz y chat con IA**: toca el micrófono o escribe. La IA recuerda la conversación,
+  conoce tus pendientes, alarmas y gastos, y responde en tiempo real (el texto aparece
+  mientras se escribe). Puedes encadenar órdenes: *"pon un timer de 5 minutos y anota comprar pan"*.
+- **Inicio "Hoy"**: tasa del dólar con mini‑gráfico, clima, próximos avisos, pendientes,
+  gastos del mes y accesos rápidos.
+- **Dólar y finanzas**: tasa BCV, paralelo y euro en vivo, **historial con gráfico**
+  (7/30/90 días), **alertas** ("avísame cuando el dólar pase de 250"), convertidor,
+  calculadoras (DCA, interés, préstamo, devaluación, spread) y **lista de precios para
+  tu negocio** en $ y Bs. lista para WhatsApp.
+- **Gastos y presupuesto**: registra gastos por voz en $ o Bs., resumen del mes por
+  categoría, presupuesto con avisos y exportación a CSV.
+- **Notas, listas, temporizadores y alarmas**: listas (Personal, Compras, Trabajo y las
+  tuyas), **alarmas repetitivas** (diario, lunes a viernes, días específicos), todo se
+  guarda en el teléfono y sobrevive a recargas.
+- **Pago Móvil**: guarda tus datos, compártelos con un toque y genera un QR para cobrar.
+- **Traductor de voz y dictado**: habla y escucha la traducción en el otro idioma;
+  dicta textos largos con puntuación por voz.
 - **Cámara**: lector QR sin internet, y análisis de fotos, documentos o traducción con IA.
-- **Más**: clima, llamadas y WhatsApp a tus contactos, rutas en Maps/Waze, música,
-  purificador de texto, modo claro/oscuro y 7 colores.
+- **Compartir y atajos**: desde otra app, *Compartir → YARBIS*; y atajos al mantener
+  presionado el ícono (Dólar, Nota, Compras, QR, Gasto, Dictado).
+- **Más**: clima, llamadas y WhatsApp a tus contactos, rutas, música, purificador de texto,
+  modo claro/oscuro y 7 colores.
 
 Ejemplos de lo que puedes decir: *"¿A cómo está el dólar?"*, *"100 dólares a bolívares"*,
 *"5000 bs a dólares a tasa paralela"*, *"temporizador de 10 minutos"*,
@@ -70,6 +81,11 @@ npm run test:e2e               # prueba completa en navegador (móvil y escritor
 | `js/reminders.js` | Notas, temporizadores y alarmas |
 | `js/camera.js` | Cámara, lector QR y visión |
 | `js/mathEngine.js` | Calculadora segura (sin `eval`) y fórmulas financieras |
+| `js/charts.js` | Gráficos SVG (líneas, mini‑gráficos y barras) |
+| `js/expenses.js` | Gastos y presupuesto |
+| `js/pagomovil.js` | Datos de Pago Móvil, compartir y QR |
+| `js/voicetools.js` | Traductor de voz y dictado |
+| `js/home.js` | Panel "Hoy" del inicio |
 | `js/settings.js` | Ajustes, tema, agenda y copias de seguridad |
 | `sw.js`, `manifest.json`, `icons/` | App instalable y uso sin conexión |
 

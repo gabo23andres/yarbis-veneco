@@ -15,6 +15,11 @@
   const S = U.storage;
   const CACHE_KEY = 'yarbis_fin_cache_v2';
   const MANUAL_KEY = 'yarbis_fx_manual';
+  const HISTORY_KEY = 'yarbis_fx_history';
+  const ALERTS_KEY = 'yarbis_fx_alerts';
+  const HOUR = 3600000;
+  const DAY = 86400000;
+  const HISTORY_DAYS = 120;
 
   // Valores de respaldo (sólo si nunca hubo conexión). Se muestran como "estimados".
   const DEFAULTS = {
@@ -84,6 +89,12 @@
       // Limpieza de claves antiguas (v10)
       S.remove('yarbis_custom_fx');
       S.remove('yarbis_custom_crypto');
+
+      this.history = S.get(HISTORY_KEY, []);
+      if (!Array.isArray(this.history)) this.history = [];
+      this.alerts = S.get(ALERTS_KEY, []);
+      if (!Array.isArray(this.alerts)) this.alerts = [];
+      this.alertListeners = new Set();
     }
 
     onChange(fn) {
@@ -242,7 +253,11 @@
         // Si sólo falta el paralelo, se conserva el último conocido
         this.applyGroup('fx', ve && ve.data.bcv ? ve : null, true);
         this.save();
+        if (this.groups.fx.status === 'live') {
+          this.recordHistory(this.groups.fx.data.bcv, this.groups.fx.data.paralelo);
+        }
         this.emit();
+        this.checkAlerts();
         return this.getRates();
       })().finally(() => { this.inflight = null; });
       return this.inflight;
@@ -361,6 +376,136 @@
       if (CRYPTO_CODES.includes(code)) return `${U.fmtCrypto(value)} ${code}`;
       if (['COP', 'CLP', 'JPY', 'ARS'].includes(code)) return `${U.fmtNumber(value, 0)} ${code}`;
       return `${U.fmtNumber(value, 2)} ${code}`;
+    }
+
+    /* ------------------------------------------
+       HISTORIAL (para el gráfico)
+       ------------------------------------------ */
+    recordHistory(bcv, paralelo, t = Date.now()) {
+      const b = Number(bcv);
+      const p = Number(paralelo);
+      if (!(b > 0)) return;
+      const last = this.history[this.history.length - 1];
+      const point = { t, bcv: b, paralelo: p > 0 ? p : (last && last.paralelo) || null };
+      // Un punto por hora como máximo: el último de la hora reemplaza al anterior
+      if (last && Math.floor(last.t / HOUR) === Math.floor(t / HOUR)) this.history[this.history.length - 1] = point;
+      else this.history.push(point);
+      const cutoff = Date.now() - HISTORY_DAYS * DAY;
+      this.history = this.history.filter(x => x.t >= cutoff).sort((a, c) => a.t - c.t);
+      S.set(HISTORY_KEY, this.history);
+    }
+
+    getHistory(days = 30) {
+      const cutoff = Date.now() - days * DAY;
+      return this.history.filter(x => x.t >= cutoff);
+    }
+
+    // Variación porcentual de una tasa en el período
+    change(rate, days) {
+      const pts = this.getHistory(days).filter(x => x[rate] > 0);
+      if (pts.length < 2) return null;
+      return ((pts[pts.length - 1][rate] - pts[0][rate]) / pts[0][rate]) * 100;
+    }
+
+    // Histórico diario de DolarApi (si existe). Rellena sólo los días que faltan.
+    async loadRemoteHistory() {
+      const last = Number(S.getRaw('yarbis_fx_hist_remote_at', '0'));
+      if (Date.now() - last < 12 * HOUR) return false;
+      S.setRaw('yarbis_fx_hist_remote_at', String(Date.now()));
+      const get = (fuente) => this.getJson(`https://ve.dolarapi.com/v1/historicos/dolares/${fuente}`, 8000, 1).catch(() => []);
+      const [of, par] = await Promise.all([get('oficial'), get('paralelo')]);
+      if (!Array.isArray(of) || !of.length) return false;
+      const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+      const known = new Set(this.history.map(x => dayKey(x.t)));
+      const parByDay = new Map((Array.isArray(par) ? par : []).map(x => [String(x.fecha).slice(0, 10), Number(x.promedio)]));
+      const cutoff = Date.now() - HISTORY_DAYS * DAY;
+      let added = 0;
+      of.forEach(x => {
+        const day = String(x.fecha || '').slice(0, 10);
+        const t = Date.parse(`${day}T16:00:00`);
+        const v = Number(x.promedio);
+        if (!day || !isFinite(t) || t < cutoff || !(v > 0) || known.has(day)) return;
+        this.history.push({ t, bcv: v, paralelo: parByDay.get(day) || null, remote: true });
+        known.add(day);
+        added++;
+      });
+      if (added) {
+        this.history.sort((a, c) => a.t - c.t);
+        S.set(HISTORY_KEY, this.history);
+        this.emit();
+      }
+      return added > 0;
+    }
+
+    /* ------------------------------------------
+       ALERTAS DE TASA
+       ------------------------------------------ */
+    onAlert(fn) {
+      this.alertListeners.add(fn);
+      return () => this.alertListeners.delete(fn);
+    }
+
+    addAlert(rate, dir, value) {
+      const v = Number(value);
+      if (!(v > 0)) return null;
+      const alert = {
+        id: U.uid(),
+        rate: rate === 'paralelo' ? 'paralelo' : 'bcv',
+        dir: dir === 'below' ? 'below' : 'above',
+        value: v,
+        createdAt: Date.now()
+      };
+      this.alerts.push(alert);
+      S.set(ALERTS_KEY, this.alerts);
+      this.emit();
+      return alert;
+    }
+
+    removeAlert(id) {
+      this.alerts = this.alerts.filter(a => a.id !== id);
+      S.set(ALERTS_KEY, this.alerts);
+      this.emit();
+    }
+
+    // Devuelve y elimina las alertas cumplidas (son de un solo uso)
+    checkAlerts(rates) {
+      if (!this.alerts.length) return [];
+      const r = rates || this.getRates();
+      if (r.fx.status === 'default' || r.manual) return [];
+      const hit = this.alerts.filter(a => {
+        const current = a.rate === 'paralelo' ? r.paralelo : r.bcv;
+        return a.dir === 'above' ? current >= a.value : current <= a.value;
+      }).map(a => ({ ...a, current: a.rate === 'paralelo' ? r.paralelo : r.bcv }));
+      if (hit.length) {
+        this.alerts = this.alerts.filter(a => !hit.some(h => h.id === a.id));
+        S.set(ALERTS_KEY, this.alerts);
+        this.alertListeners.forEach(fn => hit.forEach(h => { try { fn(h); } catch (e) { console.warn(e); } }));
+        this.emit();
+      }
+      return hit;
+    }
+
+    // future=true: "Dólar BCV suba de Bs. 250" (para "te aviso cuando el…")
+    describeAlert(a, future = false) {
+      const verb = a.dir === 'above' ? (future ? 'suba de' : 'sube de') : (future ? 'baje de' : 'baja de');
+      return `${a.rate === 'paralelo' ? 'paralelo' : 'dólar BCV'} ${verb} ${U.fmtBs(a.value)}`;
+    }
+
+    /* ------------------------------------------
+       LISTA DE PRECIOS PARA COMERCIOS
+       items: [{ name, usd }] · margen e IVA en %
+       ------------------------------------------ */
+    priceList(items, rate, marginPct = 0, ivaPct = 0) {
+      const r = Number(rate) || 0;
+      const m = 1 + (Number(marginPct) || 0) / 100;
+      const iva = 1 + (Number(ivaPct) || 0) / 100;
+      const rows = (items || []).map(it => {
+        const usd = Number(String(it.usd).replace(',', '.')) || 0;
+        const finalUsd = usd * m * iva;
+        return { name: String(it.name || '').trim(), usd, finalUsd, bs: finalUsd * r };
+      }).filter(x => x.name || x.usd);
+      const totalUsd = rows.reduce((acc, x) => acc + x.finalUsd, 0);
+      return { rows, totalUsd, totalBs: totalUsd * r };
     }
 
     statusLabel(meta) {
