@@ -332,7 +332,7 @@
         const found = await webSearch(brain, String(a.consulta || ''));
         found.sources.slice(0, 2).forEach(s => out.actions.push({ label: `🔗 ${s.title}`, url: s.uri }));
         out.searched = true;
-        return { ok: true, resultado: found.text, fuentes: found.sources.map(s => s.title) };
+        return { ok: true, resultado: found.text, fuentes: found.sources.map(s => s.title), ...(found.note ? { nota: found.note } : {}) };
       }
       case 'guardar_recuerdo': {
         const m = Memory.add(a.dato);
@@ -350,19 +350,66 @@
   /* ------------------------------------------
      BÚSQUEDA EN GOOGLE (grounding de Gemini)
      ------------------------------------------ */
-  async function webSearch(brain, query) {
-    const { res } = await brain.geminiFetch({
-      contents: [{ role: 'user', parts: [{ text: `Hoy es ${isoDate()}. Busca en internet y responde en español con datos concretos, cifras y fechas: ${query}` }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: { temperature: 0.3 }
-    });
+  const SEARCH_OFF_KEY = 'yarbis_gemini_search_off';
+
+  // En cuentas gratis la búsqueda en Google puede no estar incluida (cupo 0):
+  // se recuerda por 24 h y mientras tanto se busca en Wikipedia.
+  function googleSearchOff() {
+    const t = Number(S.getRaw(SEARCH_OFF_KEY, '0'));
+    return !!t && Date.now() - t < 24 * 3600 * 1000;
+  }
+
+  async function wikiSearch(query) {
+    const q = encodeURIComponent(String(query || '').slice(0, 200));
+    const res = await U.fetchWithTimeout(`https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&srlimit=3&format=json&origin=*`, {}, 10000);
     const data = await res.json().catch(() => ({}));
-    const cand = data.candidates && data.candidates[0];
-    const parts = (cand && cand.content && cand.content.parts) || [];
-    const text = parts.filter(p => !p.thought).map(p => p.text || '').join('').trim();
-    const chunks = (cand && cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [];
-    const sources = chunks.map(c => c.web).filter(w => w && w.uri).map(w => ({ uri: w.uri, title: w.title || 'Fuente' }));
-    return { text: text || 'No encontré resultados.', sources };
+    const hits = (data.query && data.query.search) || [];
+    if (!hits.length) return { text: 'No encontré resultados en Wikipedia.', sources: [], via: 'wikipedia' };
+    const title = hits[0].title;
+    let extract = '';
+    try {
+      const sum = await U.fetchWithTimeout(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, {}, 8000);
+      const sd = await sum.json();
+      extract = sd.extract || '';
+    } catch (e) { /* sólo los fragmentos */ }
+    const snippets = hits.map(h => `${h.title}: ${String(h.snippet || '').replace(/<[^>]+>/g, '')}`).join('\n');
+    return {
+      text: `${extract ? `${title}: ${extract}\n\n` : ''}${snippets}`.trim(),
+      sources: hits.slice(0, 2).map(h => ({ uri: `https://es.wikipedia.org/wiki/${encodeURIComponent(h.title.replace(/ /g, '_'))}`, title: `Wikipedia: ${h.title}` })),
+      via: 'wikipedia'
+    };
+  }
+
+  async function webSearch(brain, query) {
+    if (!brain.geminiApiKey || googleSearchOff()) return wikiSearch(query);
+    try {
+      const { res } = await brain.geminiFetch({
+        contents: [{ role: 'user', parts: [{ text: `Hoy es ${isoDate()}. Busca en internet y responde en español con datos concretos, cifras y fechas: ${query}` }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { temperature: 0.3 }
+      }, { noAlternate: true });
+      const data = await res.json().catch(() => ({}));
+      const cand = data.candidates && data.candidates[0];
+      const parts = (cand && cand.content && cand.content.parts) || [];
+      const text = parts.filter(p => !p.thought).map(p => p.text || '').join('').trim();
+      const chunks = (cand && cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [];
+      const sources = chunks.map(c => c.web).filter(w => w && w.uri).map(w => ({ uri: w.uri, title: w.title || 'Fuente' }));
+      return { text: text || 'No encontré resultados.', sources, via: 'google' };
+    } catch (e) {
+      if (e.fatal) throw e;
+      if (e.status === 429 || e.status === 403 || e.status === 400) S.setRaw(SEARCH_OFF_KEY, String(Date.now()));
+      const w = await wikiSearch(query);
+      w.note = 'La búsqueda en Google no está incluida en el plan gratis de Gemini; se buscó en Wikipedia.';
+      return w;
+    }
+  }
+
+  // Declaraciones para Gemini: sin búsqueda en Google, la herramienta busca en Wikipedia
+  function toolsFor(brain) {
+    if (brain.geminiApiKey && !googleSearchOff()) return TOOLS;
+    return TOOLS.map(t => (t.name === 'buscar_en_internet'
+      ? { ...t, description: 'Busca información en Wikipedia (la búsqueda en Google no está incluida en este plan). Sirve para datos generales; no tiene noticias del día.' }
+      : t));
   }
 
   /* ------------------------------------------
@@ -425,7 +472,7 @@ Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramien
   async function run(brain, messages, onChunk) {
     const body = brain.geminiChatBody(messages);
     body.system_instruction.parts[0].text += rules();
-    body.tools = [{ function_declarations: TOOLS }];
+    body.tools = [{ function_declarations: toolsFor(brain) }];
 
     const out = { effects: [], actions: [], sound: null, tools: [] };
     let shown = '';
@@ -483,7 +530,7 @@ Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramien
   async function runProvider(brain, messages, onChunk) {
     const P = root.YarbisAIProviders;
     const out = { effects: [], actions: [], sound: null, tools: [] };
-    const tools = brain.geminiApiKey ? TOOLS : TOOLS.filter(t => t.name !== 'buscar_en_internet');
+    const tools = toolsFor(brain);
     const r = await P.run({
       system: brain.systemPrompt() + rules(),
       messages,
@@ -497,5 +544,5 @@ Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramien
     return finish(out, r.text);
   }
 
-  root.YarbisGemini = { Memory, TOOLS, run, runProvider, execute, webSearch, mergeParts, isoDate };
+  root.YarbisGemini = { Memory, TOOLS, run, runProvider, execute, webSearch, wikiSearch, googleSearchOff, mergeParts, isoDate };
 })(typeof window !== 'undefined' ? window : globalThis);

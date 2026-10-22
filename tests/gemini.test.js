@@ -308,7 +308,7 @@ test('Gemini reintenta con otro modelo si se agota el cupo y quita "thinking" si
   const realFetch = win.fetch;
   const calls = [];
   brain.geminiModel = 'gemini-2.5-flash';
-  brain.geminiModelList = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+  brain.geminiModelList = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
   brain.noThinkingConfig = false;
   win.fetch = async (url, opts) => {
     const body = JSON.parse(opts.body);
@@ -331,5 +331,118 @@ test('Gemini reintenta con otro modelo si se agota el cupo y quita "thinking" si
     win.fetch = realFetch;
     brain.noThinkingConfig = false;
     brain.geminiModelList = null;
+  }
+});
+
+// Lista real de una cuenta gratis (octubre 2026)
+const REAL_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-preview-tts', 'gemma-4-31b-it', 'gemini-flash-latest',
+  'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-image', 'gemini-3-flash-preview',
+  'gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-3.1-flash-lite', 'gemini-3-pro-image', 'gemini-3.5-flash',
+  'gemini-3.5-flash-lite', 'gemini-omni-1.1-flash', 'gemini-3.5-transcribe', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash',
+  'gemini-4-argon', 'gemini-3.8-flash-tts', 'gemini-robotics-er-2-preview', 'deep-research-preview-04-2026', 'antigravity-preview-latest'];
+
+test('candidatos de Gemini: sólo modelos normales y en orden de preferencia', () => {
+  const auto = brain.geminiCandidates(REAL_MODELS, 'auto');
+  assert.deepStrictEqual(auto.slice(0, 5), ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash']);
+  for (const bad of ['argon', 'omni', 'preview', 'tts', 'image', 'transcribe', 'customtools', 'gemma', 'robotics', 'research', 'antigravity']) {
+    assert.ok(!auto.some(m => m.includes(bad)), bad);
+  }
+  assert.strictEqual(brain.geminiCandidates(REAL_MODELS, 'lite')[0], 'gemini-3.5-flash-lite');
+  assert.strictEqual(brain.geminiCandidates(REAL_MODELS, 'pro')[0], 'gemini-2.5-pro');
+  assert.strictEqual(auto.indexOf('gemini-flash-latest') > auto.indexOf('gemini-2.5-flash'), true);
+});
+
+test('elige probando: el más nuevo se cuelga, otro sin permiso, se queda con el que responde', async () => {
+  const realFetch = win.fetch;
+  const prevTimeouts = brain.geminiTimeouts;
+  brain.geminiTimeouts = { request: 300, stream: 300, probe: 300, grace: 100 };
+  win.localStorage.removeItem('yarbis_gemini_bad');
+  const seen = [];
+  win.fetch = (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes('/models?')) return Promise.resolve(new Response(JSON.stringify({ models: REAL_MODELS.map(m => ({ name: `models/${m}`, supportedGenerationMethods: ['generateContent'] })) }), { status: 200 }));
+    const model = u.match(/models\/([^:]+):/)[1];
+    seen.push(model);
+    if (model === 'gemini-3.8-flash' || model === 'gemini-3.7-flash') {
+      // Colgado: sólo termina cuando se cancela
+      return new Promise((_, reject) => opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+    }
+    if (model === 'gemini-2.5-flash') return Promise.resolve(new Response(JSON.stringify({ error: { code: 403, message: 'The caller does not have permission', status: 'PERMISSION_DENIED' } }), { status: 403 }));
+    return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'OK' }] } }] }), { status: 200 }));
+  };
+  try {
+    const r = await brain.testGeminiApiKey('AQ.CLAVE_DE_PRUEBA_LARGA_PARA_EL_FORMATO_NUEVO');
+    assert.strictEqual(r.success, true, r.message);
+    assert.strictEqual(r.model, 'gemini-3.6-flash');
+    assert.strictEqual(brain.geminiModel, 'gemini-3.6-flash');
+    assert.ok(seen.includes('gemini-3.8-flash') && seen.includes('gemini-3.6-flash'));
+  } finally {
+    win.fetch = realFetch;
+    brain.geminiTimeouts = prevTimeouts;
+  }
+});
+
+test('geminiFetch: 403 o cuelgue pasan a otro modelo y lo guardan; clave inválida no reintenta', async () => {
+  const realFetch = win.fetch;
+  const prevTimeouts = brain.geminiTimeouts;
+  brain.geminiTimeouts = { request: 300, stream: 300, probe: 300, grace: 100 };
+  brain.geminiModelList = REAL_MODELS;
+  win.localStorage.removeItem('yarbis_gemini_bad');
+  const seen = [];
+  let mode = 'hang';
+  win.fetch = (url, opts = {}) => {
+    const model = String(url).match(/models\/([^:]+):/)[1];
+    seen.push(model);
+    if (mode === 'invalid') return Promise.resolve(new Response(JSON.stringify({ error: { code: 401, message: 'API key not valid.', details: [{ reason: 'ACCESS_TOKEN_TYPE_UNSUPPORTED' }] } }), { status: 401 }));
+    if (model === 'gemini-3.8-flash') return new Promise((_, reject) => opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+    if (model === 'gemini-3.7-flash') return Promise.resolve(new Response(JSON.stringify({ error: { code: 403, message: 'The caller does not have permission' } }), { status: 403 }));
+    return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Hola' }] } }] }), { status: 200 }));
+  };
+  try {
+    brain.geminiModel = 'gemini-3.8-flash';
+    assert.strictEqual(await brain.geminiRequest({ contents: [{ role: 'user', parts: [{ text: 'hola' }] }] }), 'Hola');
+    assert.deepStrictEqual(seen, ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']);
+    assert.strictEqual(brain.geminiModel, 'gemini-3.6-flash', 'se guarda el modelo que sí responde');
+
+    mode = 'invalid';
+    seen.length = 0;
+    await assert.rejects(brain.geminiRequest({ contents: [{ role: 'user', parts: [{ text: 'hola' }] }] }), /no es válida/);
+    assert.strictEqual(seen.length, 1, 'con clave inválida no se prueban otros modelos');
+  } finally {
+    win.fetch = realFetch;
+    brain.geminiTimeouts = prevTimeouts;
+    brain.geminiModelList = null;
+    win.localStorage.removeItem('yarbis_gemini_bad');
+  }
+});
+
+test('búsqueda en Google sin cupo: busca en Wikipedia y no insiste', async () => {
+  const realFetch = win.fetch;
+  brain.geminiModel = 'gemini-3.6-flash';
+  win.localStorage.removeItem('yarbis_gemini_search_off');
+  const seen = [];
+  win.fetch = async (url) => {
+    const u = String(url);
+    seen.push(u);
+    if (u.includes('generativelanguage')) return new Response(JSON.stringify({ error: { code: 429, message: 'You exceeded your current quota' } }), { status: 429 });
+    if (u.includes('list=search')) return new Response(JSON.stringify({ query: { search: [{ title: 'Selección de fútbol de Venezuela', snippet: 'La <span>Vinotinto</span> es…' }] } }), { status: 200 });
+    if (u.includes('page/summary')) return new Response(JSON.stringify({ extract: 'La selección de fútbol de Venezuela, conocida como la Vinotinto…' }), { status: 200 });
+    throw new Error(`inesperado ${u}`);
+  };
+  try {
+    const r = await G.webSearch(brain, 'Vinotinto');
+    assert.strictEqual(r.via, 'wikipedia');
+    assert.match(r.text, /Vinotinto/);
+    assert.match(r.note, /no está incluida/);
+    assert.match(r.sources[0].uri, /es\.wikipedia\.org\/wiki\/Selecci/);
+    assert.strictEqual(seen.filter(u => u.includes('generativelanguage')).length, 1, 'no prueba otros modelos');
+    assert.strictEqual(G.googleSearchOff(), true);
+    // La siguiente búsqueda va directo a Wikipedia
+    seen.length = 0;
+    await G.webSearch(brain, 'Caracas');
+    assert.ok(!seen.some(u => u.includes('generativelanguage')));
+  } finally {
+    win.fetch = realFetch;
+    win.localStorage.removeItem('yarbis_gemini_search_off');
   }
 });
