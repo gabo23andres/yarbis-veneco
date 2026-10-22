@@ -83,6 +83,15 @@ async function mockNetwork(context) {
       return json({ choices: [{ message: { content: 'Respuesta **IA** de prueba.' } }] });
     }
     if (url.includes('llm7.io')) return route.fulfill({ status: 503, body: '' });
+    if (url.includes('generativelanguage.googleapis.com')) {
+      if (url.includes('/models?')) return json({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }] });
+      // Cerebro Gemini simulado: primero usa una herramienta y luego confirma
+      const body = route.request().postData() || '';
+      const part = body.includes('functionResponse')
+        ? { text: 'Listo, puse **15 minutos** para el pan.' }
+        : { functionCall: { name: 'crear_temporizador', args: { minutos: 15, motivo: 'Pan' } } };
+      return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts: [part] } }] })}\n\n` });
+    }
     if (url.includes('dolarapi.com/v1/historicos')) return json([]);
     if (url.includes('qrcode-generator')) {
       return route.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.qrcode=function(){return{addData:function(){},make:function(){},getModuleCount:function(){return 21},isDark:function(r,c){return (r*c+r)%3===0}}};' });
@@ -377,6 +386,25 @@ async function run() {
       assert.ok(!(await page.$('#messages .msg.streaming')));
     });
 
+    await check('cerebro Gemini: entiende y crea un temporizador', async () => {
+      await page.evaluate(() => { window.YarbisApp.brain.setApiKey('AIzaSyPRUEBA_PRUEBA_PRUEBA_PRUEBA_123'); });
+      await say('ayúdame a que no se me queme el pan', 'Listo, puse 15 minutos para el pan.');
+      assert.ok(await page.evaluate(() => window.YarbisReminders.schedule.timers.some(t => t.label === 'Pan' && t.durationMs === 900000)));
+      await page.evaluate(() => { window.YarbisApp.brain.setApiKey(''); window.YarbisReminders.schedule.cancelAllTimers(); });
+    });
+
+    await check('ajustes: otra API y recuerdos', async () => {
+      await page.evaluate(() => window.YarbisApp.brain.process('recuerda que me encanta el café'));
+      await page.evaluate(() => window.YarbisSettings.open());
+      await page.waitForSelector('#dlgSettings[open]');
+      await page.fill('#setProviderKey', 'sk-ant-prueba');
+      assert.strictEqual(await page.inputValue('#setProvider'), 'anthropic');
+      assert.match(await page.textContent('#memoryList'), /me encanta el café/);
+      await page.fill('#setProviderKey', '');
+      await page.screenshot({ path: path.join(SHOTS, 'mobile-ai-settings.png') });
+      await page.keyboard.press('Escape');
+    });
+
     await check('traductor por voz lee en inglés', async () => {
       await say('traduce al inglés: buenos días', 'Inglés:');
       // En el traductor, la traducción se lee con una voz del idioma destino
@@ -411,7 +439,17 @@ async function run() {
       await say('cóbrale 5 dólares a mamá', 'Cobro para');
     });
 
+    await check('botón atrás del teléfono cierra la ventana abierta', async () => {
+      await page.evaluate(() => window.YarbisApp.openTool('translate'));
+      await page.waitForSelector('#dlgTranslate[open]');
+      await page.goBack();
+      await page.waitForFunction(() => !document.querySelector('#dlgTranslate').open);
+      assert.ok(await page.evaluate(() => !!window.YarbisApp && !!document.querySelector('#messages')));
+    });
+
     await check('compartir hacia YARBIS y atajos del ícono', async () => {
+      // Esperar a que el "atrás" de la ventana cerrada termine antes de navegar
+      await page.waitForFunction(() => !(history.state && history.state.dlg));
       await page.goto(`${BASE}?text=${encodeURIComponent('Reunión mañana a las 3')}`);
       await page.waitForFunction(() => document.querySelector('#messages').textContent.includes('Compartido'));
       assert.match(await page.textContent('#messages'), /Guardar como nota/);

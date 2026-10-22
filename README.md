@@ -5,6 +5,17 @@ Asistente por voz en el navegador, hecho para Venezuela. Es una página estátic
 
 ## Qué hace
 
+- **Cerebro Gemini**: con tu clave gratuita de Google AI Studio, Gemini entiende cualquier
+  forma de pedir las cosas y **actúa**: crea alarmas, temporizadores, notas, gastos, eventos,
+  alertas del dólar, prepara mensajes, abre apps, **busca en Google** noticias y datos
+  actuales, y **recuerda** lo que le cuentes ("recuerda que mi cumpleaños es el 5 de mayo").
+- **Cualquier API de IA**: también acepta claves de ChatGPT (OpenAI), Claude, Groq,
+  OpenRouter, DeepSeek, Mistral, Grok o cualquier API compatible con OpenAI. La clave se
+  detecta sola y también puede usar las herramientas. Sin claves usa una IA gratuita.
+- **Hecha para el teléfono**: abre las apps instaladas (WhatsApp, YouTube, Spotify, Maps,
+  Waze…), envía SMS y correos, crea eventos en el calendario, dice dónde estás y busca
+  lugares cercanos ("gasolineras cerca"). El botón atrás cierra ventanas, deslizas entre
+  pestañas, jalas para actualizar el dólar y recibes fotos compartidas desde otras apps.
 - **Voz y chat con IA**: toca el micrófono o escribe. La IA recuerda la conversación,
   conoce tus pendientes, alarmas y gastos, y responde en tiempo real (el texto aparece
   mientras se escribe). Puedes encadenar órdenes: *"pon un timer de 5 minutos y anota comprar pan"*.
@@ -69,6 +80,22 @@ npm run test:e2e               # prueba completa en navegador (móvil y escritor
 3. Cada vez que subas cambios a `main`, la página se actualiza en
    `https://gabo23andres.github.io/yarbis-veneco/` (puede tardar 1–2 minutos).
 
+## App para Android (APK)
+
+El flujo **Compilar APK Android** (`.github/workflows/build-apk.yml`) crea `YARBIS.apk`
+cada vez que cambia `android/` o al ejecutarlo a mano en *Actions → Compilar APK Android →
+Run workflow*. En `main` además lo publica en **Releases**. La app abre YARBIS a pantalla
+completa con Chrome por dentro (Trusted Web Activity), así funcionan el micrófono, la cámara
+y las notificaciones.
+
+- Para que las actualizaciones se instalen encima sin desinstalar, guarda una llave de firma
+  fija en *Settings → Secrets → Actions*: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`
+  y `KEY_PASSWORD`. Sin ellas se usa una llave temporal en cada compilación.
+- Para quitar la barra de dirección dentro de la app hace falta publicar
+  `.well-known/assetlinks.json` en la raíz del dominio (`gabo23andres.github.io`), con la
+  huella SHA‑256 que imprime el flujo.
+- Alternativa sin APK: en Chrome de Android, menú ⋮ → *Instalar app*.
+
 ## Estructura
 
 | Archivo | Para qué sirve |
@@ -76,6 +103,9 @@ npm run test:e2e               # prueba completa en navegador (móvil y escritor
 | `index.html`, `styles.css` | Interfaz (4 pestañas: Asistente, Notas, Finanzas, Más) |
 | `js/app.js` | Controlador principal: navegación, chat, voz y acciones |
 | `js/yarbisBrain.js` | Entiende los comandos y habla con la IA |
+| `js/geminiAgent.js` | Cerebro Gemini: herramientas, búsqueda en Google y memoria |
+| `js/aiProviders.js` | Otras APIs de IA (OpenAI, Claude, Groq, OpenRouter…) |
+| `js/appLauncher.js` | Abre las apps instaladas del teléfono |
 | `js/speechEngine.js` | Reconocimiento y síntesis de voz |
 | `js/finance.js`, `js/financeView.js` | Tasas en vivo y pestaña Finanzas |
 | `js/reminders.js` | Notas, temporizadores y alarmas |
@@ -88,8 +118,10 @@ npm run test:e2e               # prueba completa en navegador (móvil y escritor
 | `js/home.js` | Panel "Hoy" del inicio |
 | `js/settings.js` | Ajustes, tema, agenda y copias de seguridad |
 | `sw.js`, `manifest.json`, `icons/` | App instalable y uso sin conexión |
+| `android/` | Proyecto Android (TWA) para el APK |
 
-Tus datos (notas, contactos, clave de IA) se guardan sólo en tu dispositivo.
+Tus datos (notas, contactos, claves de IA, recuerdos) se guardan sólo en tu dispositivo.
+Las claves de IA nunca van en el código ni en las copias de seguridad.
 
 ## Limitaciones conocidas
 
