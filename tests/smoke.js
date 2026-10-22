@@ -85,6 +85,11 @@ async function mockNetwork(context) {
     if (url.includes('llm7.io')) return route.fulfill({ status: 503, body: '' });
     if (url.includes('generativelanguage.googleapis.com')) {
       if (url.includes('/models?')) return json({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }] });
+      const raw = route.request().postData() || '';
+      // Voz a texto: la grabación llega como audio en inline_data
+      if (raw.includes('"inline_data"') && raw.includes('"mime_type":"audio/')) {
+        return json({ candidates: [{ content: { parts: [{ text: '¿A cómo está el dólar?' }] } }] });
+      }
       // Cerebro Gemini simulado: primero usa una herramienta y luego confirma
       const body = route.request().postData() || '';
       const part = body.includes('functionResponse')
@@ -499,6 +504,98 @@ async function run() {
         assert.deepStrictEqual(errs, []);
       });
       await desk.close();
+    }
+
+    /* ------------- SIN RECONOCIMIENTO DE VOZ (Brave, iPhone instalado) ------------- */
+    console.log('Voz por grabación (sin SpeechRecognition)');
+    {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-VE', serviceWorkers: 'block', permissions: ['microphone'] });
+      await mockNetwork(ctx);
+      await ctx.addInitScript(FAKE_SPEECH);
+      await ctx.addInitScript(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition; });
+      const p = await ctx.newPage();
+      const errs = [];
+      p.on('pageerror', e => errs.push(e.message));
+      p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text()); });
+      await p.goto(BASE);
+      await p.waitForSelector('#welcome');
+      await check('graba, Gemini transcribe y responde', async () => {
+        await p.evaluate(() => window.YarbisApp.brain.setApiKey('AIzaSyPRUEBA_PRUEBA_PRUEBA_PRUEBA_123'));
+        await p.click('#btnMic');
+        await p.waitForFunction(() => window.speechEngine.isListening && window.speechEngine.recorder, null, { timeout: 5000 });
+        await p.waitForTimeout(1500);
+        await p.click('#btnMic');
+        await p.waitForFunction(() => document.querySelector('#messages').textContent.includes('Dólar BCV'), null, { timeout: 10000 });
+        assert.match(await p.textContent('#messages'), /¿A cómo está el dólar\?/);
+      });
+      await check('sin clave avisa cómo activar la voz', async () => {
+        await p.evaluate(() => window.YarbisApp.brain.setApiKey(''));
+        await p.click('#btnMic');
+        await p.waitForFunction(() => /clave de Gemini/.test(document.querySelector('.toast-host') ? document.querySelector('.toast-host').textContent : ''), null, { timeout: 5000 });
+      });
+      await check('voz por grabación: sin errores de JavaScript', async () => {
+        assert.deepStrictEqual(errs, []);
+      });
+      await ctx.close();
+    }
+
+    /* ------------------- IPHONE ------------------- */
+    console.log('iPhone (Safari)');
+    {
+      const ctx = await browser.newContext({
+        viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'es-VE', serviceWorkers: 'block',
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
+      });
+      await mockNetwork(ctx);
+      await ctx.addInitScript(FAKE_SPEECH);
+      await ctx.addInitScript(() => { try { localStorage.setItem('yarbis_visits', '1'); } catch (e) {} });
+      const p = await ctx.newPage();
+      const errs = [];
+      p.on('pageerror', e => errs.push(e.message));
+      p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text()); });
+      await p.goto(BASE);
+      await p.waitForSelector('#welcome');
+      const sayI = async (text, expect) => {
+        await p.fill('#chatInput', text);
+        await p.press('#chatInput', 'Enter');
+        await p.waitForFunction((e) => document.querySelector('#messages').textContent.includes(e), expect, { timeout: 8000 });
+      };
+      await check('iPhone: plataforma, ícono y aviso para instalar', async () => {
+        assert.strictEqual(await p.getAttribute('html', 'data-platform'), 'ios');
+        assert.strictEqual(await p.getAttribute('link[rel="apple-touch-icon"]', 'href'), 'icons/apple-touch-icon.png');
+        assert.ok((await p.$$('link[rel="apple-touch-startup-image"]')).length >= 8);
+        await p.waitForSelector('.install-hint', { timeout: 6000 });
+        assert.match(await p.textContent('.install-hint'), /Agregar a inicio/);
+        assert.ok(await p.$('.haptic-switch input[switch]'));
+        await p.screenshot({ path: path.join(SHOTS, 'iphone-install-hint.png') });
+        await p.click('.install-hint .icon-btn');
+        assert.ok(!(await p.$('.install-hint')));
+        assert.strictEqual(await p.evaluate(() => localStorage.getItem('yarbis_install_hint')), 'off');
+      });
+      await check('iPhone: alarma con opción de calendario', async () => {
+        await sayI('alarma a las 7 de la mañana', 'Alarma para las');
+        const btn = p.locator('#messages .msg.assistant').last().locator('button', { hasText: 'Que suene con la app cerrada' });
+        assert.strictEqual(await btn.count(), 1);
+        const href = await p.evaluate(() => new Promise((resolve) => {
+          const orig = HTMLAnchorElement.prototype.click;
+          HTMLAnchorElement.prototype.click = function () { HTMLAnchorElement.prototype.click = orig; resolve(this.getAttribute('href')); };
+          const b = [...document.querySelectorAll('#messages button')].filter(x => /Que suene/.test(x.textContent)).pop();
+          b.click();
+        }));
+        assert.match(href, /^data:text\/calendar/);
+        const ics = decodeURIComponent(href.split(',').slice(1).join(','));
+        assert.match(ics, /TRIGGER:PT0M/);
+      });
+      await check('iPhone: SMS con el formato de iPhone', async () => {
+        await sayI('guarda el contacto Mamá 0414 1234567', 'Mamá');
+        await sayI('mándale un mensaje de texto a mamá que diga ya llegué', 'SMS para');
+        const hrefs = await p.$$eval('#messages .msg.assistant:last-child a', as => as.map(a => a.getAttribute('href')));
+        assert.ok(hrefs.includes('sms:04141234567&body=ya%20llegu%C3%A9'), hrefs.join(' '));
+      });
+      await check('iPhone: sin errores de JavaScript', async () => {
+        assert.deepStrictEqual(errs, []);
+      });
+      await ctx.close();
     }
   } finally {
     await browser.close();

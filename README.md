@@ -12,6 +12,13 @@ Asistente por voz en el navegador, hecho para Venezuela. Es una página estátic
 - **Cualquier API de IA**: también acepta claves de ChatGPT (OpenAI), Claude, Groq,
   OpenRouter, DeepSeek, Mistral, Grok o cualquier API compatible con OpenAI. La clave se
   detecta sola y también puede usar las herramientas. Sin claves usa una IA gratuita.
+- **iPhone y Android**: si el navegador no reconoce la voz (iPhone con la app instalada,
+  Brave, Firefox), YARBIS graba lo que dices y Gemini (o Whisper con OpenAI/Groq) lo
+  convierte en texto. Las alarmas se pueden guardar en el **Calendario del teléfono** para
+  que suenen con la app cerrada, y la pantalla se mantiene encendida mientras corre un
+  temporizador. En iPhone: ícono y pantallas de arranque propias, vibración (iOS 18), sin
+  zoom al escribir, aviso para "Agregar a inicio", apps que abren con su esquema
+  (WhatsApp, Spotify, YouTube, Apple Maps, Waze, Instagram) y SMS con el formato de iPhone.
 - **Hecha para el teléfono**: abre las apps instaladas (WhatsApp, YouTube, Spotify, Maps,
   Waze…), envía SMS y correos, crea eventos en el calendario, dice dónde estás y busca
   lugares cercanos ("gasolineras cerca"). El botón atrás cierra ventanas, deslizas entre
@@ -112,7 +119,8 @@ y las notificaciones.
 | `js/yarbisBrain.js` | Entiende los comandos y habla con la IA |
 | `js/geminiAgent.js` | Cerebro Gemini: herramientas, búsqueda en Google y memoria |
 | `js/aiProviders.js` | Otras APIs de IA (OpenAI, Claude, Groq, OpenRouter…) |
-| `js/appLauncher.js` | Abre las apps instaladas del teléfono |
+| `js/appLauncher.js` | Abre las apps instaladas del teléfono (intents en Android, esquemas en iPhone) |
+| `js/voiceRecorder.js` | Graba la voz cuando el navegador no la reconoce |
 | `js/speechEngine.js` | Reconocimiento y síntesis de voz |
 | `js/finance.js`, `js/financeView.js` | Tasas en vivo y pestaña Finanzas |
 | `js/reminders.js` | Notas, temporizadores y alarmas |
@@ -133,7 +141,8 @@ Las claves de IA nunca van en el código ni en las copias de seguridad.
 ## Limitaciones conocidas
 
 - El reconocimiento de voz funciona en Chrome y Safari, no en Firefox.
-- En iPhone, las alarmas sólo suenan con la app abierta; instálala en la pantalla de inicio.
+- En iPhone, las alarmas de YARBIS sólo suenan con la app abierta: usa "📅 Que suene con la
+  app cerrada" para guardarlas en el Calendario del iPhone.
 - Las APIs gratuitas de IA y tasas pueden fallar; la app reintenta, usa servicios de
   respaldo (IA: Pollinations y LLM7; clima: Open-Meteo y wttr.in) y, si todo falla, lo avisa
   en vez de inventar datos.

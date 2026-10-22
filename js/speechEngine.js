@@ -3,6 +3,8 @@
    Reconocimiento de voz con estados claros (EN ESPERA / ESCUCHANDO /
    PROCESANDO / HABLANDO), modo manos libres estable, selección de voz y
    lectura en fragmentos para evitar cortes de Chrome en textos largos.
+   Si el navegador no reconoce voz (iPhone con la app instalada, Brave,
+   Firefox), graba el audio y la IA lo convierte en texto.
    ========================================================================== */
 
 (function (root) {
@@ -16,6 +18,26 @@
     'microsoft sabina', 'microsoft dalia', 'microsoft elvira', 'microsoft alvaro',
     'jorge', 'diego', 'lucía', 'lucia', 'carlos', 'pablo', 'helena', 'laura'
   ];
+
+  // Ordena las voces de mejor a peor: calidad (Premium/Mejorada/Natural),
+  // voces conocidas, idioma exacto y español latinoamericano.
+  function rankVoices(voices, language = 'es-ES') {
+    const lang = String(language || '').toLowerCase();
+    const score = (v) => {
+      const name = String(v.name || '').toLowerCase();
+      const vl = String(v.lang || '').toLowerCase().replace('_', '-');
+      let pts = 0;
+      if (/premium|enhanced|mejorad|neural|natural|online/.test(name)) pts += 30;
+      if (/google/.test(name)) pts += 18;
+      const idx = PRIORITY_VOICES.findIndex(p => name.includes(p));
+      if (idx >= 0) pts += 15 - idx * 0.5;
+      if (vl === lang) pts += 10;
+      else if (/^es-(ve|419|mx|us|co)$/.test(vl)) pts += 6;
+      if (/compact|eloquence|novelty|bells|bad news|bahh|bubbles|zarvox|whisper/.test(name)) pts -= 40;
+      return pts;
+    };
+    return voices.slice().sort((a, b) => score(b) - score(a));
+  }
 
   class YARBISSpeechEngine {
     constructor() {
@@ -49,6 +71,12 @@
       this.primed = false;
       this.selectedVoice = null;
       this.triedFallbackLang = false;
+
+      // Plan B: grabar y transcribir con la IA (lo configura la app)
+      this.transcriber = null;          // (blob, idioma) => Promise<texto>
+      this.canTranscribe = () => false;
+      this.useRecorder = false;
+      this.recorder = null;
 
       // Callbacks
       this.onSpeechResult = null;   // (texto) => {}
@@ -106,6 +134,14 @@
       }
     }
 
+    // iPhone (Safari 16.4+): "playback" suena aunque esté activado el modo
+    // silencio; "play-and-record" permite usar el micrófono a la vez.
+    setAudioSession(type) {
+      const session = root.navigator && root.navigator.audioSession;
+      if (!session) return;
+      try { if (session.type !== type) session.type = type; } catch (e) { /* no soportado */ }
+    }
+
     // Desbloquea el audio de iOS dentro de un gesto del usuario
     primeSpeechSynthesis() {
       if (!this.synthesis || this.primed) return;
@@ -120,10 +156,21 @@
     /* ------------------------------------------
        RECONOCIMIENTO (STT)
        ------------------------------------------ */
+    // ¿Grabar y transcribir en vez de usar el reconocimiento del navegador?
+    recorderMode() {
+      const R = root.YarbisRecorder;
+      if (!R || !R.supported() || !this.transcriber || !this.canTranscribe()) return false;
+      if (this.useRecorder || !this.recognitionSupported) return true;
+      // iPhone con la app instalada: el reconocimiento del sistema suele fallar
+      const nav = root.navigator || {};
+      return !!nav.standalone && /iPhone|iPad|iPod/i.test(nav.userAgent || '');
+    }
+
     async startListening() {
       clearTimeout(this.restartTimer);
+      if (this.recorderMode()) return this.startRecording();
       if (!this.recognitionSupported) {
-        this.emitError('Tu navegador no tiene reconocimiento de voz. Usa Chrome o Safari, o escribe tu mensaje.', true);
+        this.emitError('Este navegador no reconoce la voz. Agrega tu clave de Gemini en Ajustes y YARBIS entenderá tus audios, o usa el micrófono del teclado para dictar.', true);
         this.setContinuous(false);
         return false;
       }
@@ -131,6 +178,7 @@
       if (this.isSpeaking) this.stopSpeaking(true);
 
       this.primeSpeechSynthesis();
+      this.setAudioSession('play-and-record');
 
       const rec = new this.Recognition();
       rec.lang = this.language;
@@ -187,6 +235,16 @@
           this.restartTimer = setTimeout(() => this.startListening(), 200);
           return;
         }
+        // El servicio de voz del sistema no está disponible: pasar a grabar y transcribir
+        if ((err === 'service-not-allowed' || err === 'network') && !this.useRecorder &&
+            root.YarbisRecorder && root.YarbisRecorder.supported() && this.transcriber && this.canTranscribe()) {
+          this.useRecorder = true;
+          this.session++;
+          this.isListening = false;
+          this.stopPulse();
+          this.restartTimer = setTimeout(() => this.startListening(), 150);
+          return;
+        }
         if (err === 'not-allowed' || err === 'service-not-allowed') {
           this.setContinuous(false);
           this.emitError('El micrófono está bloqueado. Permite el acceso al micrófono en la configuración del navegador (icono del candado 🔒).', true);
@@ -228,6 +286,89 @@
       }
     }
 
+    /* ------------------------------------------
+       GRABAR Y TRANSCRIBIR
+       ------------------------------------------ */
+    newRecorder(options = {}, id = null) {
+      return new root.YarbisRecorder.VoiceRecorder({
+        ...options,
+        onLevel: (level) => {
+          if ((id === null || id === this.session) && this.onAudioLevel) this.onAudioLevel(level);
+        }
+      });
+    }
+
+    micError(e) {
+      return e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
+        ? 'El micrófono está bloqueado. Permite el acceso al micrófono en los ajustes del teléfono o del navegador.'
+        : 'No se pudo usar el micrófono.';
+    }
+
+    async startRecording() {
+      if (this.isListening) return true;
+      if (this.isSpeaking) this.stopSpeaking(true);
+      this.primeSpeechSynthesis();
+
+      this.setAudioSession('play-and-record');
+      const id = ++this.session;
+      const rec = this.newRecorder({}, id);
+      this.recorder = rec;
+      this.lastText = '';
+      this.committed = false;
+      this.isListening = true;
+      this.isProcessing = false;
+      this.setState('LISTENING');
+      if (root.audioSynth) root.audioSynth.playMicChime();
+
+      try {
+        await rec.start();
+      } catch (e) {
+        if (id !== this.session) return false;
+        this.recorder = null;
+        this.isListening = false;
+        this.setState('STANDBY');
+        this.setContinuous(false);
+        this.emitError(this.micError(e), true);
+        return false;
+      }
+      rec.done.then(result => this.handleRecording(id, result));
+      return true;
+    }
+
+    async handleRecording(id, { blob, spoke, cancelled, manual, durationMs }) {
+      if (id !== this.session || cancelled) return;
+      this.recorder = null;
+      this.isListening = false;
+      // Si lo detuviste tú después de hablar un rato, se transcribe igual
+      const heard = spoke || (manual && durationMs > 800);
+      if (!heard || !blob || blob.size < 1000) {
+        if (!this.continuousMode) this.emitError('No escuché nada. Toca el micrófono e inténtalo de nuevo.');
+        this.setState('STANDBY');
+        this.scheduleRestart(350);
+        return;
+      }
+      this.isProcessing = true;
+      this.setState('PROCESSING');
+      if (this.onInterimResult) this.onInterimResult('Entendiendo lo que dijiste…');
+      try {
+        const text = String(await this.transcriber(blob, this.language) || '').trim();
+        if (id !== this.session) return;
+        if (!text) {
+          this.isProcessing = false;
+          this.emitError('No entendí lo que dijiste. Inténtalo de nuevo.');
+          this.setState('STANDBY');
+          this.scheduleRestart(350);
+          return;
+        }
+        this.commit(text);
+      } catch (e) {
+        if (id !== this.session) return;
+        this.isProcessing = false;
+        this.setState('STANDBY');
+        this.emitError(`No pude convertir tu voz en texto: ${e.message}`);
+      }
+    }
+
     commit(text) {
       if (this.committed || !text) return;
       this.committed = true;
@@ -242,7 +383,15 @@
     stopListening(abort = false) {
       clearTimeout(this.silenceTimer);
       clearTimeout(this.restartTimer);
-      if (this.recognition && this.isListening) {
+      if (this.recorder && this.isListening) {
+        if (abort) {
+          this.session++;
+          this.recorder.cancel();
+          this.recorder = null;
+        } else {
+          this.recorder.stop(); // termina y se transcribe
+        }
+      } else if (this.recognition && this.isListening) {
         try {
           if (abort) {
             this.session++; // ignora eventos tardíos
@@ -329,15 +478,7 @@
       }
       let best = null;
       if (this.voiceName) best = voices.find(v => v.name === this.voiceName) || null;
-      if (!best) {
-        const exactLang = voices.filter(v => (v.lang || '').toLowerCase() === this.language.toLowerCase());
-        for (const name of PRIORITY_VOICES) {
-          best = exactLang.find(v => v.name.toLowerCase().includes(name)) ||
-                 voices.find(v => v.name.toLowerCase().includes(name));
-          if (best) break;
-        }
-        if (!best) best = exactLang[0] || voices[0];
-      }
+      if (!best) best = rankVoices(voices, this.language)[0];
       this.selectedVoice = best;
     }
 
@@ -390,6 +531,7 @@
       clearTimeout(this.restartTimer);
       clearTimeout(this.speakSafetyTimer);
 
+      this.setAudioSession('playback');
       const token = ++this.speakToken;
       const wasBusy = this.synthesis.speaking || this.synthesis.pending;
       this.synthesis.cancel();
@@ -483,6 +625,7 @@
        No pasa por el chat: devuelve el texto a quien lo pidió.
        ------------------------------------------ */
     listenOnce(lang) {
+      if (this.recorderMode()) return this.recordOnce(lang);
       return new Promise((resolve, reject) => {
         if (!this.recognitionSupported) { reject(new Error('Tu navegador no tiene reconocimiento de voz.')); return; }
         if (this.isListening) this.stopListening(true);
@@ -502,8 +645,63 @@
       });
     }
 
+    // Una frase grabada y transcrita (traductor)
+    async recordOnce(lang) {
+      if (this.isListening) this.stopListening(true);
+      if (this.isSpeaking) this.stopSpeaking(true);
+      const rec = this.newRecorder({ idleMs: 10000 });
+      this.oneShot = rec;
+      try {
+        await rec.start();
+      } catch (e) {
+        throw new Error(this.micError(e));
+      }
+      const { blob, spoke, cancelled, manual, durationMs } = await rec.done;
+      if (cancelled || !(spoke || (manual && durationMs > 800))) return '';
+      return String(await this.transcriber(blob, lang || this.language) || '').trim();
+    }
+
+    // Dictado largo por tramos: cada pausa se transcribe y se suma al texto
+    startRecordedDictation(lang, onUpdate) {
+      let active = true;
+      let committed = '';
+      let current = null;
+      const loop = async () => {
+        while (active) {
+          current = this.newRecorder({ silenceMs: 1200, maxMs: 25000, idleMs: 20000 });
+          try {
+            await current.start();
+          } catch (e) {
+            active = false;
+            this.emitError(this.micError(e), true);
+            break;
+          }
+          const { blob, spoke, cancelled, manual, durationMs } = await current.done;
+          if (cancelled || !(spoke || (manual && durationMs > 800))) continue;
+          onUpdate(committed, 'transcribiendo…');
+          try {
+            const text = String(await this.transcriber(blob, lang || this.language) || '').trim();
+            if (text) committed += (committed ? ' ' : '') + text;
+          } catch (e) {
+            this.emitError(`No pude transcribir: ${e.message}`);
+          }
+          onUpdate(committed, '');
+        }
+      };
+      loop();
+      return () => {
+        active = false;
+        if (current) current.stop();
+      };
+    }
+
     startDictation(lang, onUpdate) {
-      if (!this.recognitionSupported) throw new Error('Tu navegador no tiene reconocimiento de voz.');
+      if (this.isListening) this.stopListening(true);
+      if (this.recorderMode()) {
+        this.setContinuous(false);
+        return this.startRecordedDictation(lang, onUpdate);
+      }
+      if (!this.recognitionSupported) throw new Error('Este navegador no reconoce la voz. Agrega tu clave de Gemini en Ajustes para dictar.');
       if (this.isListening) this.stopListening(true);
       this.setContinuous(false);
       let active = true;
@@ -557,5 +755,6 @@
     }
   }
 
+  YARBISSpeechEngine.rankVoices = rankVoices;
   root.YARBISSpeechEngine = YARBISSpeechEngine;
 })(typeof window !== 'undefined' ? window : globalThis);

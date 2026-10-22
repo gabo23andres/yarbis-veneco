@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION_CODE: ${{ github.run_number }}
-      VERSION_NAME: 14.0.${{ github.run_number }}
+      VERSION_NAME: 15.0.${{ github.run_number }}
       HAS_SECRET: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v5

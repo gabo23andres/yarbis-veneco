@@ -372,6 +372,8 @@ class AudioSynthesizer {
 
   startAlarm() {
     this.stopAlarm();
+    // iPhone: que la alarma suene aunque esté en modo silencio (Safari 16.4+)
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* no soportado */ }
     this.playAlarmBeep();
     this.alarmTimer = setInterval(() => this.playAlarmBeep(), 1400);
     if (this.canVibrate()) {

@@ -381,6 +381,32 @@
     return r.text.trim();
   }
 
+  // Voz a texto con Whisper (OpenAI o Groq)
+  const WHISPER = { openai: 'whisper-1', groq: 'whisper-large-v3' };
+
+  function canTranscribe() {
+    const c = config();
+    return !!(c && WHISPER[c.provider]);
+  }
+
+  async function transcribe(blob, lang = 'es') {
+    const c = config();
+    if (!c || !WHISPER[c.provider]) throw new Error('Este proveedor no convierte voz en texto.');
+    const ext = /mp4|aac/.test(blob.type) ? 'm4a' : /ogg/.test(blob.type) ? 'ogg' : 'webm';
+    const form = new root.FormData();
+    form.append('file', blob, `voz.${ext}`);
+    form.append('model', WHISPER[c.provider]);
+    form.append('language', String(lang || 'es').slice(0, 2));
+    const res = await fetch(`${baseUrl(c)}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${c.key}` },
+      body: form
+    });
+    if (!res.ok) throw await errorOf(res);
+    const data = await res.json();
+    return String(data.text || '').trim();
+  }
+
   async function test(cfg) {
     const prev = S.get(KEY, null);
     const prevModel = S.getRaw(MODEL_CACHE, '');
@@ -420,5 +446,5 @@
     flush(buffer.trim());
   }
 
-  root.YarbisAIProviders = { PROVIDERS, detect, config, save, clear, isReady, label, resolveModel, run, complete, vision, test, toJsonSchema };
+  root.YarbisAIProviders = { PROVIDERS, detect, config, save, clear, isReady, label, resolveModel, run, complete, vision, test, toJsonSchema, canTranscribe, transcribe };
 })(typeof window !== 'undefined' ? window : globalThis);
