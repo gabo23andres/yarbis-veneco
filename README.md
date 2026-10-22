@@ -88,11 +88,14 @@ Run workflow*. En `main` además lo publica en **Releases**. La app abre YARBIS 
 completa con Chrome por dentro (Trusted Web Activity), así funcionan el micrófono, la cámara
 y las notificaciones.
 
-- **Llave de firma fija**: guarda la llave en el secreto `KEYSTORE_BASE64`
-  (*Settings → Secrets and variables → Actions → New repository secret*). Con ella las
-  actualizaciones se instalan encima sin desinstalar. Sin el secreto se usa una llave
-  temporal en cada compilación. Guarda también una copia del archivo `.keystore`: si se
-  pierde, no se podrá actualizar la app instalada.
+- **Llave de firma fija (automática)**: la primera compilación en `main` creó la llave y la
+  guardó en la caché de Actions (`yarbis-firma-v1`); todas las compilaciones la reutilizan,
+  así las actualizaciones se instalan encima sin desinstalar. El flujo *Mantener llave del
+  APK* (`llave-apk.yml`) la lee cada 3 días para que GitHub no la borre. Si el repositorio
+  pasa más de 60 días sin cambios, GitHub pausa ese flujo; si la llave llegara a perderse,
+  la siguiente compilación crea otra: habría que reinstalar la app una vez y actualizar
+  la huella en `assetlinks.json`. Opcional: un secreto `KEYSTORE_BASE64` tiene prioridad
+  sobre la llave de la caché.
 - **Sin barra de dirección**: Android comprueba que la app y la web son del mismo dueño
   con `https://gabo23andres.github.io/.well-known/assetlinks.json`. El archivo listo está
   en `android/assetlinks.json` (huella de la llave fija); se publica en el repositorio
