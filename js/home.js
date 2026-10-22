@@ -56,6 +56,14 @@
       const r = F.getRates();
       const cards = [];
 
+      // Sin clave de IA: invitar a activar el cerebro Gemini (gratis)
+      const P = root.YarbisAIProviders;
+      if (app.brain && !app.brain.geminiApiKey && !(P && P.isReady())) {
+        cards.push(this.card('bento-brain', () => root.YarbisSettings && root.YarbisSettings.open(),
+          el('span', { class: 'bento-label', text: '🧠 Activa el cerebro Gemini' }),
+          el('span', { class: 'bento-sub', text: 'Gratis: entiende todo lo que le pidas, actúa por ti (alarmas, notas, mensajes…), busca en Google y recuerda tus datos. Toca para pegar tu clave.' })));
+      }
+
       // Tasa del dólar
       const hist = F.getHistory(30).map(p => p.bcv);
       const ch = F.change('bcv', 7);

@@ -163,6 +163,25 @@
         $('#keyStatus').textContent = brain.geminiApiKey ? 'Modelo cambiado. Se elegirá en tu próxima pregunta.' : '';
       });
 
+      // Diagnóstico de la IA
+      $('#btnDiagnoseAI').addEventListener('click', async () => {
+        const btn = $('#btnDiagnoseAI');
+        const list = $('#aiDiagnosis');
+        btn.disabled = true;
+        list.hidden = false;
+        list.replaceChildren(U.el('li', { class: 'muted small', text: 'Probando… (puede tardar unos segundos)' }));
+        try {
+          const results = await brain.diagnoseAI();
+          list.replaceChildren(...results.map(r => U.el('li', { class: `diag-item ${r.ok ? 'ok' : 'bad'}` },
+            U.el('span', { class: 'diag-mark', text: r.ok ? '✅' : '❌' }),
+            U.el('span', null, U.el('strong', { text: r.name }), ` — ${r.detail}`))));
+        } catch (e) {
+          list.replaceChildren(U.el('li', { text: `❌ ${e.message}` }));
+        }
+        btn.disabled = false;
+        this.onAiChange();
+      });
+
       // Otra API de IA
       const P = root.YarbisAIProviders;
       const provSel = $('#setProvider');

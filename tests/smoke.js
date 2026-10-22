@@ -410,6 +410,21 @@ async function run() {
       await page.keyboard.press('Escape');
     });
 
+    await check('cerebro Gemini: tarjeta para activarlo y diagnóstico', async () => {
+      await page.evaluate(() => { window.YarbisApp.clearChat && window.YarbisApp.clearChat(); window.YarbisHome.render(); });
+      assert.ok(await page.$('.bento-brain'), 'sin clave se invita a activar Gemini');
+      await page.evaluate(() => { window.YarbisApp.brain.setApiKey('AIzaSyPRUEBA_PRUEBA_PRUEBA_PRUEBA_123'); window.YarbisHome.render(); });
+      assert.ok(!(await page.$('.bento-brain')), 'con clave la tarjeta desaparece');
+      await page.evaluate(() => window.YarbisSettings.open());
+      await page.click('#btnDiagnoseAI');
+      await page.waitForFunction(() => document.querySelectorAll('#aiDiagnosis .diag-item').length >= 3, null, { timeout: 15000 });
+      const diag = await page.textContent('#aiDiagnosis');
+      assert.match(diag, /✅Gemini — responde/);
+      assert.match(diag, /Gemini como cerebro — usó/);
+      await page.keyboard.press('Escape');
+      await page.evaluate(() => { window.YarbisApp.brain.setApiKey(''); window.YarbisReminders.schedule.cancelAllTimers(); });
+    });
+
     await check('traductor por voz lee en inglés', async () => {
       await say('traduce al inglés: buenos días', 'Inglés:');
       // En el traductor, la traducción se lee con una voz del idioma destino

@@ -1293,3 +1293,8 @@ html[data-platform="ios"][data-ipad] .install-hint::after { display: none; }
 
 /* Interruptor oculto para la vibración de iOS 18 */
 .haptic-switch { position: fixed; left: -9999px; top: 0; opacity: 0; pointer-events: none; }
+.ai-diagnosis { margin-top: 8px; }
+.diag-item { display: flex; gap: 8px; align-items: flex-start; font-size: 0.86rem; line-height: 1.4; overflow-wrap: anywhere; }
+.diag-item.bad { color: var(--text); }
+.diag-mark { flex: none; }
+.bento-brain { grid-column: 1 / -1; border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--surface)), var(--surface)); }

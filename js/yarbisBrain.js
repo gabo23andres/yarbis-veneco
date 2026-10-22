@@ -1714,6 +1714,7 @@ Reglas:
       // Cerebro: Gemini u otra API con tu clave. Conversa y además actúa con las
       // herramientas de la app. Si uno falla se prueba el otro.
       const brainMessages = [...this.history.slice(-20), { role: 'user', text: userText }];
+      let geminiBlocked = false; // clave inválida o sin cupo: no insistir con Gemini
       for (const engine of this.brainOrder()) {
         try {
           const r = engine === 'gemini'
@@ -1725,8 +1726,21 @@ Reglas:
           return { text: r.text, ai: true, actions: r.actions, effects: r.effects, sound: r.sound || undefined, tools: r.tools };
         } catch (e) {
           const who = engine === 'gemini' ? 'Gemini' : root.YarbisAIProviders.label();
+          if (engine === 'gemini' && (e.fatal || e.status === 429)) geminiBlocked = true;
           lastError = lastError ? `${lastError} · ${who}: ${e.message}` : `${who}: ${e.message}`;
           console.warn(`${who} (cerebro) falló:`, e.message);
+        }
+      }
+
+      // Gemini sin herramientas: por si el fallo fue de las herramientas, no de Gemini
+      if (this.geminiApiKey && !geminiBlocked && this.brainOrder().includes('gemini')) {
+        try {
+          answer = typeof opts.onChunk === 'function'
+            ? await this.streamGemini(messages, opts.onChunk)
+            : await this.queryGemini(messages);
+          this.lastAiEngine = 'gemini';
+        } catch (e) {
+          console.warn('Gemini (sin herramientas) falló:', e.message);
         }
       }
 
@@ -1741,15 +1755,6 @@ Reglas:
         }
       }
 
-      if (!answer && this.geminiApiKey && !lastError) {
-        try {
-          answer = await this.queryGemini(messages);
-          this.lastAiEngine = 'gemini';
-        } catch (e) {
-          lastError = e.message;
-          console.warn('Gemini falló:', e);
-        }
-      }
       if (!answer) {
         try {
           answer = await this.queryFreeAI(messages);
@@ -1915,17 +1920,7 @@ Reglas:
     }
 
     async streamGemini(messages, onChunk) {
-      const key = this.geminiApiKey;
-      const model = await this.resolveGeminiModel(key);
-      const res = await this.streamFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify(this.geminiChatBody(messages))
-      }, null, 30000);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
-      }
+      const { res } = await this.geminiFetch(this.geminiChatBody(messages), { stream: true });
       let full = '';
       await this.readSSE(res, (payload) => {
         try {
@@ -1946,7 +1941,12 @@ Reglas:
     async listGeminiModels(key) {
       const res = await U.fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } }, 10000);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const err = new Error(this.geminiErrorMessage(res.status, data));
+        err.status = res.status;
+        err.fatal = res.status === 401 || res.status === 403 || /API key not valid|API_KEY_INVALID|API key expired/i.test(JSON.stringify(data));
+        throw err;
+      }
       return (data.models || [])
         .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
         .map(m => m.name.replace(/^models\//, ''));
@@ -1983,28 +1983,99 @@ Reglas:
       return this.geminiModel;
     }
 
-    async geminiRequest(body, retry = true) {
-      const key = this.geminiApiKey;
-      const model = await this.resolveGeminiModel(key);
-      const res = await U.fetchWithTimeout(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) },
-        30000
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (retry && (res.status === 404 || res.status === 400 && /model/i.test(JSON.stringify(data)))) {
-          this.geminiModel = '';
-          await this.resolveGeminiModel(key, true);
-          return this.geminiRequest(body, false);
-        }
-        throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
+    // Pensamiento corto: respuestas rápidas para voz. Sin esto, Gemini 2.5 puede
+    // gastar todos los tokens "pensando" y devolver una respuesta vacía.
+    thinkingConfig(model) {
+      if (this.noThinkingConfig) return null;
+      if (/^gemini-2\.5-flash/.test(model)) return { thinkingBudget: 0 };
+      if (/^gemini-2\.5-pro/.test(model)) return { thinkingBudget: 128 };
+      if (/^gemini-([3-9]|\d{2})/.test(model)) return { thinkingLevel: 'low' };
+      return null;
+    }
+
+    geminiBodyFor(body, model) {
+      const generationConfig = { maxOutputTokens: 8192, ...(body.generationConfig || {}) };
+      const tc = this.thinkingConfig(model);
+      if (tc && !generationConfig.thinkingConfig) generationConfig.thinkingConfig = tc;
+      if (!tc) delete generationConfig.thinkingConfig;
+      return { ...body, generationConfig };
+    }
+
+    geminiErrorMessage(status, data) {
+      const raw = (data && data.error && data.error.message) || `HTTP ${status}`;
+      if (/API key not valid|API_KEY_INVALID|API key expired/i.test(raw)) return 'La clave de Gemini no es válida o expiró. Cópiala de nuevo desde Google AI Studio.';
+      if (status === 401 || status === 403) return `La clave no tiene permiso para usar Gemini (${raw.slice(0, 120)}).`;
+      if (status === 429) return 'Se agotó por ahora el cupo gratis de Gemini. Espera un minuto o elige el modelo "Ahorro" en Ajustes.';
+      if (status >= 500) return 'Gemini está saturado en este momento. Inténtalo de nuevo en unos segundos.';
+      return raw;
+    }
+
+    // Otro modelo para reintentar (saturado, sin cupo o retirado)
+    async alternateGeminiModel(tried) {
+      let models = this.geminiModelList;
+      if (!models) {
+        try { models = this.geminiModelList = await this.listGeminiModels(this.geminiApiKey); } catch (e) { return null; }
       }
-      const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
-      const text = parts ? parts.map(p => p.text || '').join('').trim() : '';
+      for (const pref of ['lite', 'auto', 'pro']) {
+        const pool = models.filter(m => !tried.has(m));
+        if (!pool.length) return null;
+        const pick = this.chooseModel(pool, pref);
+        if (pick && !tried.has(pick) && /^gemini-/.test(pick)) return pick;
+      }
+      return null;
+    }
+
+    // Todas las llamadas a Gemini pasan por aquí: elige modelo, ajusta el
+    // pensamiento y reintenta con otro modelo si hace falta.
+    async geminiFetch(body, { stream = false } = {}) {
+      const key = this.geminiApiKey;
+      if (!key) throw new Error('Sin clave de Gemini.');
+      let model = await this.resolveGeminiModel(key);
+      const tried = new Set();
+      let lastErr = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        tried.add(model);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`;
+        const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(this.geminiBodyFor(body, model)) };
+        const res = stream ? await this.streamFetch(url, opts, null, 30000) : await U.fetchWithTimeout(url, opts, 45000);
+        if (res.ok) return { res, model };
+        const data = await res.json().catch(() => ({}));
+        const raw = JSON.stringify(data);
+        lastErr = new Error(this.geminiErrorMessage(res.status, data));
+        lastErr.status = res.status;
+        lastErr.fatal = res.status === 401 || res.status === 403 || /API key not valid|API_KEY_INVALID|API key expired/i.test(raw);
+        if (lastErr.fatal) throw lastErr;
+        if (res.status === 400 && /thinking/i.test(raw) && !this.noThinkingConfig) {
+          this.noThinkingConfig = true;
+          tried.delete(model);
+          continue;
+        }
+        const retired = res.status === 404 || (res.status === 400 && /model/i.test(raw) && /not found|not supported|unsupported|deprecated/i.test(raw));
+        if (retired || res.status === 429 || res.status >= 500) {
+          const alt = await this.alternateGeminiModel(tried);
+          if (alt) {
+            if (retired) {
+              this.geminiModel = alt;
+              S.setRaw('yarbis_gemini_model', alt);
+            }
+            model = alt;
+            continue;
+          }
+        }
+        throw lastErr;
+      }
+      throw lastErr || new Error('Gemini no respondió.');
+    }
+
+    async geminiRequest(body) {
+      const { res } = await this.geminiFetch(body);
+      const data = await res.json().catch(() => ({}));
+      const cand = data.candidates && data.candidates[0];
+      const parts = cand && cand.content && cand.content.parts;
+      const text = parts ? parts.filter(p => !p.thought).map(p => p.text || '').join('').trim() : '';
       if (!text) {
-        const reason = data.promptFeedback && data.promptFeedback.blockReason;
-        throw new Error(reason ? `respuesta bloqueada (${reason})` : 'respuesta vacía');
+        const reason = (data.promptFeedback && data.promptFeedback.blockReason) || (cand && cand.finishReason);
+        throw new Error(reason ? `respuesta vacía (${reason})` : 'respuesta vacía');
       }
       return text;
     }
@@ -2025,7 +2096,7 @@ Reglas:
       return {
         system_instruction: { parts: [{ text: system || this.systemPrompt() }] },
         contents,
-        generationConfig: { temperature: 0.6, maxOutputTokens: 1200 }
+        generationConfig: { temperature: 0.6 }
       };
     }
 
@@ -2040,15 +2111,17 @@ Reglas:
       const prevModel = this.geminiModel;
       try {
         this.geminiApiKey = key;
-        const model = await this.resolveGeminiModel(key, true);
-        await this.geminiRequest({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 10 } });
-        return { success: true, message: `✅ Clave válida. Modelo: ${model}.`, model };
+        this.geminiModelList = null;
+        await this.resolveGeminiModel(key, true);
+        // Basta con que Gemini acepte la petición: la clave funciona
+        const { model } = await this.geminiFetch({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 256 } });
+        return { success: true, message: `✅ Clave válida. Gemini es tu cerebro (modelo ${model}).`, model };
       } catch (e) {
         this.geminiApiKey = prevKey;
         this.geminiModel = prevModel;
         if (prevModel) S.setRaw('yarbis_gemini_model', prevModel);
         else S.remove('yarbis_gemini_model');
-        return { success: false, message: `❌ ${e.name === 'AbortError' ? 'Tiempo de espera agotado.' : e.message}` };
+        return { success: false, message: `❌ ${e.name === 'AbortError' ? 'Gemini tardó demasiado en responder. Revisa tu conexión e inténtalo de nuevo.' : e.message}` };
       }
     }
 
@@ -2091,6 +2164,44 @@ Reglas:
         console.warn('IA gratuita (respaldo):', e.message);
       }
       return null;
+    }
+
+    /* ---------- Diagnóstico: prueba cada motor de IA y dice qué falla ---------- */
+    async diagnoseAI() {
+      const out = [];
+      const add = (ok, name, detail) => out.push({ ok, name, detail });
+      if (this.geminiApiKey) {
+        try {
+          const { model } = await this.geminiFetch({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 256 } });
+          add(true, 'Gemini', `responde (modelo ${model})`);
+          try {
+            const r = await root.YarbisGemini.run(this, [{ role: 'user', text: 'Usa la herramienta tasas_del_dia y dime sólo la tasa del dólar BCV.' }]);
+            add(r.tools.length > 0, 'Gemini como cerebro', r.tools.length ? `usó ${r.tools.join(', ')}: ${r.text.slice(0, 80)}` : 'respondió sin usar las herramientas');
+          } catch (e) {
+            add(false, 'Gemini como cerebro', e.message);
+          }
+        } catch (e) {
+          add(false, 'Gemini', e.message);
+        }
+      } else {
+        add(false, 'Gemini', 'sin clave: pégala arriba y toca "Guardar y probar"');
+      }
+      const P = root.YarbisAIProviders;
+      if (P && P.isReady()) {
+        try {
+          await P.complete('Responde exactamente: OK', 'Di OK');
+          add(true, P.label(), `responde (modelo ${await P.resolveModel()})`);
+        } catch (e) {
+          add(false, P.label(), e.message);
+        }
+      }
+      try {
+        const t = await this.queryFreeAI([{ role: 'user', text: 'Responde solo: OK' }], 'Responde en una palabra.');
+        add(!!t, 'IA gratuita (respaldo)', t ? 'responde' : 'no respondió');
+      } catch (e) {
+        add(false, 'IA gratuita (respaldo)', e.message);
+      }
+      return out;
     }
 
     /* ---------- Voz a texto (cuando el navegador no reconoce voz) ---------- */
