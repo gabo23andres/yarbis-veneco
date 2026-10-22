@@ -13,7 +13,6 @@
   const MEM_KEY = 'yarbis_memories';
   const MAX_MEMORIES = 60;
   const MAX_ROUNDS = 5;
-  const API = 'https://generativelanguage.googleapis.com/v1beta/models';
 
   /* ------------------------------------------
      MEMORIA: datos duraderos del usuario
@@ -64,7 +63,12 @@
      ------------------------------------------ */
   const str = (description, extra = {}) => ({ type: 'STRING', description, ...extra });
   const num = (description) => ({ type: 'NUMBER', description });
-  const obj = (properties, required = []) => ({ type: 'OBJECT', properties, required });
+  // Gemini rechaza (error 400) un OBJECT sin propiedades o con "required" vacío:
+  // las herramientas sin datos van sin "parameters".
+  const obj = (properties, required = []) => {
+    if (!Object.keys(properties).length) return undefined;
+    return required.length ? { type: 'OBJECT', properties, required } : { type: 'OBJECT', properties };
+  };
 
   const TOOLS = [
     {
@@ -347,22 +351,15 @@
      BÚSQUEDA EN GOOGLE (grounding de Gemini)
      ------------------------------------------ */
   async function webSearch(brain, query) {
-    const key = brain.geminiApiKey;
-    const model = await brain.resolveGeminiModel(key);
-    const res = await U.fetchWithTimeout(`${API}/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: `Hoy es ${isoDate()}. Busca en internet y responde en español con datos concretos, cifras y fechas: ${query}` }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 1200 }
-      })
-    }, 30000);
+    const { res } = await brain.geminiFetch({
+      contents: [{ role: 'user', parts: [{ text: `Hoy es ${isoDate()}. Busca en internet y responde en español con datos concretos, cifras y fechas: ${query}` }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: { temperature: 0.3 }
+    });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
     const cand = data.candidates && data.candidates[0];
     const parts = (cand && cand.content && cand.content.parts) || [];
-    const text = parts.map(p => p.text || '').join('').trim();
+    const text = parts.filter(p => !p.thought).map(p => p.text || '').join('').trim();
     const chunks = (cand && cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [];
     const sources = chunks.map(c => c.web).filter(w => w && w.uri).map(w => ({ uri: w.uri, title: w.title || 'Fuente' }));
     return { text: text || 'No encontré resultados.', sources };
@@ -396,26 +393,18 @@ Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramien
     return merged;
   }
 
-  async function round(brain, model, body, onText) {
-    const key = brain.geminiApiKey;
-    const res = await brain.streamFetch(`${API}/${model}:streamGenerateContent?alt=sse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify(body)
-    }, null, 30000);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      const err = new Error((data.error && data.error.message) || `HTTP ${res.status}`);
-      err.status = res.status;
-      throw err;
-    }
+  async function round(brain, body, onText) {
+    const { res } = await brain.geminiFetch(body, { stream: true });
     const raw = [];
     let text = '';
     let blocked = '';
+    let finish = '';
     await brain.readSSE(res, (payload) => {
       let data;
       try { data = JSON.parse(payload); } catch (e) { return; }
       if (data.promptFeedback && data.promptFeedback.blockReason) blocked = data.promptFeedback.blockReason;
+      const cand = data.candidates && data.candidates[0];
+      if (cand && cand.finishReason) finish = cand.finishReason;
       const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
       (parts || []).forEach(p => {
         raw.push(p);
@@ -426,34 +415,24 @@ Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramien
       });
     });
     if (blocked && !raw.length) throw new Error(`respuesta bloqueada (${blocked})`);
-    return { parts: mergeParts(raw), text };
+    const parts = mergeParts(raw);
+    if (!text.trim() && !parts.some(p => p.functionCall)) {
+      throw new Error(`respuesta vacía${finish && finish !== 'STOP' ? ` (${finish})` : ''}`);
+    }
+    return { parts, text };
   }
 
   async function run(brain, messages, onChunk) {
     const body = brain.geminiChatBody(messages);
     body.system_instruction.parts[0].text += rules();
     body.tools = [{ function_declarations: TOOLS }];
-    body.generationConfig = { ...body.generationConfig, maxOutputTokens: 2048 };
 
     const out = { effects: [], actions: [], sound: null, tools: [] };
-    let model = await brain.resolveGeminiModel(brain.geminiApiKey);
     let shown = '';
     let finalText = '';
 
     for (let i = 0; i < MAX_ROUNDS; i++) {
-      let r;
-      try {
-        r = await round(brain, model, body, (t) => onChunk && onChunk(shown + t));
-      } catch (e) {
-        // Modelo retirado: elegir otro y reintentar una vez
-        if (i === 0 && (e.status === 404 || (e.status === 400 && /model/i.test(e.message)))) {
-          brain.geminiModel = '';
-          model = await brain.resolveGeminiModel(brain.geminiApiKey, true);
-          r = await round(brain, model, body, (t) => onChunk && onChunk(shown + t));
-        } else {
-          throw e;
-        }
-      }
+      const r = await round(brain, body, (t) => onChunk && onChunk(shown + t));
       const calls = r.parts.filter(p => p.functionCall);
       if (!calls.length) {
         finalText = shown + r.text;

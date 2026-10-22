@@ -117,9 +117,16 @@
 
   async function errorOf(res) {
     const data = await res.json().catch(() => ({}));
-    const msg = (data.error && (data.error.message || data.error)) || data.message || `HTTP ${res.status}`;
-    const err = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    const raw = (data.error && (data.error.message || data.error)) || data.message || `HTTP ${res.status}`;
+    const msg = typeof raw === 'string' ? raw : JSON.stringify(raw);
+    let friendly = msg;
+    if (res.status === 401) friendly = 'La clave no es válida. Revísala en Ajustes.';
+    else if (/insufficient_quota|credit balance|billing|payment/i.test(msg)) friendly = 'Tu cuenta de ese proveedor no tiene saldo. Recárgala o usa Gemini (gratis).';
+    else if (res.status === 429) friendly = 'Llegaste al límite de uso de ese proveedor. Espera un momento.';
+    else if (res.status === 403) friendly = `Sin permiso para usar esa API (${msg.slice(0, 120)}).`;
+    const err = new Error(friendly);
     err.status = res.status;
+    err.raw = msg;
     return err;
   }
 
@@ -240,11 +247,18 @@
   }
 
   async function anthropicTurn(c, model, body, onText) {
-    const res = await fetch(`${baseUrl(c)}/messages`, {
-      method: 'POST', headers: anthropicHeaders(c, model),
-      body: JSON.stringify({ model, max_tokens: 4096, ...anthropicExtras(model), ...body, stream: true })
+    const post = (extras) => fetch(`${baseUrl(c)}/messages`, {
+      method: 'POST', headers: extras ? anthropicHeaders(c, model) : headers(c),
+      body: JSON.stringify({ model, max_tokens: 4096, ...(extras ? anthropicExtras(model) : {}), ...body, stream: true })
     });
-    if (!res.ok) throw await errorOf(res);
+    let res = await post(true);
+    if (!res.ok) {
+      const err = await errorOf(res);
+      // Si la cuenta no acepta las opciones extra (effort, modelo de respaldo), se reintenta sin ellas
+      if (err.status !== 400 || !/fallback|output_config|effort|beta/i.test(err.raw)) throw err;
+      res = await post(false);
+      if (!res.ok) throw await errorOf(res);
+    }
     const blocks = [];
     const json = [];
     let text = '';
@@ -299,8 +313,8 @@
 
     const chat = isClaude ? anthropicMessages(messages) : openaiMessages(system, messages);
     const toolDefs = () => (isClaude
-      ? tools.map(t => ({ name: t.name, description: t.description, input_schema: toJsonSchema(t.parameters) }))
-      : tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: toJsonSchema(t.parameters) } })));
+      ? tools.map(t => ({ name: t.name, description: t.description, input_schema: toJsonSchema(t.parameters) || { type: 'object', properties: {} } }))
+      : tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: toJsonSchema(t.parameters) || { type: 'object', properties: {} } } })));
 
     for (let i = 0; i < maxRounds; i++) {
       const body = isClaude ? { system, messages: chat } : { messages: chat };

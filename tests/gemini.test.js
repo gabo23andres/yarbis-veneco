@@ -245,3 +245,91 @@ test('Claude actúa con herramientas y devuelve los bloques intactos', async () 
   assert.ok(R.notes.items.some(n => n.text === 'Pagar la luz'));
   P.clear();
 });
+
+test('herramientas válidas para la API de Gemini (sin OBJECT vacíos)', () => {
+  const TYPES = ['STRING', 'NUMBER', 'INTEGER', 'BOOLEAN', 'ARRAY', 'OBJECT'];
+  const check = (schema, where) => {
+    assert.ok(TYPES.includes(schema.type), `${where}: tipo ${schema.type}`);
+    if (schema.type === 'OBJECT') {
+      assert.ok(schema.properties && Object.keys(schema.properties).length, `${where}: OBJECT sin propiedades`);
+      if ('required' in schema) {
+        assert.ok(schema.required.length, `${where}: required vacío`);
+        schema.required.forEach(r => assert.ok(r in schema.properties, `${where}: required ${r} no existe`));
+      }
+      Object.entries(schema.properties).forEach(([k, v]) => check(v, `${where}.${k}`));
+    }
+    if (schema.type === 'ARRAY') check(schema.items, `${where}[]`);
+  };
+  for (const t of G.TOOLS) {
+    assert.match(t.name, /^[a-z_]+$/);
+    if (t.parameters !== undefined) check(t.parameters, t.name);
+  }
+  // Los proveedores tipo OpenAI/Claude reciben siempre un objeto
+  assert.ok(G.TOOLS.some(t => t.parameters === undefined));
+});
+
+test('cuerpo para Gemini: pensamiento corto y tokens suficientes', () => {
+  const b25 = brain.geminiBodyFor({ contents: [] }, 'gemini-2.5-flash');
+  assert.deepStrictEqual(b25.generationConfig.thinkingConfig, { thinkingBudget: 0 });
+  assert.ok(b25.generationConfig.maxOutputTokens >= 4096);
+  assert.deepStrictEqual(brain.geminiBodyFor({ contents: [] }, 'gemini-2.5-pro').generationConfig.thinkingConfig, { thinkingBudget: 128 });
+  assert.deepStrictEqual(brain.geminiBodyFor({ contents: [] }, 'gemini-3-flash').generationConfig.thinkingConfig, { thinkingLevel: 'low' });
+  assert.strictEqual(brain.geminiBodyFor({ contents: [] }, 'gemini-2.0-flash').generationConfig.thinkingConfig, undefined);
+});
+
+test('probar clave: vale aunque Gemini devuelva texto vacío', async () => {
+  const realFetch = win.fetch;
+  win.fetch = async (url) => {
+    if (String(url).includes('/models?')) return new Response(JSON.stringify({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }] }), { status: 200 });
+    return new Response(JSON.stringify({ candidates: [{ finishReason: 'MAX_TOKENS', content: { role: 'model' } }] }), { status: 200 });
+  };
+  try {
+    const r = await brain.testGeminiApiKey('AIzaSyCLAVE_DE_PRUEBA_DE_TREINTA_Y_NUEVE');
+    assert.strictEqual(r.success, true, r.message);
+    assert.match(r.message, /gemini-2\.5-flash/);
+  } finally {
+    win.fetch = realFetch;
+  }
+});
+
+test('probar clave: mensaje claro si la clave es inválida', async () => {
+  const realFetch = win.fetch;
+  win.fetch = async () => new Response(JSON.stringify({ error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } }), { status: 400 });
+  try {
+    const r = await brain.testGeminiApiKey('AIzaSyCLAVE_DE_PRUEBA_DE_TREINTA_Y_NUEVE');
+    assert.strictEqual(r.success, false);
+    assert.match(r.message, /no es válida/);
+  } finally {
+    win.fetch = realFetch;
+  }
+});
+
+test('Gemini reintenta con otro modelo si se agota el cupo y quita "thinking" si no se acepta', async () => {
+  const realFetch = win.fetch;
+  const calls = [];
+  brain.geminiModel = 'gemini-2.5-flash';
+  brain.geminiModelList = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+  brain.noThinkingConfig = false;
+  win.fetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    calls.push({ url: String(url), thinking: body.generationConfig.thinkingConfig });
+    if (calls.length === 1) return new Response(JSON.stringify({ error: { code: 429, message: 'Resource exhausted' } }), { status: 429 });
+    if (calls.length === 2) return new Response(JSON.stringify({ error: { code: 400, message: 'Unknown name "thinkingConfig"' } }), { status: 400 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Hola desde el respaldo' }] } }] }), { status: 200 });
+  };
+  try {
+    const text = await brain.geminiRequest({ contents: [{ role: 'user', parts: [{ text: 'hola' }] }] });
+    assert.strictEqual(text, 'Hola desde el respaldo');
+    assert.match(calls[0].url, /gemini-2\.5-flash:generateContent/);
+    assert.match(calls[1].url, /gemini-2\.5-flash-lite:generateContent/);
+    assert.ok(calls[1].thinking);
+    assert.match(calls[2].url, /gemini-2\.5-flash-lite:generateContent/);
+    assert.strictEqual(calls[2].thinking, undefined);
+    // El modelo elegido por el usuario no cambia por un problema de cupo
+    assert.strictEqual(brain.geminiModel, 'gemini-2.5-flash');
+  } finally {
+    win.fetch = realFetch;
+    brain.noThinkingConfig = false;
+    brain.geminiModelList = null;
+  }
+});

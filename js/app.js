@@ -65,7 +65,10 @@
         brain: this.brain,
         speech: this.speech,
         onProfileChange: () => this.refreshProfile(),
-        onAiChange: () => this.updateAiChip()
+        onAiChange: () => {
+          this.updateAiChip();
+          if (root.YarbisHome) root.YarbisHome.render();
+        }
       });
 
       this.refreshProfile();
