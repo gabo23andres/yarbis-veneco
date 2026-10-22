@@ -72,7 +72,7 @@
       if (cached) {
         ['fx', 'crypto', 'fiat'].forEach(k => {
           if (cached[k] && cached[k].data && cached[k].updatedAt) {
-            this.groups[k] = { ...cached[k], status: 'cache' };
+            this.groups[k] = { ...cached[k], status: 'stored' };
           }
         });
       }
@@ -360,6 +360,10 @@
       if (!meta) return '';
       if (meta.status === 'manual') return 'Tasa manual';
       if (meta.status === 'live') return `En vivo · ${U.fmtTime(meta.updatedAt)}`;
+      if (meta.status === 'stored') {
+        const sameDay = new Date(meta.updatedAt).toDateString() === new Date().toDateString();
+        return sameDay ? `Actualizado a las ${U.fmtTime(meta.updatedAt)}` : `Actualizado ${U.timeAgo(meta.updatedAt)}`;
+      }
       if (meta.status === 'cache') return `Sin conexión · dato ${U.timeAgo(meta.updatedAt)}`;
       return 'Sin conexión · valor estimado';
     }

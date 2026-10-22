@@ -1,0 +1,14 @@
+{
+  "name": "yarbis-veneco",
+  "version": "11.0.0",
+  "private": true,
+  "description": "YARBIS: asistente personal por voz (PWA estática para GitHub Pages).",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "node tests/smoke.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

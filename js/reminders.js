@@ -219,6 +219,11 @@
       return target.getTime();
     }
 
+    stopTicking() {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    }
+
     ensureTicking() {
       if (this.tickTimer) return;
       this.tickTimer = setInterval(() => this.tick(), 1000);
@@ -406,7 +411,7 @@
             if (e.key === 'Escape') { e.stopPropagation(); this.editingId = null; this.renderNotes(); }
           });
           li.appendChild(el('div', { class: 'note-body' }, input));
-          li.appendChild(el('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Guardar', text: '✓', onClick: save }));
+          li.appendChild(el('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Guardar', title: 'Guardar', onClick: save }, U.icon('check')));
           this.notesList.appendChild(li);
           setTimeout(() => input.focus(), 0);
           return;
@@ -418,11 +423,11 @@
         body.addEventListener('dblclick', () => { this.editingId = note.id; this.renderNotes(); });
         li.appendChild(body);
         li.appendChild(el('button', {
-          type: 'button', class: 'icon-btn small', 'aria-label': 'Editar nota', title: 'Editar', text: '✏️',
+          type: 'button', class: 'icon-btn small', 'aria-label': 'Editar nota', title: 'Editar',
           onClick: () => { this.editingId = note.id; this.renderNotes(); }
-        }));
+        }, U.icon('edit')));
         li.appendChild(el('button', {
-          type: 'button', class: 'icon-btn small danger', 'aria-label': 'Borrar nota', title: 'Borrar', text: '🗑️',
+          type: 'button', class: 'icon-btn small danger', 'aria-label': 'Borrar nota', title: 'Borrar',
           onClick: () => {
             const copy = { ...note };
             this.notes.remove(note.id);
@@ -431,7 +436,7 @@
               onAction: () => { this.notes.items.unshift(copy); this.notes.save(); }
             });
           }
-        }));
+        }, U.icon('trash')));
         this.notesList.appendChild(li);
       });
     }
@@ -453,14 +458,13 @@
               el('div', { class: 'timer-info' }, time, el('span', { class: 'timer-label', text: t.label })),
               el('div', { class: 'timer-actions' },
                 el('button', {
-                  type: 'button', class: 'icon-btn small', 'aria-label': paused ? 'Reanudar' : 'Pausar',
-                  text: paused ? '▶️' : '⏸️',
+                  type: 'button', class: 'icon-btn small', 'aria-label': paused ? 'Reanudar' : 'Pausar', title: paused ? 'Reanudar' : 'Pausar',
                   onClick: () => paused ? this.schedule.resumeTimer(t.id) : this.schedule.pauseTimer(t.id)
-                }),
+                }, U.icon(paused ? 'play' : 'pause')),
                 el('button', {
-                  type: 'button', class: 'icon-btn small danger', 'aria-label': 'Cancelar temporizador', text: '✕',
+                  type: 'button', class: 'icon-btn small danger', 'aria-label': 'Cancelar temporizador', title: 'Cancelar',
                   onClick: () => this.schedule.cancelTimer(t.id)
-                }))),
+                }, U.icon('x')))),
             el('div', { class: 'progress' }, bar));
           this.timerNodes.set(t.id, { time, bar });
           this.timersList.appendChild(li);
@@ -482,9 +486,9 @@
               el('span', { class: 'alarm-label', text: a.label }),
               el('span', { class: 'note-meta', text: isTomorrow ? d.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric' }) : 'Hoy' })),
             el('button', {
-              type: 'button', class: 'icon-btn small danger', 'aria-label': 'Borrar alarma', text: '✕',
+              type: 'button', class: 'icon-btn small danger', 'aria-label': 'Borrar alarma', title: 'Borrar',
               onClick: () => this.schedule.removeAlarm(a.id)
-            })));
+            }, U.icon('x'))));
         });
       }
     }

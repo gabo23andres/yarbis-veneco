@@ -81,6 +81,11 @@
     hulkbuster: ['hulkbuster', 'dorado', 'amarillo', 'naranja']
   };
 
+  const ACCENT_NAMES = {
+    neon: 'Neón', mark85: 'Mark 85', warmachine: 'War Machine', spideriron: 'Spider-Iron',
+    wakanda: 'Wakanda', stealth: 'Sigilo', hulkbuster: 'Hulkbuster'
+  };
+
   const CURRENCY_WORDS = [
     { re: /^(dolares?|usd|\$|verdes?|lechugas?)$/, code: 'USD' },
     { re: /^(bolivares?|bs|bolos?|ves|bss)$/, code: 'VES' },
@@ -218,6 +223,11 @@
     if (/^0(4\d{2})\d{7}$/.test(digits)) return '58' + digits.slice(1);
     if (/^4\d{9}$/.test(digits)) return '58' + digits;
     return digits;
+  }
+
+  // Agrega punto final salvo que ya termine en uno (p. ej. "8:00 p. m.")
+  function sentence(text) {
+    return /[.!?…](\*\*|_)?$/.test(text) ? text : `${text}.`;
   }
 
   function pick(list) {
@@ -377,7 +387,7 @@
 
       /* ---------- Hora y fecha ---------- */
       if (has(/\b(que hora es|que horas son|dime la hora|la hora)\b/) && n.split(' ').length <= 6) {
-        return { text: `Son las ${new Date().toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })}.` };
+        return { text: sentence(`Son las ${new Date().toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })}`) };
       }
       if (has(/\b(que dia es hoy|que fecha es|fecha de hoy|en que dia estamos|a cuanto estamos)\b/)) {
         const d = new Date().toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -411,7 +421,7 @@
           const timer = this.reminders.schedule.addTimer(seconds, label);
           const when = U.fmtTime(Date.now() + seconds * 1000);
           return {
-            text: `⏱️ Temporizador de **${U.describeDuration(seconds)}**${label ? ` para "${label}"` : ''}. Sonará a las ${when}.`,
+            text: sentence(`⏱️ Temporizador de **${U.describeDuration(seconds)}**${label ? ` para "${label}"` : ''}. Sonará a las ${when}`),
             speak: `Listo, temporizador de ${U.describeDuration(seconds)}${label ? ` para ${label}` : ''}.`,
             effect: { type: 'REMINDER', id: timer && timer.id },
             actions: [{ label: 'Ver temporizadores', view: 'notes' }],
@@ -446,7 +456,7 @@
           let label = stripDay(clock.after).replace(/^(para|que|de|y|a)\s+/, '').trim();
           if (!label) {
             label = stripDay(clock.before
-              .replace(/^(pon(me)?|programa(me)?|crea(me)?|agrega|configura|activa)?\s*(una\s+)?(alarma|despertador)?\s*/, '')
+              .replace(/^(pon(me)?|programa(me)?|crea(me)?|agrega|configura|activa)?\s*((una|1)\s+)?(alarma|despertador)?\s*/, '')
               .replace(/^(despiertame|recuerdame|recordarme|avisame)\s*/, ''))
               .replace(/^(para|que|de)\s+/, '')
               .trim();
@@ -460,8 +470,8 @@
           const alarm = this.reminders.schedule.addAlarm(at, label);
           const isTomorrow = new Date(at).toDateString() !== new Date().toDateString();
           return {
-            text: `⏰ Alarma para las **${U.fmtTime(at)}**${isTomorrow ? ' (mañana)' : ''}${label !== 'Alarma' ? ` · ${label}` : ''}.`,
-            speak: `Alarma programada para las ${U.fmtTime(at)}${isTomorrow ? ' de mañana' : ''}.`,
+            text: sentence(`⏰ Alarma para las **${U.fmtTime(at)}**${isTomorrow ? ' (mañana)' : ''}${label !== 'Alarma' ? ` · ${label}` : ''}`),
+            speak: sentence(`Alarma programada para las ${U.fmtTime(at)}${isTomorrow ? ' de mañana' : ''}`),
             effect: { type: 'REMINDER', id: alarm && alarm.id },
             actions: [{ label: 'Ver alarmas', view: 'notes' }],
             sound: 'success'
@@ -476,18 +486,21 @@
       const notes = this.reminders.notes;
       if (has(/\b(lee|leeme|dime|cuales son|muestrame|ensename|ver|mostrar|abre|abrir)\s+(mis\s+|las\s+)?(notas|pendientes|recordatorios)\b/) || has(/\bque\s+(notas|pendientes|tareas)\s+tengo\b/) || has(/^mis (notas|pendientes)$/)) {
         const pending = notes.pending();
-        if (!pending.length) return { text: 'No tienes notas pendientes. 🎉', actions: [{ label: 'Abrir notas', view: 'notes' }] };
+        const openIt = has(/^(abre|abrir|ver|mostrar|muestrame|ensename)\b/);
+        const effect = openIt ? { type: 'OPEN_VIEW', view: 'notes' } : undefined;
+        if (!pending.length) return { text: 'No tienes notas pendientes. 🎉', actions: [{ label: 'Abrir notas', view: 'notes' }], effect };
         const top = pending.slice(0, 7);
         return {
+          effect,
           text: `Tienes ${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}:\n` + top.map(x => `- ${x.text}`).join('\n') + (pending.length > top.length ? `\n- …y ${pending.length - top.length} más` : ''),
-          speak: `Tienes ${pending.length} pendientes: ${top.map(x => x.text).join('. ')}.`,
+          speak: `Tienes ${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}: ${top.map(x => x.text).join('. ')}.`,
           actions: [{ label: 'Abrir notas', view: 'notes' }]
         };
       }
       if (has(/\b(borra|elimina|limpia|quita)\s+(todas\s+)?(mis\s+|las\s+)?notas\b/) && !has(/\bnota\s+(de|que)\b/)) {
         return {
           text: `¿Seguro que quieres borrar tus ${notes.items.length} notas? Esto no se puede deshacer.`,
-          actions: [{ label: 'Sí, borrar todas', command: 'notes-clear-all', danger: true }]
+          actions: [{ label: 'Sí, borrar todas', command: 'notes-clear-all-confirmed', danger: true }]
         };
       }
       const doneQuery =
@@ -585,7 +598,7 @@
       }
 
       /* ---------- Navegación GPS ---------- */
-      const dest = grab(/^(?:como\s+llego\s+a|como\s+llegar\s+a|ruta\s+(?:a|hacia|para)|llevame\s+a|navega(?:r)?\s+(?:a|hacia)|direccion\s+(?:a|de|hacia)|ir\s+a)\s+(.+)$/d);
+      const dest = grab(/^(?:como\s+(?:llego|llegar|voy|ir)\s+(?:a|al|hasta)|ruta\s+(?:a|al|hacia|para)|llevame\s+(?:a|al)|navega(?:r)?\s+(?:a|al|hacia)|direccion\s+(?:a|al|de|del|hacia)|ir\s+(?:a|al))\s+(.+)$/d);
       if (dest) {
         const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
         return {
@@ -637,7 +650,7 @@
       if (has(/\b(tema|color|protocolo|modo)\b/)) {
         for (const [accent, words] of Object.entries(ACCENTS)) {
           if (words.some(w => new RegExp(`\\b${w}\\b`).test(n))) {
-            return { text: `Tema ${accent === 'neon' ? 'Neón' : U.capitalize(accent)} activado.`, effect: { type: 'THEME', accent }, sound: 'success' };
+            return { text: `Tema ${ACCENT_NAMES[accent]} activado.`, effect: { type: 'THEME', accent }, sound: 'success' };
           }
         }
       }
@@ -785,7 +798,7 @@
       let speak = `${fromLabel.replace('Bs.', '')} ${from === 'VES' ? 'bolívares' : ''} son ${F.format(result, toCode).replace('Bs.', '')} ${to === 'VES' ? 'bolívares' : ''}`;
 
       if (from === 'VES' || to === 'VES') {
-        const other = parallel ? 'BCV' : 'paralelo';
+        const other = parallel ? 'BCV' : 'paralela';
         const otherFrom = from === 'VES' ? (parallel ? 'VES_BCV' : 'VES_PAR') : fromCode;
         const otherTo = to === 'VES' ? (parallel ? 'VES_BCV' : 'VES_PAR') : toCode;
         const alt = F.convert(amount, otherFrom, otherTo, rates);
@@ -906,10 +919,12 @@
     }
 
     saveContact(name, phone) {
-      const cleanName = U.normalize(name);
+      const cleanName = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
       const cleanPhone = String(phone || '').replace(/[^\d+]/g, '');
       if (!cleanName || !cleanPhone) return false;
       const contacts = this.getAllContacts();
+      // Evita duplicados que sólo difieren en acentos (mama / mamá)
+      Object.keys(contacts).forEach(k => { if (U.normalize(k) === U.normalize(cleanName)) delete contacts[k]; });
       contacts[cleanName] = cleanPhone;
       S.set('yarbis_contacts', contacts);
       return true;
@@ -917,18 +932,17 @@
 
     deleteContact(name) {
       const contacts = this.getAllContacts();
-      delete contacts[U.normalize(name)];
+      Object.keys(contacts).forEach(k => { if (U.normalize(k) === U.normalize(name)) delete contacts[k]; });
       S.set('yarbis_contacts', contacts);
     }
 
     findContacts(query) {
       const q = U.normalize(query).replace(/^(a|al|mi|la|el)\s+/, '').trim();
       if (!q) return [];
-      const contacts = this.getAllContacts();
-      if (contacts[q]) return [{ name: q, phone: contacts[q] }];
-      return Object.entries(contacts)
-        .filter(([k]) => k.includes(q) || q.includes(k) || k.split(' ')[0] === q.split(' ')[0])
-        .map(([name, phone]) => ({ name, phone }));
+      const entries = Object.entries(this.getAllContacts()).map(([name, phone]) => ({ name, phone, key: U.normalize(name) }));
+      const exact = entries.filter(e => e.key === q);
+      if (exact.length) return exact;
+      return entries.filter(e => e.key.includes(q) || q.includes(e.key) || e.key.split(' ')[0] === q.split(' ')[0]);
     }
 
     callContact(who) {

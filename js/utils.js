@@ -208,6 +208,18 @@
     return node;
   }
 
+  // Ícono del sprite SVG definido en index.html
+  function icon(name) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = root.document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'icon');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = root.document.createElementNS(NS, 'use');
+    use.setAttribute('href', `#i-${name}`);
+    svg.appendChild(use);
+    return svg;
+  }
+
   function $(selector, scope) {
     return (scope || root.document).querySelector(selector);
   }
@@ -373,6 +385,8 @@
       }));
     }
     host.appendChild(node);
+    // Máximo dos avisos a la vez: el más viejo se va
+    while (host.children.length > 2) host.firstElementChild.remove();
     const duration = options.duration || 3500;
     setTimeout(() => {
       node.classList.add('toast-out');
@@ -428,6 +442,7 @@
     timeAgo,
     uid,
     el,
+    icon,
     $,
     $$,
     renderMarkdown,

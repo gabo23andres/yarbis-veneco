@@ -364,11 +364,17 @@ class AudioSynthesizer {
     });
   }
 
+  // El navegador sólo permite vibrar después de que el usuario tocó la página
+  canVibrate() {
+    if (!navigator.vibrate) return false;
+    return !navigator.userActivation || navigator.userActivation.hasBeenActive;
+  }
+
   startAlarm() {
     this.stopAlarm();
     this.playAlarmBeep();
     this.alarmTimer = setInterval(() => this.playAlarmBeep(), 1400);
-    if (navigator.vibrate) {
+    if (this.canVibrate()) {
       try { navigator.vibrate([400, 200, 400, 200, 400]); } catch (e) { /* ignorar */ }
     }
   }
@@ -376,7 +382,7 @@ class AudioSynthesizer {
   stopAlarm() {
     if (this.alarmTimer) clearInterval(this.alarmTimer);
     this.alarmTimer = null;
-    if (navigator.vibrate) {
+    if (this.canVibrate()) {
       try { navigator.vibrate(0); } catch (e) { /* ignorar */ }
     }
   }

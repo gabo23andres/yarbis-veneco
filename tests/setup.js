@@ -27,6 +27,7 @@ function loadApp() {
   globalThis.YarbisFinance.groups.fx.data = { bcv: 100, paralelo: 120, eur: 110 };
   globalThis.YarbisFinance.groups.fx.status = 'live';
   globalThis.YarbisFinance.groups.fx.updatedAt = Date.now();
+  globalThis.YarbisFinance.groups.fiat.data = { USD: 1, EUR: 0.92 };
   const brain = new globalThis.YARBISBrain();
   // La IA nunca se consulta en las pruebas
   brain.askAI = async () => ({ text: '__AI__', ai: true });

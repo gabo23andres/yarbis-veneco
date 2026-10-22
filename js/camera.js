@@ -216,7 +216,7 @@
             const text = await this.decode(this.video, this.video.videoWidth, this.video.videoHeight);
             if (text) {
               if (root.audioSynth) root.audioSynth.playSuccessChime();
-              if (navigator.vibrate) navigator.vibrate(80);
+              if (root.audioSynth && root.audioSynth.canVibrate()) navigator.vibrate(80);
               this.close();
               if (this.onCode) this.onCode(text);
               this.busy = false;

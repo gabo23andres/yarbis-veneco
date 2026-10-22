@@ -1,1907 +1,721 @@
 /* ==========================================================================
-   YARBIS - MAIN APPLICATION CONTROLLER 3.0
-   Personal Assistant: STT/TTS, Arc Reactor Canvas, Notes, Timers & Settings
+   YARBIS - CONTROLADOR PRINCIPAL
+   Une todo: navegación, chat, voz, cámara, alarmas, ajustes y PWA.
+   Todos los eventos se enlazan una sola vez aquí (no hay onclick en el HTML),
+   lo que evita que los botones se disparen dos veces.
    ========================================================================== */
 
-function initYarbisApp() {
-  if (window.__yarbisInitialized) return;
-  window.__yarbisInitialized = true;
+(function (root) {
+  'use strict';
 
-  // Initialize Subsystems Resiliently
-  let audioSynth = window.audioSynth;
-  if (!audioSynth && window.AudioSynthesizer) {
-    try { audioSynth = new window.AudioSynthesizer(); } catch(e) { console.warn('AudioSynth init warning:', e); }
-  }
+  const U = root.YarbisUtils;
+  const S = U.storage;
+  const CHAT_KEY = 'yarbis_chat_log';
+  const MAX_LOG = 80;
 
-  let arcReactor = null;
-  if (window.ArcReactorEngine) {
-    try { arcReactor = new window.ArcReactorEngine('arcReactorCanvas', 'waveformCanvas', 'bgParticlesCanvas'); } catch(e) { console.warn('ArcReactor init warning:', e); }
-  }
+  const VIEW_HASH = { assistant: '', notes: '#notas', finance: '#finanzas', more: '#mas' };
+  const HASH_VIEW = { '': 'assistant', '#notas': 'notes', '#finanzas': 'finance', '#mas': 'more' };
+  const SCAN_LABEL = { general: '📷 Foto para analizar', document: '📄 Documento para leer', translate: '🌐 Texto para traducir' };
 
-  let speechEngine = window.speechEngine;
-  if (!speechEngine && window.YARBISSpeechEngine) {
-    try { speechEngine = new window.YARBISSpeechEngine(); } catch(e) { console.warn('SpeechEngine init warning:', e); }
-  }
+  const App = {
+    view: 'assistant',
+    queue: Promise.resolve(),
+    log: [],
+    torchStream: null,
+    installPrompt: null,
+    ringing: null,
 
-  let brain = window.brain;
-  if (!brain && window.YARBISBrain) {
-    try { brain = new window.YARBISBrain(); } catch(e) { console.warn('Brain init warning:', e); }
-  }
+    init() {
+      if (this.started) return;
+      this.started = true;
 
-  window.audioSynth = audioSynth || { playClickSound: ()=>{}, playSuccessChime: ()=>{}, playScanSound: ()=>{}, initContext: ()=>{} };
-  window.arcReactor = arcReactor || { setAudioLevel: ()=>{}, setState: ()=>{} };
-  window.speechEngine = speechEngine || { speak: ()=>{}, toggleListening: ()=>{}, primeSpeechSynthesis: ()=>{} };
-  window.brain = brain || { userName: 'Señor', assistantName: 'YARBIS' };
+      this.audio = root.audioSynth;
+      this.speech = new root.YARBISSpeechEngine();
+      root.speechEngine = this.speech;
+      this.brain = new root.YARBISBrain();
+      root.brain = this.brain;
+      this.finance = root.YarbisFinance;
+      this.reminders = root.YarbisReminders;
 
-  // UI Element References
-  const btnMic = document.getElementById('btnMic');
-  const btnSettings = document.getElementById('btnSettings');
-  const btnScan = document.getElementById('btnScan');
-  const btnMute = document.getElementById('btnMute');
-  const textInput = document.getElementById('textInput');
-  const btnSend = document.getElementById('btnSend');
-  const transcriptScroll = document.getElementById('transcriptScroll');
-  const btnClearChat = document.getElementById('btnClearChat');
+      this.orb = new root.VoiceOrb('orbCanvas');
+      this.orbMini = new root.VoiceOrb('orbMini');
+      this.applyOrbColor();
+      root.YarbisTheme.onChange(() => this.applyOrbColor());
 
-  const stateValue = document.getElementById('stateValue');
-  const hudClock = document.getElementById('hudClock');
-  const promptPills = document.querySelectorAll('.prompt-pill');
-  const protocolButtons = document.querySelectorAll('.btn-protocol');
-  const appPills = document.querySelectorAll('.app-pill');
+      this.loadChat();
+      this.bindNavigation();
+      this.bindComposer();
+      this.bindVoice();
+      this.bindDelegation();
+      this.bindDialogs();
+      this.bindReminders();
+      this.bindFinance();
+      this.bindPwa();
 
-  // Header Brand Elements
-  const displayAssistantName = document.getElementById('displayAssistantName');
-  const displayUserGreeting = document.getElementById('displayUserGreeting');
-
-  // Notes & Reminders Elements
-  const inputNewNote = document.getElementById('inputNewNote');
-  const btnAddNote = document.getElementById('btnAddNote');
-  const notesScroll = document.getElementById('notesScroll') || document.getElementById('notesList');
-  const notesCount = document.getElementById('notesCount');
-  const noteFilterBtns = document.querySelectorAll('.btn-filter-note');
-
-  // Timer Elements
-  const timerWidget = document.getElementById('timerWidget');
-  const timerDisplay = document.getElementById('timerDisplay');
-  const timerProgress = document.getElementById('timerProgress');
-  const btnCancelTimer = document.getElementById('btnCancelTimer');
-
-  // Telemetry Elements
-  const valEnergy = document.getElementById('valEnergy');
-  const barEnergy = document.getElementById('barEnergy');
-  const valTemp = document.getElementById('valTemp');
-  const barTemp = document.getElementById('barTemp');
-  const radarStatus = document.getElementById('radarStatus');
-
-  // Modal Settings Elements
-  const modalSettings = document.getElementById('modalSettings');
-  const btnCloseSettings = document.getElementById('btnCloseSettings');
-  const btnSaveSettings = document.getElementById('btnSaveSettings');
-  const inputAssistantName = document.getElementById('inputAssistantName');
-  const inputUserName = document.getElementById('inputUserName');
-  const inputGeminiKey = document.getElementById('inputGeminiKey');
-  const selectLanguage = document.getElementById('selectLanguage');
-  const keyTestResult = document.getElementById('keyTestResult');
-
-  // Modal Elements
-  const modalWatermarksCleaner = document.getElementById('modalWatermarksCleaner');
-  const modalCryptoFinance = document.getElementById('modalCryptoFinance');
-  const modalInstallPwa = document.getElementById('modalInstallPwa');
-  const btnCloseInstallPwa = document.getElementById('btnCloseInstallPwa');
-  const txtWatermarkInput = document.getElementById('txtWatermarkInput');
-  const txtWatermarkOutput = document.getElementById('txtWatermarkOutput');
-  const valZeroWidthTokens = document.getElementById('valZeroWidthTokens');
-  const valAiPatterns = document.getElementById('valAiPatterns');
-  const valPurityScore = document.getElementById('valPurityScore');
-  const watermarkStatusBadge = document.getElementById('watermarkStatusBadge');
-
-  let isMuted = false;
-  let activeFilter = 'all';
-  let notesList = JSON.parse(localStorage.getItem('yarbis_notes_list') || '[]');
-  let timerInterval = null;
-  let timerTotalSec = 0;
-  let timerRemainingSec = 0;
-
-  // Initialize Clock
-  function updateClock() {
-    const now = new Date();
-    hudClock.textContent = now.toLocaleTimeString('es-ES', { hour12: false });
-  }
-  setInterval(updateClock, 1000);
-  updateClock();
-
-  // Load and apply Assistant & User Name Branding
-  function updateBrandingUI() {
-    if (displayAssistantName) {
-      displayAssistantName.textContent = (brain.assistantName || 'YARBIS').toUpperCase();
-    }
-    if (displayUserGreeting) {
-      displayUserGreeting.textContent = `Tu Asistente Personal • ${brain.userName}`;
-    }
-  }
-  updateBrandingUI();
-
-  // Live Telemetry Simulation
-  function simulateTelemetry() {
-    if (!valEnergy) return;
-    const energyVal = (98.2 + (Math.random() * 0.6 - 0.3)).toFixed(1);
-    const tempVal = Math.floor(41 + Math.random() * 3);
-
-    valEnergy.textContent = `${energyVal}%`;
-    barEnergy.style.width = `${energyVal}%`;
-    valTemp.textContent = `${tempVal}°C`;
-    barTemp.style.width = `${Math.min(tempVal, 100)}%`;
-  }
-  setInterval(simulateTelemetry, 3000);
-
-  // Audio Level Sync from Speech Engine to Canvas Reactor
-  speechEngine.onAudioLevel = (level) => {
-    arcReactor.setAudioLevel(level);
-  };
-
-  speechEngine.onPermissionError = (msg) => {
-    appendMessage(brain.assistantName, `⚠️ ${msg}`);
-  };
-
-  // State Change Sync
-  speechEngine.onStateChange = (state) => {
-    arcReactor.setState(state);
-
-    if (state === 'LISTENING') {
-      btnMic.classList.add('listening');
-      stateValue.textContent = 'ESCUCHANDO...';
-      stateValue.style.color = 'var(--color-danger)';
-    } else if (state === 'PROCESSING') {
-      btnMic.classList.remove('listening');
-      stateValue.textContent = 'PROCESANDO...';
-      stateValue.style.color = 'var(--color-accent)';
-    } else if (state === 'SPEAKING') {
-      btnMic.classList.remove('listening');
-      stateValue.textContent = 'HABLANDO...';
-      stateValue.style.color = 'var(--color-primary)';
-    } else {
-      btnMic.classList.remove('listening');
-      stateValue.textContent = 'EN ESPERA';
-      stateValue.style.color = 'var(--color-primary)';
-    }
-  };
-
-  // Speech Recognition Result
-  speechEngine.onSpeechResult = async (userText) => {
-    appendMessage('USER', userText);
-    await handleUserQuery(userText);
-  };
-
-  speechEngine.onInterimResult = (interimText) => {
-    if (stateValue) {
-      stateValue.textContent = `🎙️ "${interimText.substring(0, 30)}"`;
-      stateValue.style.color = 'var(--color-danger)';
-    }
-  };
-
-  // Central User Command Handler
-  async function handleUserQuery(userText) {
-    if (!userText) return;
-
-    audioSynth.playSuccessChime();
-
-    // Query Brain
-    const response = await brain.processCommand(userText);
-
-    // Play Special Sound FX if requested
-    if (response.soundFx === 'hulkbuster') {
-      audioSynth.playHulkbusterSound();
-    } else if (response.soundFx === 'scan') {
-      audioSynth.playScanSound();
-    } else if (response.soundFx === 'repulsor') {
-      audioSynth.playRepulsorSound();
-    } else if (response.soundFx === 'nano') {
-      audioSynth.playNanoArmorSound();
-    }
-
-    // Apply UI Theme Changes if commanded
-    if (response.themeChange) {
-      applyTheme(response.themeChange);
-    }
-
-    // Special Action Handlers
-    if (response.action === 'CLEAR_LOGS') {
-      transcriptScroll.innerHTML = '';
-    } else if (response.action === 'SCAN') {
-      if (radarStatus) radarStatus.textContent = "AMENAZAS DETECTADAS: 0 • PERÍMETRO SEGURO";
-    } else if (response.action === 'OPEN_URL') {
-      launchApp(response.url, response.deepLink);
-    } else if (response.action === 'ADD_NOTE' && response.noteText) {
-      addNote(response.noteText);
-    } else if (response.action === 'SHOW_NOTES') {
-      setNoteFilter('all');
-    } else if (response.action === 'CLEAR_NOTES') {
-      clearAllNotes();
-    } else if (response.action === 'SET_TIMER' && response.durationSeconds) {
-      startTimer(response.durationSeconds);
-    } else if (response.action === 'CANCEL_TIMER') {
-      cancelTimer();
-    } else if (response.action === 'SET_ALARM' && response.alarmData) {
-      addAlarm(response.alarmData);
-    } else if (response.action === 'OPEN_CAMERA') {
-      openCameraModal();
-    } else if (response.action === 'OPEN_WATERMARK_CLEANER') {
-      openWatermarkModal();
-    } else if (response.action === 'OPEN_CRYPTO_HUB') {
-      openCryptoFinanceModal();
-    } else if (response.action === 'TORCH_ON') {
-      toggleTorch(true);
-    } else if (response.action === 'TORCH_OFF') {
-      toggleTorch(false);
-    } else if (response.action === 'CHECK_BATTERY') {
-      if ('getBattery' in navigator) {
-        try {
-          const battery = await navigator.getBattery();
-          const levelPct = Math.round(battery.level * 100);
-          const isCharging = battery.charging ? 'y se encuentra cargando ⚡' : 'desconectado del cargador 🔋';
-          const batteryMsg = `Tu teléfono tiene ${levelPct}% de batería ${isCharging}, ${brain.userName}.`;
-          appendMessage(brain.assistantName, batteryMsg, true);
-          speechEngine.speak(batteryMsg);
-          return;
-        } catch (e) {}
-      }
-      const genericMsg = `No tengo acceso al sensor de batería en este navegador, pero los sistemas de energía de YARBIS están al 100%, ${brain.userName}.`;
-      appendMessage(brain.assistantName, genericMsg, true);
-      speechEngine.speak(genericMsg);
-      return;
-    }
-
-    // Append Assistant Response
-    appendMessage(brain.assistantName, response.textResponse, true);
-
-    // If opening an app, call, or whatsapp, attach interactive launch button
-    if (response.action === 'OPEN_URL') {
-      const isCall = (response.deepLink && response.deepLink.startsWith('tel:')) || (response.url && response.url.startsWith('tel:'));
-      const isWa = (response.deepLink && response.deepLink.includes('whatsapp')) || (response.url && response.url.includes('whatsapp'));
-      
-      const btnLabel = isCall ? '📞 Tocar para Iniciar Llamada' : (isWa ? '💬 Tocar para Abrir WhatsApp' : '🚀 Abrir Aplicación');
-      const actionUrl = response.deepLink || response.url;
-
-      const launchCard = document.createElement('div');
-      launchCard.style.marginTop = '8px';
-      launchCard.innerHTML = `<a href="${actionUrl}" style="display:inline-block; background:var(--color-primary); color:#04070d; font-weight:700; font-size:0.78rem; padding:8px 16px; border-radius:20px; text-decoration:none; box-shadow:0 0 15px var(--hud-glow);">${btnLabel}</a>`;
-      transcriptScroll.appendChild(launchCard);
-      transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
-
-      launchApp(response.url, response.deepLink);
-    }
-
-    // Speak Response
-    speechEngine.speak(response.textResponse);
-  }
-
-  // Append Chat Message
-  function appendMessage(sender, messageText, animateTypewriter = false) {
-    const msgDiv = document.createElement('div');
-    const isUser = sender === 'USER';
-    msgDiv.className = `chat-msg ${isUser ? 'user' : 'yarbis'}`;
-
-    const authorSpan = document.createElement('span');
-    authorSpan.className = 'msg-author';
-    authorSpan.textContent = isUser ? brain.userName.toUpperCase() : `${brain.assistantName.toUpperCase()} OS`;
-
-    const bodyDiv = document.createElement('div');
-    bodyDiv.className = 'msg-body';
-
-    msgDiv.appendChild(authorSpan);
-    msgDiv.appendChild(bodyDiv);
-    transcriptScroll.appendChild(msgDiv);
-
-    if (animateTypewriter && !isUser) {
-      let index = 0;
-      bodyDiv.textContent = '';
-      const typeInterval = setInterval(() => {
-        bodyDiv.textContent += messageText.charAt(index);
-        index++;
-        transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
-        if (index >= messageText.length) {
-          clearInterval(typeInterval);
-        }
-      }, 14);
-    } else {
-      bodyDiv.textContent = messageText;
-      transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
-    }
-  }
-
-  // Smart Application Launcher for Mobile Native Apps & Web
-  function launchApp(webUrl, deepLink) {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const targetUrl = (isMobile && deepLink) ? deepLink : (webUrl || deepLink);
-
-    if (!targetUrl) return;
-
-    if (targetUrl.startsWith('tel:') || targetUrl.startsWith('whatsapp:') || targetUrl.startsWith('sms:') || targetUrl.startsWith('whatsapp-business:')) {
-      window.location.href = targetUrl;
-    } else if (isMobile) {
-      window.location.href = targetUrl;
-    } else {
-      window.open(webUrl || targetUrl, '_blank');
-    }
-  }
-
-  // Theme Switcher
-  function applyTheme(themeName) {
-    document.body.className = '';
-    if (themeName && themeName !== 'default') {
-      document.body.classList.add(themeName);
-    }
-
-    const computedPrimary = getComputedStyle(document.body).getPropertyValue('--color-primary').trim();
-    const computedRgb = getComputedStyle(document.body).getPropertyValue('--color-primary-rgb').trim();
-    arcReactor.setTheme(computedPrimary, computedRgb);
-
-    audioSynth.playProtocolAlert();
-  }
-
-  /* ==========================================
-     NOTES & REMINDERS CONTROLLER
-     ========================================== */
-  function saveNotes() {
-    localStorage.setItem('yarbis_notes_list', JSON.stringify(notesList));
-    renderNotes();
-  }
-
-  function addNote(text) {
-    if (!text || !text.trim()) return;
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    const newNote = {
-      id: Date.now(),
-      text: text.trim(),
-      completed: false,
-      timestamp: timeStr
-    };
-    notesList.unshift(newNote);
-    saveNotes();
-  }
-
-  function toggleNoteCompleted(id) {
-    notesList = notesList.map(n => n.id === id ? { ...n, completed: !n.completed } : n);
-    saveNotes();
-  }
-
-  function deleteNote(id) {
-    notesList = notesList.filter(n => n.id !== id);
-    saveNotes();
-  }
-
-  function clearAllNotes() {
-    notesList = [];
-    saveNotes();
-  }
-
-  function setNoteFilter(filter) {
-    activeFilter = filter;
-    noteFilterBtns.forEach(btn => {
-      if (btn.getAttribute('data-filter') === filter) {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
-      }
-    });
-    renderNotes();
-  }
-
-  function renderNotes() {
-    notesScroll.innerHTML = '';
-
-    const filtered = notesList.filter(n => {
-      if (activeFilter === 'active') return !n.completed;
-      if (activeFilter === 'completed') return n.completed;
-      return true;
-    });
-
-    const activeCount = notesList.filter(n => !n.completed).length;
-    notesCount.textContent = `${activeCount} ${activeCount === 1 ? 'NOTA' : 'NOTAS'}`;
-
-    if (filtered.length === 0) {
-      const emptyDiv = document.createElement('div');
-      emptyDiv.className = 'empty-notes';
-      emptyDiv.textContent = activeFilter === 'completed'
-        ? 'No hay notas completadas.'
-        : 'No hay notas o recordatorios. ¡Agrega uno nuevo!';
-      notesScroll.appendChild(emptyDiv);
-      return;
-    }
-
-    filtered.forEach(note => {
-      const itemDiv = document.createElement('div');
-      itemDiv.className = `note-item ${note.completed ? 'completed' : ''}`;
-
-      const checkBtn = document.createElement('button');
-      checkBtn.className = 'btn-note-check';
-      checkBtn.innerHTML = note.completed ? '✓' : '';
-      checkBtn.title = note.completed ? 'Marcar pendiente' : 'Marcar completado';
-      checkBtn.addEventListener('click', () => {
-        audioSynth.playClickSound();
-        toggleNoteCompleted(note.id);
+      root.YarbisCleaner.mountUI();
+      root.YarbisCamera.mount({
+        onImage: (dataUrl, mode) => this.analyzeImage(dataUrl, mode),
+        onCode: (text) => this.showScannedCode(text)
+      });
+      root.YarbisSettings.mount({
+        brain: this.brain,
+        speech: this.speech,
+        onProfileChange: () => this.refreshProfile(),
+        onAiChange: () => this.updateAiChip()
       });
 
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'note-content';
+      this.refreshProfile();
+      this.updateAiChip();
+      this.showView(HASH_VIEW[root.location.hash] || 'assistant', { replace: true });
+    },
 
-      const textSpan = document.createElement('span');
-      textSpan.className = 'note-text';
-      textSpan.textContent = note.text;
+    /* ==========================================
+       NAVEGACIÓN
+       ========================================== */
+    bindNavigation() {
+      U.$$('[data-view]').forEach(btn => {
+        btn.addEventListener('click', () => this.showView(btn.dataset.view));
+      });
+      root.addEventListener('hashchange', () => {
+        const v = HASH_VIEW[root.location.hash];
+        if (v && v !== this.view) this.showView(v, { fromHash: true });
+      });
+    },
 
-      const timeSpan = document.createElement('span');
-      timeSpan.className = 'note-time';
-      timeSpan.textContent = note.timestamp;
+    showView(name, opts = {}) {
+      if (name === 'settings') { root.YarbisSettings.open(); return; }
+      if (name === 'cleaner') { U.$('#dlgCleaner').showModal(); return; }
+      if (!VIEW_HASH.hasOwnProperty(name)) name = 'assistant';
+      const prev = this.view;
+      this.view = name;
 
-      contentDiv.appendChild(textSpan);
-      contentDiv.appendChild(timeSpan);
-
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn-note-delete';
-      delBtn.innerHTML = '✕';
-      delBtn.title = 'Eliminar nota';
-      delBtn.addEventListener('click', () => {
-        audioSynth.playClickSound();
-        deleteNote(note.id);
+      U.$$('.view').forEach(v => v.classList.toggle('active', v.dataset.viewName === name));
+      U.$$('[data-view]').forEach(b => {
+        const active = b.dataset.view === name;
+        b.classList.toggle('active', active);
+        if (active) b.setAttribute('aria-current', 'page');
+        else b.removeAttribute('aria-current');
       });
 
-      itemDiv.appendChild(checkBtn);
-      itemDiv.appendChild(contentDiv);
-      itemDiv.appendChild(delBtn);
-
-      notesScroll.appendChild(itemDiv);
-    });
-  }
-
-  // Note Input Listener
-  if (btnAddNote && inputNewNote) {
-    const handleAddNoteSubmit = () => {
-      const val = inputNewNote.value.trim();
-      if (val) {
-        audioSynth.playClickSound();
-        addNote(val);
-        inputNewNote.value = '';
+      if (!opts.fromHash) {
+        const hash = VIEW_HASH[name];
+        const url = hash || root.location.pathname + root.location.search;
+        if (opts.replace) root.history.replaceState(null, '', url);
+        else if (root.location.hash !== hash) root.history.pushState(null, '', url);
       }
-    };
-    btnAddNote.addEventListener('click', handleAddNoteSubmit);
-    inputNewNote.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleAddNoteSubmit();
-    });
-  }
 
-  // Note Filter Buttons
-  noteFilterBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      audioSynth.playClickSound();
-      setNoteFilter(btn.getAttribute('data-filter'));
-    });
-  });
+      if (name === 'finance') root.YarbisFinanceView.onShow();
+      else if (prev === 'finance') root.YarbisFinanceView.onHide();
+      if (name === 'assistant') this.scrollChat();
+    },
 
-  /* ==========================================
-     TIMERS & COUNTDOWNS CONTROLLER
-     ========================================== */
-  function startTimer(seconds) {
-    cancelTimer();
-
-    timerTotalSec = seconds;
-    timerRemainingSec = seconds;
-
-    if (timerWidget) timerWidget.style.display = 'flex';
-    updateTimerDisplay();
-
-    timerInterval = setInterval(() => {
-      timerRemainingSec--;
-      updateTimerDisplay();
-
-      if (timerRemainingSec <= 0) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-
-        // Finish Alarm
-        audioSynth.playProtocolAlert();
-        const finishMsg = `¡${brain.userName}! El temporizador de ${formatTime(timerTotalSec)} ha finalizado.`;
-        appendMessage(brain.assistantName, `⏰ ${finishMsg}`);
-        speechEngine.speak(finishMsg);
-
-        setTimeout(() => {
-          if (timerWidget) timerWidget.style.display = 'none';
-        }, 5000);
-      }
-    }, 1000);
-  }
-
-  function cancelTimer() {
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
-    }
-    if (timerWidget) timerWidget.style.display = 'none';
-  }
-
-  function updateTimerDisplay() {
-    if (timerDisplay) {
-      timerDisplay.textContent = formatTime(timerRemainingSec);
-    }
-    if (timerProgress) {
-      const pct = (timerRemainingSec / timerTotalSec) * 100;
-      timerProgress.style.width = `${Math.max(0, Math.min(100, pct))}%`;
-    }
-  }
-
-  function formatTime(totalSec) {
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-
-  if (btnCancelTimer) {
-    btnCancelTimer.addEventListener('click', () => {
-      audioSynth.playClickSound();
-      cancelTimer();
-    });
-  }
-
-  /* ==========================================
-     GENERAL EVENT LISTENERS & SHORTCUTS
-     ========================================== */
-
-  // Mic Button Click
-  if (btnMic) {
-    btnMic.addEventListener('click', async () => {
-      audioSynth.initContext();
-      audioSynth.playClickSound();
-      speechEngine.primeSpeechSynthesis();
-      await speechEngine.toggleListening();
-    });
-  }
-
-  // Continuous Hands-Free Listening Toggle
-  const btnContinuous = document.getElementById('btnContinuous');
-  if (btnContinuous) {
-    btnContinuous.addEventListener('click', () => {
-      audioSynth.initContext();
-      audioSynth.playClickSound();
-      speechEngine.continuousMode = !speechEngine.continuousMode;
-      btnContinuous.classList.toggle('active', speechEngine.continuousMode);
-      
-      const msg = speechEngine.continuousMode 
-        ? 'Modo Manos Libres (Escucha Continua) Activado' 
-        : 'Modo Manos Libres Desactivado';
-      
-      appendMessage(brain.assistantName, `🔄 ${msg}`);
-      speechEngine.speak(msg);
-
-      if (speechEngine.continuousMode && !speechEngine.isListening) {
-        speechEngine.startListening();
-      }
-    });
-  }
-
-  // Scan Button Click
-  if (btnScan) {
-    btnScan.addEventListener('click', () => {
-      audioSynth.initContext();
-      audioSynth.playClickSound();
-      appendMessage('USER', 'Escaneo de amenazas');
-      handleUserQuery('escaneo de amenazas');
-    });
-  }
-
-  // Arc Reactor Click
-  const arcCanvas = document.getElementById('arcReactorCanvas');
-  if (arcCanvas) {
-    arcCanvas.addEventListener('click', () => {
-      audioSynth.initContext();
-      audioSynth.playRepulsorSound();
-      arcReactor.setAudioLevel(1.0);
-      speechEngine.speak(`Núcleo del asistente ${brain.assistantName} operando al 100% de capacidad.`);
-    });
-  }
-
-  // Clear Chat Button
-  if (btnClearChat) {
-    btnClearChat.addEventListener('click', () => {
-      audioSynth.playClickSound();
-      transcriptScroll.innerHTML = '';
-    });
-  }
-
-  // Text Input Submit
-  function submitTextInput() {
-    const val = textInput.value.trim();
-    if (val) {
-      audioSynth.initContext();
-      audioSynth.playClickSound();
-      appendMessage('USER', val);
-      handleUserQuery(val);
-      textInput.value = '';
-    }
-  }
-
-  if (btnSend) {
-    btnSend.addEventListener('click', submitTextInput);
-  }
-  if (textInput) {
-    textInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submitTextInput();
-    });
-  }
-
-  // Prompt Pills
-  promptPills.forEach(pill => {
-    pill.addEventListener('click', () => {
-      audioSynth.initContext();
-      audioSynth.playClickSound();
-      const promptText = pill.getAttribute('data-prompt');
-      appendMessage('USER', promptText);
-      handleUserQuery(promptText);
-    });
-  });
-
-  // Protocol / Theme Buttons
-  protocolButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      audioSynth.initContext();
-      audioSynth.playClickSound();
-      const themeName = btn.getAttribute('data-theme');
-      applyTheme(themeName);
-    });
-  });
-
-  // Mute Button
-  if (btnMute) {
-    btnMute.addEventListener('click', () => {
-      isMuted = !isMuted;
-      audioSynth.setMuted(isMuted);
-      audioSynth.playClickSound();
-      btnMute.innerHTML = isMuted ? '🔇' : '🔊';
-    });
-  }
-
-  // AI Badge Status Updates
-  const btnTestKey = document.getElementById('btnTestKey');
-  const aiStatusText = document.getElementById('aiStatusText');
-  const aiStatusDot = document.getElementById('aiStatusDot');
-
-  function updateAiStatusBadge() {
-    if (!aiStatusText) return;
-    if (brain.geminiApiKey) {
-      aiStatusText.textContent = 'GEMINI LIVE';
-      if (aiStatusDot) aiStatusDot.style.backgroundColor = 'var(--color-success)';
-    } else {
-      aiStatusText.textContent = 'IA EN VIVO';
-      if (aiStatusDot) aiStatusDot.style.backgroundColor = 'var(--color-primary)';
-    }
-  }
-  updateAiStatusBadge();
-
-  if (btnTestKey && inputGeminiKey && keyTestResult) {
-    btnTestKey.addEventListener('click', async () => {
-      audioSynth.playClickSound();
-      keyTestResult.textContent = '⚡ Probando conexión en tiempo real con Google Gemini API...';
-      keyTestResult.style.color = 'var(--color-accent)';
-      const res = await brain.testGeminiApiKey(inputGeminiKey.value);
-      keyTestResult.textContent = res.message;
-      keyTestResult.style.color = res.success ? 'var(--color-success)' : 'var(--color-danger)';
-      if (res.success) {
-        audioSynth.playSuccessChime();
-      }
-    });
-  }
-
-  // Contacts Agenda UI Controller
-  const inputContactName = document.getElementById('inputContactName');
-  const inputContactPhone = document.getElementById('inputContactPhone');
-  const btnAddContact = document.getElementById('btnAddContact');
-  const contactsListDisplay = document.getElementById('contactsListDisplay');
-
-  function renderContactsUI() {
-    if (!contactsListDisplay) return;
-    const contacts = brain.getAllContacts();
-    const keys = Object.keys(contacts);
-    if (keys.length === 0) {
-      contactsListDisplay.textContent = 'No hay contactos guardados en tu agenda. Puedes añadir un contacto arriba o por voz.';
-      return;
-    }
-
-    contactsListDisplay.innerHTML = keys.map(k => 
-      `<span style="display:inline-block; background:rgba(255,255,255,0.1); border:1px solid var(--hud-glass-border); border-radius:10px; padding:2px 8px; margin:2px;">
-        👤 <strong>${k.toUpperCase()}</strong>: ${contacts[k]}
-        <button onclick="window.yarbisDeleteContact('${k}')" style="background:none; border:none; color:var(--color-danger); cursor:pointer; font-weight:bold; margin-left:4px;">✕</button>
-      </span>`
-    ).join('');
-  }
-
-  window.yarbisDeleteContact = (name) => {
-    brain.deleteContact(name);
-    renderContactsUI();
-  };
-
-  if (btnAddContact && inputContactName && inputContactPhone) {
-    btnAddContact.addEventListener('click', () => {
-      const name = inputContactName.value.trim();
-      const phone = inputContactPhone.value.trim();
-      if (name && phone) {
-        audioSynth.playClickSound();
-        brain.saveContact(name, phone);
-        inputContactName.value = '';
-        inputContactPhone.value = '';
-        renderContactsUI();
-      }
-    });
-  }
-
-  const btnImportPhoneContacts = document.getElementById('btnImportPhoneContacts');
-  const inputVcfFile = document.getElementById('inputVcfFile');
-
-  // Native Web Contact Picker API (iOS Safari 14.5+ & Android Chrome)
-  if (btnImportPhoneContacts) {
-    btnImportPhoneContacts.addEventListener('click', async () => {
-      audioSynth.playClickSound();
-      if ('contacts' in navigator && 'select' in navigator.contacts) {
-        try {
-          const props = ['name', 'tel'];
-          const opts = { multiple: true };
-          const contacts = await navigator.contacts.select(props, opts);
-          if (contacts && contacts.length > 0) {
-            let count = 0;
-            contacts.forEach(c => {
-              const name = (c.name && c.name[0]) ? c.name[0] : '';
-              const tel = (c.tel && c.tel[0]) ? c.tel[0] : '';
-              if (name && tel) {
-                brain.saveContact(name, tel);
-                count++;
-              }
-            });
-            renderContactsUI();
-            audioSynth.playSuccessChime();
-            speechEngine.speak(`Se han importado ${count} contactos de tu teléfono a YARBIS, ${brain.userName}.`);
-          }
-        } catch (err) {
-          console.warn('Contact picker cancelled or failed:', err);
-        }
-      } else {
-        alert('Tu navegador no admite la selección directa de contactos. Puedes usar el botón "Cargar Archivo .VCF" para importar tu lista de contactos exportada.');
-      }
-    });
-  }
-
-  // Parse .VCF Contact File
-  if (inputVcfFile) {
-    inputVcfFile.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        const text = evt.target.result;
-        const vcardBlocks = text.split(/END:VCARD/i);
-        let count = 0;
-
-        vcardBlocks.forEach(block => {
-          const nameMatch = block.match(/FN:(.*)/i) || block.match(/N:(.*)/i);
-          const telMatch = block.match(/TEL.*:(.*)/i);
-          if (nameMatch && telMatch) {
-            let name = nameMatch[1].replace(/;/g, ' ').trim();
-            let tel = telMatch[1].trim();
-            if (name && tel) {
-              brain.saveContact(name, tel);
-              count++;
-            }
-          }
-        });
-
-        renderContactsUI();
-        audioSynth.playSuccessChime();
-        speechEngine.speak(`Se han importado ${count} contactos del archivo VCF a tu agenda, ${brain.userName}.`);
+    /* ==========================================
+       CHAT
+       ========================================== */
+    bindComposer() {
+      const form = U.$('#composer');
+      const input = U.$('#chatInput');
+      const autosize = () => {
+        input.style.height = 'auto';
+        input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+        const hasText = input.value.trim().length > 0;
+        form.classList.toggle('has-text', hasText);
+        U.$('#btnSend').hidden = !hasText;
       };
-      reader.readAsText(file);
-    });
-  }
-
-  // Settings Modal Controls
-  const openSettingsModal = (e) => {
-    if (e && e.type === 'touchend') e.preventDefault();
-    audioSynth.playClickSound();
-    if (inputAssistantName) inputAssistantName.value = brain.assistantName;
-    if (inputUserName) inputUserName.value = brain.userName;
-    if (inputGeminiKey) inputGeminiKey.value = brain.geminiApiKey;
-    if (selectLanguage) selectLanguage.value = speechEngine.language || 'es-ES';
-    renderContactsUI();
-    if (keyTestResult) {
-      keyTestResult.textContent = brain.geminiApiKey
-        ? '⚡ Clave Gemini configurada y activa.'
-        : 'Si dejas el campo vacío, YARBIS utilizará el motor de IA Gratuito en vivo de forma automática.';
-      keyTestResult.style.color = 'var(--color-text-dim)';
-    }
-    modalSettings.classList.add('active');
-  };
-
-  if (btnSettings) {
-    btnSettings.addEventListener('click', openSettingsModal);
-    btnSettings.addEventListener('touchend', openSettingsModal);
-  }
-
-  const closeSettingsModal = (e) => {
-    if (e && e.type === 'touchend') e.preventDefault();
-    audioSynth.playClickSound();
-    modalSettings.classList.remove('active');
-  };
-
-  if (btnCloseSettings) {
-    btnCloseSettings.addEventListener('click', closeSettingsModal);
-    btnCloseSettings.addEventListener('touchend', closeSettingsModal);
-  }
-
-  function saveSettingsModal() {
-    const newAssistantName = inputAssistantName ? inputAssistantName.value : 'YARBIS';
-    const newUserName = inputUserName ? inputUserName.value : 'Señor';
-    const apiKey = inputGeminiKey ? inputGeminiKey.value : '';
-    const selectedLang = selectLanguage ? selectLanguage.value : 'es-ES';
-
-    brain.setNames(newAssistantName, newUserName);
-    brain.setApiKey(apiKey);
-    speechEngine.setLanguage(selectedLang);
-
-    updateBrandingUI();
-    updateAiStatusBadge();
-    renderNotes();
-
-    if (modalSettings) modalSettings.classList.remove('active');
-    audioSynth.playSuccessChime();
-    speechEngine.speak(`Configuración actualizada correctamente, ${brain.userName}.`);
-  }
-
-  if (btnSaveSettings) {
-    btnSaveSettings.addEventListener('click', (e) => {
-      if (e && e.type === 'touchend') e.preventDefault();
-      saveSettingsModal();
-    });
-  }
-
-  // Keyboard Shortcuts (Alt + M for Mic, Esc to close/clear)
-  document.addEventListener('keydown', (e) => {
-    if (e.altKey && e.key.toLowerCase() === 'm') {
-      e.preventDefault();
-      audioSynth.initContext();
-      audioSynth.playClickSound();
-      speechEngine.toggleListening();
-    } else if (e.key === 'Escape') {
-      if (modalSettings.classList.contains('active')) {
-        modalSettings.classList.remove('active');
-      } else {
-        transcriptScroll.innerHTML = '';
-      }
-    }
-  });
-
-  // Mobile Tab Switcher Controller
-  const mobileTabBtns = document.querySelectorAll('.mobile-tab-btn');
-  const voiceStage = document.querySelector('.voice-stage');
-  const telemetryPanel = document.querySelector('.telemetry-panel');
-  const terminalPanel = document.querySelector('.terminal-panel');
-
-  function switchMobileTab(tabName) {
-    mobileTabBtns.forEach(btn => {
-      if (btn.getAttribute('data-tab') === tabName) {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
-      }
-    });
-
-    if (voiceStage) voiceStage.classList.remove('active-mobile-panel');
-    if (telemetryPanel) telemetryPanel.classList.remove('active-mobile-panel');
-    if (terminalPanel) terminalPanel.classList.remove('active-mobile-panel');
-
-    if (tabName === 'voice' && voiceStage) {
-      voiceStage.classList.add('active-mobile-panel');
-    } else if (tabName === 'notes' && telemetryPanel) {
-      telemetryPanel.classList.add('active-mobile-panel');
-      renderNotes();
-    } else if (tabName === 'chat' && terminalPanel) {
-      terminalPanel.classList.add('active-mobile-panel');
-      if (transcriptScroll) transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
-    }
-  }
-
-  // Expose global methods for inline HTML onclick attributes
-  window.openSettings = openSettingsModal;
-  window.closeSettings = closeSettingsModal;
-  window.saveSettings = saveSettingsModal;
-  window.switchTab = switchMobileTab;
-  window.toggleMic = async () => {
-    audioSynth.initContext();
-    audioSynth.playClickSound();
-    speechEngine.primeSpeechSynthesis();
-    await speechEngine.toggleListening();
-  };
-  window.toggleContinuous = () => {
-    audioSynth.initContext();
-    audioSynth.playClickSound();
-    speechEngine.continuousMode = !speechEngine.continuousMode;
-    if (btnContinuous) btnContinuous.classList.toggle('active', speechEngine.continuousMode);
-    const msg = speechEngine.continuousMode ? 'Modo Manos Libres Activado' : 'Modo Manos Libres Desactivado';
-    appendMessage(brain.assistantName, `🔄 ${msg}`);
-    speechEngine.speak(msg);
-    if (speechEngine.continuousMode && !speechEngine.isListening) {
-      speechEngine.startListening();
-    }
-  };
-
-  // ==========================================
-  // CAMERA VISION & MULTI-MODE SCANNER
-  // ==========================================
-  const modalCamera = document.getElementById('modalCamera');
-  const videoCamera = document.getElementById('videoCamera');
-  const canvasCameraSnapshot = document.getElementById('canvasCameraSnapshot');
-  let cameraStream = null;
-  let currentFacingMode = 'environment';
-  let currentScanMode = 'general';
-  let isFlashOn = false;
-
-  async function startCameraStream() {
-    if (!videoCamera) return;
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-    }
-    try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: currentFacingMode } },
-        audio: false
-      });
-      videoCamera.srcObject = cameraStream;
-      await videoCamera.play();
-    } catch (err) {
-      console.warn('Camera stream error:', err);
-      alert('No se pudo acceder a la cámara. Por favor verifica los permisos en tu navegador.');
-    }
-  }
-
-  async function openCameraModal() {
-    audioSynth.playScanSound();
-    if (modalCamera) modalCamera.classList.add('active');
-    await startCameraStream();
-  }
-
-  function closeCameraModal() {
-    audioSynth.playClickSound();
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      cameraStream = null;
-    }
-    if (modalCamera) modalCamera.classList.remove('active');
-  }
-
-  window.setScanMode = (mode) => {
-    currentScanMode = mode;
-    audioSynth.playClickSound();
-    document.querySelectorAll('.btn-camera-mode').forEach(b => {
-      b.classList.toggle('active', b.getAttribute('data-mode') === mode);
-    });
-    const txtCapture = document.getElementById('txtCaptureBtn');
-    if (txtCapture) {
-      if (mode === 'document') txtCapture.textContent = '📄 Escanear Documento';
-      else if (mode === 'translate') txtCapture.textContent = '🌐 Traducir Texto';
-      else if (mode === 'qr') txtCapture.textContent = '📱 Leer Código QR';
-      else txtCapture.textContent = '📸 Escanear con IA';
-    }
-  };
-
-  window.toggleCameraFlash = async () => {
-    audioSynth.playClickSound();
-    if (!cameraStream) return;
-    const track = cameraStream.getVideoTracks()[0];
-    if (track) {
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      if (capabilities.torch) {
-        try {
-          isFlashOn = !isFlashOn;
-          await track.applyConstraints({ advanced: [{ torch: isFlashOn }] });
-          const btnFlash = document.getElementById('btnToggleFlash');
-          if (btnFlash) btnFlash.classList.toggle('active', isFlashOn);
-        } catch (e) {
-          console.warn('Torch constraint error:', e);
-        }
-      } else {
-        alert('La linterna no está disponible en este dispositivo/navegador.');
-      }
-    }
-  };
-
-  window.handleGalleryUpload = (event) => {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
-    audioSynth.playClickSound();
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64Img = e.target.result;
-      closeCameraModal();
-      appendMessage('USER', '📂 [Imagen subida desde Galería]');
-      appendMessage(brain.assistantName, '⚡ Analizando imagen con visión artificial Stark...', true);
-      audioSynth.playScanSound();
-      const visionAnalysis = await brain.analyzeImage(base64Img, currentScanMode);
-      appendMessage(brain.assistantName, visionAnalysis, true);
-      speechEngine.speak(visionAnalysis);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  window.openCamera = openCameraModal;
-  window.closeCamera = closeCameraModal;
-  window.switchCamera = async () => {
-    audioSynth.playClickSound();
-    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-    await startCameraStream();
-  };
-  window.captureScan = async () => {
-    audioSynth.playClickSound();
-    if (!videoCamera || !canvasCameraSnapshot) return;
-    canvasCameraSnapshot.width = videoCamera.videoWidth || 640;
-    canvasCameraSnapshot.height = videoCamera.videoHeight || 480;
-    const ctx = canvasCameraSnapshot.getContext('2d');
-    ctx.drawImage(videoCamera, 0, 0, canvasCameraSnapshot.width, canvasCameraSnapshot.height);
-    const base64Img = canvasCameraSnapshot.toDataURL('image/jpeg', 0.85);
-    closeCameraModal();
-    appendMessage('USER', `📸 [Foto enviada a Escáner (${currentScanMode.toUpperCase()})]`);
-    appendMessage(brain.assistantName, '⚡ Analizando imagen con visión artificial Stark...', true);
-    audioSynth.playScanSound();
-    const visionAnalysis = await brain.analyzeImage(base64Img, currentScanMode);
-    appendMessage(brain.assistantName, visionAnalysis, true);
-    speechEngine.speak(visionAnalysis);
-
-    if (currentScanMode === 'document' && visionAnalysis.length > 20) {
-      appendMessage(brain.assistantName, `💡 Puedes copiar este texto o guardarlo tocando [📝 Notas]`, false);
-    }
-  };
-  window.openInstallPwa = () => {
-    audioSynth.playClickSound();
-    if (modalInstallPwa) modalInstallPwa.classList.add('active');
-  };
-  window.closeInstallPwa = () => {
-    audioSynth.playClickSound();
-    if (modalInstallPwa) modalInstallPwa.classList.remove('active');
-  };
-
-  // Watermarks Cleaner Modal & Handlers
-  function openWatermarkModal() {
-    audioSynth.playScanSound();
-    if (modalWatermarksCleaner) {
-      modalWatermarksCleaner.classList.add('active');
-      if (txtWatermarkInput) {
-        txtWatermarkInput.focus();
-        updateWatermarkLiveScan();
-      }
-    }
-  }
-
-  function closeWatermarkModal() {
-    audioSynth.playClickSound();
-    if (modalWatermarksCleaner) modalWatermarksCleaner.classList.remove('active');
-  }
-
-  function updateWatermarkLiveScan() {
-    if (!txtWatermarkInput) return;
-    const text = txtWatermarkInput.value || '';
-    const zeroWidthRegex = /[\u200B-\u200D\u200E\u200F\uFEFF\u2060\u202A-\u202E\u2066-\u2069\u180E\u00AD]/g;
-    const matches = text.match(zeroWidthRegex) || [];
-    const count = matches.length;
-
-    const aiPhrases = /\b(en conclusión|a modo de conclusión|en resumen|es crucial|cabe destacar|en el panorama actual|juega un papel fundamental|es importante tener en cuenta)\b/gi;
-    const aiMatches = text.match(aiPhrases) || [];
-
-    if (valZeroWidthTokens) valZeroWidthTokens.textContent = count;
-    if (valAiPatterns) valAiPatterns.textContent = aiMatches.length;
-
-    if (valPurityScore) {
-      if (count === 0 && aiMatches.length === 0) {
-        valPurityScore.textContent = '100% LIMPIO';
-        valPurityScore.style.color = 'var(--color-success)';
-      } else {
-        const score = Math.max(0, 100 - (count * 10 + aiMatches.length * 15));
-        valPurityScore.textContent = `${score}% RASTROS`;
-        valPurityScore.style.color = score < 50 ? 'var(--color-danger)' : 'var(--color-accent)';
-      }
-    }
-
-    if (watermarkStatusBadge) {
-      if (count > 0 || aiMatches.length > 0) {
-        watermarkStatusBadge.textContent = 'RASTROS DETECTADOS';
-        watermarkStatusBadge.style.color = 'var(--color-danger)';
-      } else {
-        watermarkStatusBadge.textContent = 'LISTO';
-        watermarkStatusBadge.style.color = 'var(--color-primary)';
-      }
-    }
-  }
-
-  if (txtWatermarkInput) {
-    txtWatermarkInput.addEventListener('input', updateWatermarkLiveScan);
-    txtWatermarkInput.addEventListener('paste', () => setTimeout(updateWatermarkLiveScan, 50));
-  }
-
-  function sanitizeWatermarkText() {
-    if (!txtWatermarkInput || !txtWatermarkOutput) return;
-    const raw = txtWatermarkInput.value;
-    if (!raw.trim()) return;
-
-    audioSynth.playSuccessChime();
-    const result = brain.cleanAIWatermarks(raw, { humanize: false });
-    txtWatermarkOutput.value = result.cleanedText;
-    updateWatermarkLiveScan();
-
-    if (watermarkStatusBadge) {
-      watermarkStatusBadge.textContent = `SANITIZADO (-${result.zeroWidthCount} TOKENS)`;
-      watermarkStatusBadge.style.color = 'var(--color-success)';
-    }
-  }
-
-  function humanizeWatermarkText() {
-    if (!txtWatermarkInput || !txtWatermarkOutput) return;
-    const raw = txtWatermarkInput.value;
-    if (!raw.trim()) return;
-
-    audioSynth.playScanSound();
-    const result = brain.cleanAIWatermarks(raw, { humanize: true });
-    txtWatermarkOutput.value = result.cleanedText;
-    updateWatermarkLiveScan();
-
-    if (watermarkStatusBadge) {
-      watermarkStatusBadge.textContent = `HUMANIZADO Y SANITIZADO`;
-      watermarkStatusBadge.style.color = 'var(--color-success)';
-    }
-  }
-
-  function copyCleanedWatermarkText() {
-    if (!txtWatermarkOutput || !txtWatermarkOutput.value) return;
-    navigator.clipboard.writeText(txtWatermarkOutput.value).then(() => {
-      audioSynth.playSuccessChime();
-      speechEngine.speak('Texto sanitizado copiado al portapapeles.');
-      const copyBtn = document.getElementById('btnCopyCleanedText');
-      if (copyBtn) {
-        const originalText = copyBtn.textContent;
-        copyBtn.textContent = '✓ Copiado';
-        setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
-      }
-    }).catch(() => {
-      txtWatermarkOutput.select();
-      document.execCommand('copy');
-      audioSynth.playSuccessChime();
-    });
-  }
-
-  function saveCleanedAsNote() {
-    if (!txtWatermarkOutput || !txtWatermarkOutput.value) return;
-    audioSynth.playClickSound();
-    addNote(txtWatermarkOutput.value.trim());
-    speechEngine.speak('Texto sanitizado guardado en tus notas.');
-    const noteBtn = document.getElementById('btnSaveCleanedAsNote');
-    if (noteBtn) {
-      const orig = noteBtn.textContent;
-      noteBtn.textContent = '✓ Guardado';
-      setTimeout(() => { noteBtn.textContent = orig; }, 2000);
-    }
-  }
-
-  window.openWatermarkCleaner = openWatermarkModal;
-  window.closeWatermarkCleaner = closeWatermarkModal;
-  window.sanitizeWatermarkText = sanitizeWatermarkText;
-  window.humanizeWatermarkText = humanizeWatermarkText;
-  window.copyCleanedWatermarkText = copyCleanedWatermarkText;
-  window.saveCleanedAsNote = saveCleanedAsNote;
-
-  // ==========================================
-  // CRYPTOCURRENCY & QUANTITATIVE FINANCE MODAL
-  // ==========================================
-  let cachedCryptoData = null;
-
-  async function openCryptoFinanceModal() {
-    audioSynth.playScanSound();
-    if (modalCryptoFinance) {
-      modalCryptoFinance.classList.add('active');
-      await refreshCryptoPrices();
-      calculateCryptoConversion();
-      calcRoiUi();
-    }
-  }
-
-  let cachedVenezuelaFX = null;
-  let cachedFiatRates = null;
-
-  function closeCryptoFinanceModal() {
-    audioSynth.playClickSound();
-    if (modalCryptoFinance) modalCryptoFinance.classList.remove('active');
-  }
-
-  function updateAllFinancialTickers() {
-    // 1. Update Crypto Tickers Strip
-    if (cachedCryptoData) {
-      const symbols = ['BTC', 'ETH', 'SOL'];
-      symbols.forEach(sym => {
-        const item = cachedCryptoData[sym];
-        const card = document.getElementById(`ticker${sym}`);
-        if (card && item) {
-          const sign = (item.change24h || 0) >= 0 ? '+' : '';
-          const cls = (item.change24h || 0) >= 0 ? 'positive' : 'negative';
-          const fmtPrice = item.price >= 1 ? '$' + item.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '$' + item.price.toFixed(4);
-          
-          const priceEl = card.querySelector('.ticker-price');
-          const changeEl = card.querySelector('.ticker-change');
-          if (priceEl) priceEl.textContent = fmtPrice;
-          if (changeEl) {
-            changeEl.textContent = `${sign}${(item.change24h || 0).toFixed(2)}%`;
-            changeEl.className = `ticker-change ${cls}`;
-          }
+      input.addEventListener('input', autosize);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+          e.preventDefault();
+          form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit'));
         }
       });
-    }
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        autosize();
+        this.audio.initContext();
+        this.speech.primeSpeechSynthesis();
+        this.submit(text);
+      });
+    },
 
-    // 2. Update Venezuela FX Tickers
-    if (cachedVenezuelaFX) {
-      const tickerBcv = document.getElementById('tickerBCV');
-      const tickerUsdt = document.getElementById('tickerUSDT');
-      const cardBcv = document.getElementById('cardBcvRate');
-      const cardParallel = document.getElementById('cardParallelRate');
-      const cardSpread = document.getElementById('cardSpreadRate');
-      const cardEur = document.getElementById('cardEurRate');
+    // Procesa mensajes en orden, uno a la vez
+    submit(text, opts = {}) {
+      this.queue = this.queue.then(() => this.handle(text, opts)).catch(err => console.error(err));
+      return this.queue;
+    },
 
-      if (tickerBcv) {
-        const p = tickerBcv.querySelector('.ticker-price');
-        if (p) p.textContent = `Bs. ${cachedVenezuelaFX.usdOfficialBCV.toFixed(2)}`;
+    async handle(text, { fromVoice = false } = {}) {
+      if (this.view !== 'assistant') this.showView('assistant');
+      this.addMessage({ role: 'user', text });
+      const typing = this.showTyping();
+      let res;
+      try {
+        res = await this.brain.process(text);
+      } catch (e) {
+        console.error(e);
+        res = { text: '⚠️ Algo falló procesando eso. Inténtalo de nuevo.', error: true };
       }
-      if (tickerUsdt) {
-        const p = tickerUsdt.querySelector('.ticker-price');
-        const c = tickerUsdt.querySelector('.ticker-change');
-        if (p) p.textContent = `Bs. ${cachedVenezuelaFX.usdMarketParallel.toFixed(2)}`;
-        if (c) c.textContent = `+${cachedVenezuelaFX.spreadPercent.toFixed(1)}% spread`;
+      typing.remove();
+      this.addMessage({ role: 'assistant', text: res.text, actions: res.actions, error: res.error });
+
+      if (res.sound === 'success') this.audio.playSuccessChime();
+      try {
+        await this.runEffect(res.effect, res);
+      } catch (e) {
+        console.warn('Efecto falló:', e);
       }
-      if (cardBcv) cardBcv.textContent = `Bs. ${cachedVenezuelaFX.usdOfficialBCV.toFixed(2)}`;
-      if (cardParallel) cardParallel.textContent = `Bs. ${cachedVenezuelaFX.usdMarketParallel.toFixed(2)}`;
-      if (cardSpread) cardSpread.textContent = `+${cachedVenezuelaFX.spreadPercent.toFixed(1)}% Brecha`;
-      if (cardEur) cardEur.textContent = `Bs. ${cachedVenezuelaFX.eurOfficialBCV.toFixed(2)}`;
+      this.speakReply(res, fromVoice);
+    },
 
-      // 3. Update BVC Table Dynamically with Active BCV Rate
-      const tblBvc = document.getElementById('tblBvcBody');
-      if (tblBvc && cachedVenezuelaFX.usdOfficialBCV > 0) {
-        const bcvRate = cachedVenezuelaFX.usdOfficialBCV;
-        const bvcStocks = [
-          { ticker: 'MVZ.A', name: 'Mercantil A', priceVes: bcvRate * 2.85, change: '+1.64%', isPositive: true },
-          { ticker: 'MVZ.B', name: 'Mercantil B', priceVes: bcvRate * 2.65, change: '-0.58%', isPositive: false },
-          { ticker: 'RST', name: 'Ron Sta. Teresa', priceVes: bcvRate * 0.65, change: '+2.15%', isPositive: true },
-          { ticker: 'BNC', name: 'Banco Nac. Crédito', priceVes: bcvRate * 0.045, change: '0.00%', isPositive: null },
-          { ticker: 'TDV.D', name: 'CANTV Clase D', priceVes: bcvRate * 0.28, change: '-1.17%', isPositive: false }
-        ];
+    speakReply(res, fromVoice) {
+      const mode = S.getRaw('yarbis_speak_mode', 'voice');
+      const should = !res.silent && (mode === 'always' || (mode === 'voice' && (fromVoice || this.speech.continuousMode)));
+      if (should) this.speech.speak(res.speak || res.text, { force: true });
+      else this.speech.doneProcessing();
+    },
 
-        tblBvc.innerHTML = bvcStocks.map(s => {
-          const usdVal = (s.priceVes / bcvRate).toFixed(2);
-          const changeColor = s.isPositive === true ? 'var(--color-success)' : (s.isPositive === false ? '#ff3366' : 'var(--color-text-dim)');
-          return `
-            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-              <td style="padding: 5px 8px; font-weight:700;">${s.ticker}</td>
-              <td style="padding: 5px 8px;">${s.name}</td>
-              <td style="padding: 5px 8px;">Bs. ${s.priceVes.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-              <td style="padding: 5px 8px; color:var(--color-primary);">$${usdVal}</td>
-              <td style="padding: 5px 8px; color:${changeColor};">${s.change}</td>
-            </tr>
-          `;
-        }).join('');
+    loadChat() {
+      const log = S.get(CHAT_KEY, []);
+      this.log = Array.isArray(log) ? log.slice(-MAX_LOG) : [];
+      const box = U.$('#messages');
+      box.replaceChildren(...this.log.map(m => this.renderMessage(m)));
+      this.updateWelcome();
+      this.scrollChat();
+    },
+
+    saveChat() {
+      S.set(CHAT_KEY, this.log.slice(-MAX_LOG).map(m => ({ ...m, image: undefined })));
+    },
+
+    addMessage(msg) {
+      const m = { id: U.uid(), ts: Date.now(), ...msg };
+      this.log.push(m);
+      if (this.log.length > MAX_LOG) this.log = this.log.slice(-MAX_LOG);
+      this.saveChat();
+      const node = this.renderMessage(m);
+      U.$('#messages').appendChild(node);
+      this.updateWelcome();
+      this.scrollChat();
+      return node;
+    },
+
+    clearChat() {
+      this.log = [];
+      this.saveChat();
+      U.$('#messages').replaceChildren();
+      this.updateWelcome();
+    },
+
+    updateWelcome() {
+      U.$('#welcome').hidden = this.log.length > 0;
+    },
+
+    scrollChat() {
+      const sc = U.$('#chatScroll');
+      requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
+    },
+
+    showTyping() {
+      const node = U.el('div', { class: 'msg assistant' },
+        U.el('div', { class: 'msg-avatar' }),
+        U.el('div', { class: 'msg-content' },
+          U.el('div', { class: 'typing', 'aria-label': 'Pensando' }, U.el('span'), U.el('span'), U.el('span'))));
+      U.$('#messages').appendChild(node);
+      this.scrollChat();
+      return node;
+    },
+
+    renderMessage(m) {
+      const el = U.el;
+      const isUser = m.role === 'user';
+      const body = el('div', { class: 'msg-body' });
+      if (isUser) body.textContent = m.text;
+      else body.innerHTML = U.renderMarkdown(m.text);
+
+      const content = el('div', { class: 'msg-content' });
+      if (m.image) content.appendChild(el('img', { class: 'msg-image', src: m.image, alt: 'Imagen enviada' }));
+      content.appendChild(body);
+
+      if (m.actions && m.actions.length) {
+        content.appendChild(el('div', { class: 'msg-actions' }, m.actions.map(a => this.renderAction(a))));
       }
-    }
-  }
 
-  function toggleRateEditor() {
-    audioSynth.playClickSound();
-    const panel = document.getElementById('panelManualRates');
-    if (panel) {
-      panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
-      if (panel.style.display === 'block') {
-        const inBcv = document.getElementById('inputCustomBcv');
-        const inPar = document.getElementById('inputCustomParalelo');
-        const inEur = document.getElementById('inputCustomEur');
-        const inBtc = document.getElementById('inputCustomBtc');
-        const inEth = document.getElementById('inputCustomEth');
-        const inSol = document.getElementById('inputCustomSol');
+      const meta = el('div', { class: 'msg-meta' }, el('span', { text: U.fmtTime(m.ts || Date.now()) }));
+      if (!isUser) {
+        meta.appendChild(el('button', {
+          type: 'button', class: 'icon-btn', title: 'Copiar', 'aria-label': 'Copiar respuesta',
+          onClick: async () => U.toast(await U.copyText(m.text) ? 'Copiado.' : 'No se pudo copiar.')
+        }, U.icon('copy')));
+        meta.appendChild(el('button', {
+          type: 'button', class: 'icon-btn', title: 'Leer en voz alta', 'aria-label': 'Leer en voz alta',
+          onClick: () => { this.speech.primeSpeechSynthesis(); this.speech.speak(m.text, { force: true }); }
+        }, U.icon('volume')));
+      }
+      content.appendChild(meta);
 
-        if (cachedVenezuelaFX) {
-          if (inBcv) inBcv.value = cachedVenezuelaFX.usdOfficialBCV.toFixed(2);
-          if (inPar) inPar.value = cachedVenezuelaFX.usdMarketParallel.toFixed(2);
-          if (inEur) inEur.value = cachedVenezuelaFX.eurOfficialBCV.toFixed(2);
+      return el('div', { class: `msg ${isUser ? 'user' : 'assistant'}${m.error ? ' error' : ''}` },
+        isUser ? null : el('div', { class: 'msg-avatar', 'aria-hidden': 'true' }),
+        content);
+    },
+
+    renderAction(a) {
+      const cls = `btn btn-sm ${a.danger ? 'btn-secondary danger' : 'btn-secondary'}`;
+      if (a.url && U.isSafeUrl(a.url)) {
+        const external = /^https?:/i.test(a.url);
+        return U.el('a', {
+          class: cls, href: a.url,
+          target: external ? '_blank' : null,
+          rel: external ? 'noopener noreferrer' : null
+        }, external ? U.icon('external') : null, a.label);
+      }
+      return U.el('button', {
+        type: 'button', class: cls,
+        onClick: (e) => {
+          if (a.view) this.showView(a.view);
+          if (a.command) this.runCommand(a.command, a.value, e.currentTarget);
         }
-        if (cachedCryptoData) {
-          if (inBtc && cachedCryptoData.BTC) inBtc.value = cachedCryptoData.BTC.price;
-          if (inEth && cachedCryptoData.ETH) inEth.value = cachedCryptoData.ETH.price;
-          if (inSol && cachedCryptoData.SOL) inSol.value = cachedCryptoData.SOL.price;
-        }
+      }, a.label);
+    },
+
+    runCommand(command, value, button) {
+      const notes = this.reminders.notes;
+      if (command === 'notes-clear-all-confirmed') {
+        notes.clearAll();
+        if (button) button.disabled = true;
+        U.toast('Notas borradas.');
+      } else if (command === 'copy') {
+        U.copyText(value).then(ok => U.toast(ok ? 'Copiado.' : 'No se pudo copiar.'));
+      } else if (command === 'save-contact' && value) {
+        this.brain.saveContact(value.name, value.tel);
+        if (button) button.disabled = true;
+        U.toast('Contacto guardado.', { type: 'ok' });
+      } else if (command === 'save-note') {
+        notes.add(value);
+        if (button) button.disabled = true;
+        U.toast('Guardado en tus notas.', { type: 'ok' });
       }
-    }
-  }
+    },
 
-  function saveCustomRates() {
-    audioSynth.playSuccessChime();
-    const bcv = parseFloat(document.getElementById('inputCustomBcv')?.value) || 62.40;
-    const par = parseFloat(document.getElementById('inputCustomParalelo')?.value) || 75.10;
-    const eur = parseFloat(document.getElementById('inputCustomEur')?.value) || (bcv * 1.087);
-    const btc = parseFloat(document.getElementById('inputCustomBtc')?.value) || 64500;
-    const eth = parseFloat(document.getElementById('inputCustomEth')?.value) || 2600;
-    const sol = parseFloat(document.getElementById('inputCustomSol')?.value) || 145;
-
-    const customFX = {
-      usdOfficialBCV: bcv,
-      usdMarketParallel: par,
-      eurOfficialBCV: eur,
-      usdtP2P: par,
-      copVesRate: (bcv / 4120),
-      vesCopRate: (4120 / bcv),
-      brlVesRate: (bcv / 5.65),
-      spreadPercent: ((par - bcv) / bcv) * 100,
-      lastUpdated: 'Personalizado',
-      source: 'Tasas fijadas por el usuario'
-    };
-
-    const customCrypto = {
-      BTC: { price: btc, change24h: 1.2 },
-      ETH: { price: eth, change24h: 0.8 },
-      SOL: { price: sol, change24h: 2.1 },
-      BNB: { price: 650, change24h: 0.5 },
-      XRP: { price: 1.45, change24h: 0.0 }
-    };
-
-    cachedVenezuelaFX = customFX;
-    cachedCryptoData = customCrypto;
-
-    try {
-      localStorage.setItem('yarbis_custom_fx', JSON.stringify(customFX));
-      localStorage.setItem('yarbis_custom_crypto', JSON.stringify(customCrypto));
-    } catch (e) {}
-
-    updateAllFinancialTickers();
-    calculateCryptoConversion();
-    calcDcaUi();
-
-    const panel = document.getElementById('panelManualRates');
-    if (panel) panel.style.display = 'none';
-
-    speechEngine.speak('Tasas y precios actualizados correctamente.');
-  }
-
-  function resetRatesToBase() {
-    audioSynth.playClickSound();
-    const inBcv = document.getElementById('inputCustomBcv');
-    const inPar = document.getElementById('inputCustomParalelo');
-    const inEur = document.getElementById('inputCustomEur');
-    const inBtc = document.getElementById('inputCustomBtc');
-    const inEth = document.getElementById('inputCustomEth');
-    const inSol = document.getElementById('inputCustomSol');
-
-    if (inBcv) inBcv.value = '773.31';
-    if (inPar) inPar.value = '889.65';
-    if (inEur) inEur.value = '896.03';
-    if (inBtc) inBtc.value = '64792';
-    if (inEth) inEth.value = '1910';
-    if (inSol) inSol.value = '76.8';
-
-    saveCustomRates();
-  }
-
-  // Limpiar caché antigua de tasas desactualizadas automáticamente
-  try {
-    const oldFx = localStorage.getItem('yarbis_custom_fx');
-    if (oldFx && (oldFx.includes('62.4') || oldFx.includes('75.1'))) {
-      localStorage.removeItem('yarbis_custom_fx');
-      localStorage.removeItem('yarbis_custom_crypto');
-    }
-  } catch (e) {}
-
-  async function refreshCryptoPrices(forceApi = true) {
-    const btnRefresh = document.getElementById('btnRefreshCrypto');
-    if (btnRefresh) btnRefresh.textContent = '⏳ Sincronizando...';
-
-    const [cryptoData, fxData, fiatData] = await Promise.all([
-      brain.fetchLiveCryptoPrices(),
-      brain.fetchLiveVenezuelaFX(),
-      brain.fetchGlobalFiatRates()
-    ]);
-
-    if (cryptoData) cachedCryptoData = cryptoData;
-    if (fxData) cachedVenezuelaFX = fxData;
-    if (fiatData) cachedFiatRates = fiatData;
-
-    updateAllFinancialTickers();
-    calculateCryptoConversion();
-    calcDcaUi();
-
-    if (btnRefresh) btnRefresh.textContent = '🔄 Actualizar';
-  }
-
-  // Auto-Sync Heartbeat (Actualiza automáticamente cada 30 segundos)
-  setInterval(() => {
-    refreshCryptoPrices(true);
-  }, 30000);
-
-  // Carga automática inicial de precios en vivo al iniciar
-  setTimeout(() => {
-    refreshCryptoPrices(true);
-  }, 300);
-
-  function swapCurrencies() {
-    audioSynth.playClickSound();
-    const selFrom = document.getElementById('selectFromCurrency');
-    const selTo = document.getElementById('selectToCurrency');
-    if (selFrom && selTo) {
-      const temp = selFrom.value;
-      selFrom.value = selTo.value;
-      selTo.value = temp;
-      calculateCryptoConversion();
-    }
-  }
-
-  function calculateCryptoConversion() {
-    const inputAmount = document.getElementById('inputCryptoAmount');
-    const selFrom = document.getElementById('selectFromCurrency');
-    const selTo = document.getElementById('selectToCurrency');
-    const lblResult = document.getElementById('lblConversionResult');
-    const lblRate = document.getElementById('lblConversionRate');
-
-    if (!inputAmount || !selFrom || !selTo || !lblResult) return;
-
-    const amount = parseFloat(inputAmount.value) || 0;
-    const fromCode = selFrom.value;
-    const toCode = selTo.value;
-
-    const fx = cachedVenezuelaFX || (brain.getFXSampleRates ? brain.getFXSampleRates() : { usdOfficialBCV: 62.40, usdMarketParallel: 75.10, eurOfficialBCV: 67.85 });
-    const fiat = cachedFiatRates || (brain.fetchGlobalFiatRates ? { EUR: 0.92, COP: 4120, BRL: 5.65, MXN: 19.80, PEN: 3.75, CLP: 940, ARS: 1040, GBP: 0.79, JPY: 154.5, CAD: 1.38, CNY: 7.24, RUB: 98.5 } : {});
-    const crypto = cachedCryptoData || { BTC: { price: 95000 }, ETH: { price: 3400 }, SOL: { price: 190 }, BNB: { price: 650 }, XRP: { price: 1.45 } };
-
-    const converted = brain.convertUniversalCurrency(amount, fromCode, toCode, fx, crypto, fiat);
-
-    // Format display
-    let formattedResult = '';
-    if (toCode.startsWith('VES')) {
-      formattedResult = `Bs. ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    } else if (toCode === 'USD' || toCode === 'USDT' || toCode === 'USDC') {
-      formattedResult = `$${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${toCode}`;
-    } else if (toCode === 'EUR') {
-      formattedResult = `€${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
-    } else if (toCode === 'COP' || toCode === 'ARS' || toCode === 'CLP' || toCode === 'JPY') {
-      formattedResult = `${converted.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${toCode}`;
-    } else if (crypto && crypto[toCode]) {
-      formattedResult = `${converted < 0.0001 ? converted.toFixed(8) : converted.toFixed(4)} ${toCode}`;
-    } else {
-      formattedResult = `${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${toCode}`;
-    }
-
-    lblResult.textContent = formattedResult;
-
-    // Unit rate label
-    const unitRate = brain.convertUniversalCurrency(1, fromCode, toCode, fx, crypto, fiat);
-    if (lblRate) {
-      lblRate.textContent = `1 ${fromCode.replace('_', ' ')} ≈ ${unitRate < 0.0001 ? unitRate.toFixed(6) : unitRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ${toCode.replace('_', ' ')}`;
-    }
-  }
-
-  function calcDcaUi() {
-    const p1 = parseFloat(document.getElementById('inputDcaP1')?.value) || 0;
-    const a1 = parseFloat(document.getElementById('inputDcaA1')?.value) || 0;
-    const p2 = parseFloat(document.getElementById('inputDcaP2')?.value) || 0;
-    const a2 = parseFloat(document.getElementById('inputDcaA2')?.value) || 0;
-
-    const res = brain.calculateDCA([
-      { amount: a1, price: p1 },
-      { amount: a2, price: p2 }
-    ]);
-
-    const lblAvg = document.getElementById('lblDcaAvg');
-    const lblTot = document.getElementById('lblDcaTotal');
-
-    if (res) {
-      if (lblAvg) lblAvg.textContent = `$${res.avgPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
-      if (lblTot) lblTot.textContent = `$${res.totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
-    }
-  }
-
-  function generateWebhookJson() {
-    audioSynth.playClickSound();
-    const payload = brain.generateStructuredDataRequest('BVC_CRYPTO_FEED', ['BTC', 'ETH', 'MVZ.A', 'RST', 'USD_BCV', 'USD_P2P']);
-    const jsonStr = JSON.stringify(payload, null, 2);
-    
-    const boxOutput = document.getElementById('boxMathOutput');
-    const lblOutput = document.getElementById('lblMathOutput');
-
-    if (boxOutput) boxOutput.style.display = 'block';
-    if (lblOutput) lblOutput.textContent = `// Payload JSON para Webhook / Automatización:\n${jsonStr}`;
-    
-    navigator.clipboard.writeText(jsonStr).then(() => {
-      speechEngine.speak('Estructura JSON generada y copiada al portapapeles.');
-    });
-  }
-
-  function calcRoiUi() {
-    const inInitial = document.getElementById('inputRoiInitial');
-    const inBuy = document.getElementById('inputRoiBuy');
-    const inSell = document.getElementById('inputRoiSell');
-    const lblPercent = document.getElementById('lblRoiPercent');
-    const lblProfit = document.getElementById('lblRoiNetProfit');
-
-    if (!inInitial || !inBuy || !inSell || !lblPercent || !lblProfit) return;
-
-    const initial = parseFloat(inInitial.value) || 0;
-    const buy = parseFloat(inBuy.value) || 0;
-    const sell = parseFloat(inSell.value) || 0;
-
-    const res = brain.calculateCryptoROI(initial, buy, sell);
-    if (res) {
-      const sign = res.roiPercent >= 0 ? '+' : '';
-      lblPercent.textContent = `${sign}${res.roiPercent.toFixed(2)}%`;
-      lblPercent.style.color = res.roiPercent >= 0 ? 'var(--color-success)' : '#ff3366';
-
-      const profitSign = res.netProfit >= 0 ? '+$' : '-$';
-      lblProfit.textContent = `${profitSign}${Math.abs(res.netProfit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
-      lblProfit.style.color = res.netProfit >= 0 ? '#fff' : '#ff3366';
-    }
-  }
-
-  // Tab Switcher for Crypto & Finance Modal
-  function switchCryptoTab(tabName) {
-    const tabs = {
-      converter: document.getElementById('tabCryptoConverter'),
-      bvc: document.getElementById('tabCryptoBVC'),
-      global: document.getElementById('tabCryptoGlobal'),
-      dca: document.getElementById('tabCryptoDCA'),
-      math: document.getElementById('tabCryptoMath')
-    };
-
-    const buttons = document.querySelectorAll('.btn-crypto-tab');
-    buttons.forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
-    });
-
-    Object.keys(tabs).forEach(k => {
-      if (tabs[k]) {
-        tabs[k].style.display = (k === tabName) ? 'block' : 'none';
-        tabs[k].classList.toggle('active', k === tabName);
+    /* ==========================================
+       EFECTOS DE LAS RESPUESTAS
+       ========================================== */
+    async runEffect(effect) {
+      if (!effect) return;
+      switch (effect.type) {
+        case 'OPEN_URL':
+          this.openUrl(effect.url);
+          break;
+        case 'OPEN_VIEW':
+          this.showView(effect.view);
+          break;
+        case 'OPEN_CAMERA':
+          root.YarbisCamera.open(effect.mode);
+          break;
+        case 'THEME':
+          if (effect.mode) root.YarbisTheme.setMode(effect.mode);
+          if (effect.accent) root.YarbisTheme.setAccent(effect.accent);
+          break;
+        case 'CLEAR_CHAT':
+          this.clearChat();
+          break;
+        case 'STOP':
+          this.speech.stopAll();
+          break;
+        case 'HANDS_FREE':
+          this.speech.setContinuous(effect.on);
+          break;
+        case 'TORCH':
+          await this.setTorch(effect.on);
+          break;
+        case 'REMINDER':
+          this.reminders.requestNotificationPermission();
+          break;
+        case 'PROFILE':
+          this.refreshProfile();
+          break;
+        default:
+          break;
       }
-    });
+    },
 
-    audioSynth.playClickSound();
-
-    if (tabName === 'dca') {
-      calcDcaUi();
-    } else if (tabName === 'converter') {
-      calculateCryptoConversion();
-    } else if (tabName === 'math') {
-      evalInstantMath();
-    }
-  }
-
-  // Instant Mathematical Evaluator
-  function evalInstantMath() {
-    const input = document.getElementById('inputInstantMath');
-    const lbl = document.getElementById('lblMathInstantResult');
-    if (!input || !lbl) return;
-
-    const val = input.value.trim();
-    if (!val) {
-      lbl.textContent = '0';
-      lbl.style.color = 'var(--color-primary)';
-      return;
-    }
-
-    const res = brain.evaluateMathExpression(val);
-    if (res) {
-      lbl.textContent = `= ${res.formatted}`;
-      lbl.style.color = 'var(--color-success)';
-    } else {
-      lbl.textContent = 'Expresión pendiente o compleja';
-      lbl.style.color = 'var(--color-text-dim)';
-    }
-  }
-
-  // Mathematical & Financial Presets
-  function applyMathPreset(preset) {
-    audioSynth.playClickSound();
-    const txt = document.getElementById('txtMathQuery');
-    const instant = document.getElementById('inputInstantMath');
-    if (!txt) return;
-
-    if (preset === 'compound') {
-      txt.value = 'Calcula el interés compuesto de un capital inicial de $2,500 USD con una tasa anual del 12% capitalizable mensualmente durante 3 años. Muestra la fórmula, desglose año por año y el monto final acumulado.';
-      if (instant) instant.value = '2500 * (1 + 0.12/12)^(12 * 3)';
-    } else if (preset === 'devaluation') {
-      txt.value = 'Si mantengo Bs. 50,000 en cuenta bancaria y la tasa de cambio BCV pasa de Bs. 62.40 a Bs. 85.00 por USD en 6 meses, ¿cuál es el porcentaje de devaluación y la pérdida real de poder adquisitivo en dólares?';
-      if (instant) instant.value = '((85.00 - 62.40) / 62.40) * 100';
-    } else if (preset === 'arbitrage') {
-      txt.value = 'Evalúa una oportunidad de arbitraje comprando $1,000 USDT en Binance P2P a Bs. 74.50 por dólar y liquidando en mercado comercial a Bs. 78.20 con 0.15% de comisión por transacción. ¿Cuál es la ganancia neta en USD y VES?';
-      if (instant) instant.value = '(1000 * 78.20 * 0.9985) - (1000 * 74.50 * 1.0015)';
-    } else if (preset === 'rule3') {
-      txt.value = 'Si 15 desarrolladores completan un proyecto en 40 días, ¿cuántos días tomará completar el mismo proyecto con 25 desarrolladores a ritmo constante? Muestra el paso a paso matemático.';
-      if (instant) instant.value = '(15 * 40) / 25';
-    } else if (preset === 'loan') {
-      txt.value = 'Calcula la cuota mensual fija (sistema de amortización francés) para un préstamo de $10,000 USD al 8.5% de interés anual a 24 meses plazo. Detalla la tabla resumen de amortización.';
-      if (instant) instant.value = '(10000 * (0.085/12) * (1 + 0.085/12)^24) / ((1 + 0.085/12)^24 - 1)';
-    }
-
-    evalInstantMath();
-    solveMathProblem();
-  }
-
-  function copyMathOutput() {
-    const lblOutput = document.getElementById('lblMathOutput');
-    if (!lblOutput || !lblOutput.textContent) return;
-    navigator.clipboard.writeText(lblOutput.textContent).then(() => {
-      audioSynth.playSuccessChime();
-      speechEngine.speak('Desglose matemático copiado al portapapeles.');
-    });
-  }
-
-  async function solveMathProblem() {
-    const txt = document.getElementById('txtMathQuery');
-    const btn = document.getElementById('btnSolveMath');
-    const boxOutput = document.getElementById('boxMathOutput');
-    const lblOutput = document.getElementById('lblMathOutput');
-
-    if (!txt || !txt.value.trim()) return;
-
-    const query = txt.value.trim();
-    audioSynth.playScanSound();
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = '⚡ Auditando y Calculando...';
-    }
-
-    if (boxOutput) boxOutput.style.display = 'block';
-    if (lblOutput) lblOutput.textContent = 'Procesando modelo bursátil/matemático con precisión Stark...';
-
-    try {
-      // First check if it's a pure mathematical expression
-      const instantRes = brain.evaluateMathExpression(query);
-      if (instantRes) {
-        lblOutput.textContent = `🎯 RESULTADO EXACTO:\n\nFórmula evaluada: ${instantRes.expression}\nResultado numérico = ${instantRes.formatted}\n\n[Precisión Stark 100% verificada]`;
-        audioSynth.playSuccessChime();
-        speechEngine.speak(`El resultado matemático es ${instantRes.formatted}.`);
+    openUrl(url) {
+      if (!url || !U.isSafeUrl(url)) return;
+      if (/^(tel|sms|mailto):/i.test(url)) {
+        root.location.href = url;
         return;
       }
-
-      // Query AI Quantitative Engine
-      const prompt = `Actúa como un Experto Matemático y Analista Financiero Cuantitativo de alto nivel Stark.
-Resuelve con precisión matemática absoluta el siguiente problema o consulta:
-"${query}"
-
-Estructura tu respuesta exactamente con:
-1. 📐 **Fórmulas y Variables Identificadas**
-2. 🧮 **Paso a Paso de Resolución Numérica / Algebraica**
-3. 🎯 **Resultado Final Exacto (con unidades monetarias o porcentuales)**
-4. 💡 **Conclusión Financiera / Recomendación Estratégica**`;
-
-      const answer = await brain.queryFreeAI(prompt);
-      if (lblOutput) lblOutput.textContent = answer;
-      audioSynth.playSuccessChime();
-      speechEngine.speak(`Análisis financiero y auditoría completados, ${brain.userName}.`);
-    } catch (e) {
-      if (lblOutput) lblOutput.textContent = `Error al procesar el análisis: ${e.message}`;
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = '⚡ Auditar y Resolver con Precisión Stark';
-      }
-    }
-  }
-
-  window.openCryptoFinance = openCryptoFinanceModal;
-  window.closeCryptoFinance = closeCryptoFinanceModal;
-  window.refreshCryptoPrices = refreshCryptoPrices;
-  window.switchCryptoTab = switchCryptoTab;
-  window.calculateCryptoConversion = calculateCryptoConversion;
-  window.swapCurrencies = swapCurrencies;
-  window.calcRoiUi = calcRoiUi;
-  window.calcDcaUi = calcDcaUi;
-  window.generateWebhookJson = generateWebhookJson;
-  window.solveMathProblem = solveMathProblem;
-  window.evalInstantMath = evalInstantMath;
-  window.applyMathPreset = applyMathPreset;
-  window.copyMathOutput = copyMathOutput;
-  window.toggleRateEditor = toggleRateEditor;
-  window.saveCustomRates = saveCustomRates;
-  window.resetRatesToBase = resetRatesToBase;
-
-  window.addNoteFromInput = () => {
-    if (inputNewNote && inputNewNote.value.trim()) {
-      audioSynth.playClickSound();
-      addNote(inputNewNote.value.trim());
-      inputNewNote.value = '';
-    }
-  };
-  window.clearAllNotes = clearAllNotes;
-  window.clearLogs = () => {
-    audioSynth.playClickSound();
-    if (transcriptScroll) transcriptScroll.innerHTML = '';
-  };
-  window.submitTextInput = submitTextInput;
-  window.cancelTimer = cancelTimer;
-
-  // Set default active tab on mobile
-  switchMobileTab('voice');
-
-  mobileTabBtns.forEach(btn => {
-    const handleTabClick = (e) => {
-      if (e && e.type === 'touchend') e.preventDefault();
-      audioSynth.playClickSound();
-      switchMobileTab(btn.getAttribute('data-tab'));
-    };
-    btn.addEventListener('click', handleTabClick);
-    btn.addEventListener('touchend', handleTabClick);
-  });
-
-  // Device Torch / Flashlight Controller
-  let torchTrack = null;
-  async function toggleTorch(turnOn) {
-    try {
-      if (turnOn) {
-        if (!torchTrack) {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }
-          });
-          torchTrack = stream.getVideoTracks()[0];
-        }
-        if (torchTrack && torchTrack.applyConstraints) {
-          await torchTrack.applyConstraints({
-            advanced: [{ torch: true }]
-          });
-        }
+      let win = null;
+      try { win = root.open(url, '_blank'); } catch (e) { win = null; }
+      if (win) {
+        try { win.opener = null; } catch (e) { /* ignorar */ }
       } else {
-        if (torchTrack) {
-          torchTrack.stop();
-          torchTrack = null;
-        }
+        U.toast('Toca el botón de la respuesta para abrirlo.');
       }
-    } catch (e) {
-      console.warn('Torch not supported or permission denied:', e);
-    }
-  }
+    },
 
-  // App Pills Quick Launcher (appPills queried above)
-  const appLinksMap = {
-    'whatsapp': { url: 'https://web.whatsapp.com', deep: 'whatsapp://' },
-    'youtube': { url: 'https://www.youtube.com', deep: 'youtube://' },
-    'spotify': { url: 'https://open.spotify.com', deep: 'spotify://' },
-    'bdv': { url: 'https://bdvenlinea.banvenez.com/' },
-    'banesco': { url: 'https://www.banesconline.com/' },
-    'pedidosya': { url: 'https://www.pedidosya.com.ve/', deep: 'pedidosya://' },
-    'yummy': { url: 'https://www.yummy.com.ve/', deep: 'yummy://' },
-    'mercadolibre': { url: 'https://www.mercadolibre.com.ve/', deep: 'mercadolibre://' },
-    'gmail': { url: 'https://mail.google.com', deep: 'googlegmail://' },
-    'maps': { url: 'https://maps.google.com', deep: 'comgooglemaps://' },
-    'chatgpt': { url: 'https://chatgpt.com', deep: 'chatgpt://' },
-    'drive': { url: 'https://drive.google.com', deep: 'googledrive://' }
+    async setTorch(on) {
+      try {
+        if (on) {
+          if (!this.torchStream) {
+            this.torchStream = await root.navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          }
+          const track = this.torchStream.getVideoTracks()[0];
+          const caps = track.getCapabilities ? track.getCapabilities() : {};
+          if (!caps.torch) throw new Error('sin linterna');
+          await track.applyConstraints({ advanced: [{ torch: true }] });
+        } else if (this.torchStream) {
+          this.torchStream.getTracks().forEach(t => t.stop());
+          this.torchStream = null;
+        }
+      } catch (e) {
+        if (this.torchStream) {
+          this.torchStream.getTracks().forEach(t => t.stop());
+          this.torchStream = null;
+        }
+        U.toast('Este navegador no permite controlar la linterna (en iPhone no es posible desde la web).', { type: 'warn', duration: 5000 });
+      }
+    },
+
+    /* ==========================================
+       VOZ
+       ========================================== */
+    bindVoice() {
+      const sp = this.speech;
+      const mic = U.$('#btnMic');
+      const bar = U.$('#voiceBar');
+      const stateEl = U.$('#voiceState');
+      const interimEl = U.$('#voiceInterim');
+      const handsFree = U.$('#btnHandsFree');
+
+      mic.addEventListener('click', () => {
+        this.audio.initContext();
+        sp.primeSpeechSynthesis();
+        if (this.view !== 'assistant') this.showView('assistant');
+        sp.toggleListening();
+      });
+
+      handsFree.addEventListener('click', () => {
+        this.audio.initContext();
+        sp.primeSpeechSynthesis();
+        sp.setContinuous(!sp.continuousMode);
+        U.toast(sp.continuousMode ? 'Manos libres activado: te escucho después de cada respuesta.' : 'Manos libres desactivado.');
+      });
+
+      U.$('#btnVoiceStop').addEventListener('click', () => sp.stopAll());
+
+      sp.onContinuousChange = (on) => {
+        handsFree.setAttribute('aria-pressed', on ? 'true' : 'false');
+        handsFree.classList.toggle('active', on);
+      };
+
+      const labels = { LISTENING: 'Escuchando…', PROCESSING: 'Pensando…', SPEAKING: 'Hablando…' };
+      sp.onStateChange = (state) => {
+        this.orb.setState(state);
+        this.orbMini.setState(state);
+        mic.classList.toggle('listening', state === 'LISTENING');
+        mic.setAttribute('aria-label', state === 'LISTENING' ? 'Dejar de escuchar' : 'Hablar');
+        if (state === 'STANDBY') {
+          bar.hidden = true;
+          interimEl.textContent = '';
+        } else {
+          bar.hidden = false;
+          stateEl.textContent = labels[state];
+          if (state !== 'LISTENING') interimEl.textContent = '';
+          else interimEl.textContent = sp.continuousMode ? 'Manos libres activo' : 'Habla ahora';
+        }
+      };
+      sp.onInterimResult = (text) => { interimEl.textContent = text; };
+      sp.onAudioLevel = (level) => { this.orb.setAudioLevel(level); this.orbMini.setAudioLevel(level); };
+      sp.onSpeechResult = (text) => this.submit(text, { fromVoice: true });
+      sp.onError = (msg, { fatal }) => U.toast(msg, { type: fatal ? 'error' : 'warn', duration: fatal ? 6000 : 3500 });
+
+      root.document.addEventListener('keydown', (e) => {
+        if (e.altKey && (e.key === 'm' || e.key === 'M')) {
+          e.preventDefault();
+          mic.click();
+        }
+      });
+    },
+
+    applyOrbColor() {
+      const c = root.YarbisTheme.orbColor();
+      this.orb.setTheme && this.orb.setTheme(c);
+      this.orbMini.setTheme && this.orbMini.setTheme(c);
+    },
+
+    /* ==========================================
+       CLICS GENERALES (delegación)
+       ========================================== */
+    bindDelegation() {
+      root.document.addEventListener('click', (e) => {
+        const ask = e.target.closest('[data-ask]');
+        if (ask) {
+          this.audio.initContext();
+          this.submit(ask.dataset.ask);
+          return;
+        }
+        const timer = e.target.closest('[data-timer]');
+        if (timer) {
+          this.reminders.schedule.addTimer(Number(timer.dataset.timer));
+          this.reminders.requestNotificationPermission();
+          U.toast(`Temporizador de ${U.describeDuration(Number(timer.dataset.timer))} iniciado.`, { type: 'ok' });
+          return;
+        }
+        const action = e.target.closest('[data-action]');
+        if (!action) return;
+        const name = action.dataset.action;
+        if (name === 'open-settings') root.YarbisSettings.open();
+        else if (name === 'open-camera') root.YarbisCamera.open(action.dataset.mode || 'general');
+        else if (name === 'open-cleaner') U.$('#dlgCleaner').showModal();
+        else if (name === 'install') this.install();
+        else if (name === 'new-chat') {
+          this.brain.resetConversation();
+          this.clearChat();
+          this.speech.stopSpeaking();
+          U.toast('Conversación nueva.');
+        } else if (name === 'notes-clear-done') {
+          this.reminders.notes.clearDone();
+        } else if (name === 'notes-clear-all') {
+          if (this.reminders.notes.items.length && root.confirm('¿Borrar todas las notas? No se puede deshacer.')) {
+            this.reminders.notes.clearAll();
+          }
+        }
+      });
+    },
+
+    bindDialogs() {
+      U.$$('dialog').forEach(dlg => {
+        // Cerrar tocando fuera del contenido
+        dlg.addEventListener('click', (e) => {
+          if (e.target === dlg && dlg.id !== 'dlgRinging') dlg.close();
+        });
+        dlg.addEventListener('cancel', (e) => {
+          if (dlg.id === 'dlgRinging') { e.preventDefault(); this.stopRinging(); }
+        });
+      });
+      root.document.addEventListener('click', (e) => {
+        const closer = e.target.closest('[data-close]');
+        if (closer) {
+          const dlg = closer.closest('dialog');
+          if (dlg) dlg.close();
+        }
+      });
+    },
+
+    /* ==========================================
+       NOTAS, TEMPORIZADORES Y ALARMAS
+       ========================================== */
+    bindReminders() {
+      const R = this.reminders;
+      // Conectar el aviso ANTES de montar: así suenan las alarmas vencidas con la app cerrada
+      R.schedule.onRing = ({ kind, item, late }) => this.ring(kind, item, late);
+      R.mountUI();
+
+      const updateBadges = () => {
+        const n = R.notes.pending().length;
+        [U.$('#navNotesBadge'), U.$('#tabNotesBadge')].forEach(b => {
+          if (!b) return;
+          b.hidden = n === 0;
+          b.textContent = n > 99 ? '99+' : String(n);
+        });
+      };
+      R.notes.onChange(updateBadges);
+      updateBadges();
+
+      const chip = U.$('#timerChip');
+      const chipText = U.$('#timerChipText');
+      chip.addEventListener('click', () => this.showView('notes'));
+      const updateChip = () => {
+        const running = R.schedule.timers.filter(t => t.pausedRemaining === null);
+        if (!running.length) { chip.hidden = true; return; }
+        const next = running.reduce((a, b) => (a.endAt < b.endAt ? a : b));
+        chip.hidden = false;
+        chipText.textContent = U.fmtDuration(R.schedule.remaining(next) / 1000) + (running.length > 1 ? ` (+${running.length - 1})` : '');
+      };
+      R.schedule.onChange(updateChip);
+      updateChip();
+
+      U.$('#btnRingStop').addEventListener('click', () => this.stopRinging());
+      U.$('#btnRingSnooze').addEventListener('click', () => {
+        const item = this.ringing;
+        this.stopRinging();
+        if (item) {
+          R.schedule.addAlarm(Date.now() + 5 * 60000, item.label);
+          U.toast('Te aviso de nuevo en 5 minutos.');
+        }
+      });
+    },
+
+    ring(kind, item, late) {
+      const title = kind === 'timer' ? '⏱️ ¡Tiempo!' : '⏰ ¡Alarma!';
+      const text = kind === 'timer'
+        ? `${item.label}`
+        : `${U.fmtTime(item.at)} · ${item.label}${late ? ' (mientras la app estaba cerrada)' : ''}`;
+      this.ringing = item;
+      U.$('#ringTitle').textContent = title;
+      U.$('#ringText').textContent = text;
+      const dlg = U.$('#dlgRinging');
+      if (!dlg.open) dlg.showModal();
+      this.audio.startAlarm();
+      this.addMessage({ role: 'assistant', text: `${title} ${text}` });
+      if (root.document.hidden) this.reminders.notify(title.replace(/^\S+\s/, ''), text);
+      // Se detiene sola al minuto si nadie la apaga
+      clearTimeout(this.ringTimeout);
+      this.ringTimeout = setTimeout(() => this.stopRinging(), 60000);
+    },
+
+    stopRinging() {
+      clearTimeout(this.ringTimeout);
+      this.audio.stopAlarm();
+      const dlg = U.$('#dlgRinging');
+      if (dlg.open) dlg.close();
+      this.ringing = null;
+    },
+
+    /* ==========================================
+       FINANZAS (tasa en la barra lateral)
+       ========================================== */
+    bindFinance() {
+      const side = U.$('#sideRate');
+      const render = (r) => {
+        if (!side) return;
+        side.replaceChildren(
+          U.el('div', null, 'Dólar BCV ', U.el('strong', { text: U.fmtBs(r.bcv) })),
+          U.el('div', { class: 'small muted', text: this.finance.statusLabel(r.fx) }));
+      };
+      this.finance.onChange(render);
+      render(this.finance.getRates());
+      // Una sola carga inicial (las actualizaciones periódicas sólo ocurren en la pestaña Finanzas)
+      this.finance.ensureFresh(10 * 60 * 1000).catch(() => {});
+    },
+
+    /* ==========================================
+       CÁMARA
+       ========================================== */
+    async analyzeImage(dataUrl, mode) {
+      this.showView('assistant');
+      this.addMessage({ role: 'user', text: SCAN_LABEL[mode] || SCAN_LABEL.general, image: dataUrl });
+      const typing = this.showTyping();
+      const res = await this.brain.analyzeImage(dataUrl, mode);
+      typing.remove();
+      this.addMessage({
+        role: 'assistant',
+        text: res.text,
+        error: !res.ok,
+        actions: res.ok
+          ? [{ label: 'Copiar texto', command: 'copy', value: res.text }, { label: 'Guardar en notas', command: 'save-note', value: res.text }]
+          : [{ label: 'Abrir Ajustes', view: 'settings' }]
+      });
+      if (res.ok) {
+        this.brain.remember('user', `[Envié una foto: ${SCAN_LABEL[mode] || 'foto'}]`);
+        this.brain.remember('assistant', res.text);
+        if (S.getRaw('yarbis_speak_mode', 'voice') === 'always') this.speech.speak(res.text, { force: true });
+      }
+    },
+
+    showScannedCode(raw) {
+      this.showView('assistant');
+      const text = String(raw || '').trim();
+      this.addMessage({ role: 'user', text: '📱 Código escaneado' });
+      const actions = [];
+      let reply;
+      if (/^https?:\/\//i.test(text)) {
+        reply = `🔗 **Enlace detectado:**\n\n${text}\n\n_Verifica que sea un sitio de confianza antes de abrirlo._`;
+        actions.push({ label: 'Abrir enlace', url: text });
+      } else if (/^WIFI:/i.test(text)) {
+        const field = (k) => {
+          const m = text.match(new RegExp(`${k}:((?:\\\\.|[^;])*)`, 'i'));
+          return m ? m[1].replace(/\\(.)/g, '$1') : '';
+        };
+        const ssid = field('S');
+        const pass = field('P');
+        reply = `📶 **Red Wi‑Fi:** ${ssid || '(sin nombre)'}\n- Seguridad: ${field('T') || 'abierta'}\n- Contraseña: ${pass ? `\`${pass}\`` : '(sin contraseña)'}`;
+        if (pass) actions.push({ label: 'Copiar contraseña', command: 'copy', value: pass });
+      } else if (/^(tel|sms|mailto):/i.test(text)) {
+        reply = `📞 **Contacto:** ${text.replace(/^\w+:/, '')}`;
+        actions.push({ label: 'Abrir', url: text });
+      } else if (/^BEGIN:VCARD/i.test(text)) {
+        const list = root.YarbisSettings.parseVcf(text);
+        reply = list.length ? `👤 **Contacto:** ${list[0].name} · ${list[0].tel}` : '👤 Tarjeta de contacto';
+        if (list.length) actions.push({ label: 'Guardar en agenda', command: 'save-contact', value: list[0] });
+      } else {
+        reply = `📄 **Contenido del código:**\n\n${text}`;
+      }
+      actions.push({ label: 'Copiar', command: 'copy', value: text });
+      actions.push({ label: 'Guardar en notas', command: 'save-note', value: text });
+      this.addMessage({ role: 'assistant', text: reply, actions });
+    },
+
+    /* ==========================================
+       PERFIL, ESTADO DE IA, PWA
+       ========================================== */
+    refreshProfile() {
+      U.$$('[data-bind="assistantName"]').forEach(n => { n.textContent = this.brain.assistantName; });
+      const hour = new Date().getHours();
+      const saludo = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+      U.$('#welcomeTitle').textContent = `¡${saludo}${this.brain.userName ? `, ${this.brain.userName}` : ''}! ¿En qué te ayudo?`;
+      root.document.title = `${this.brain.assistantName} · Asistente personal`;
+    },
+
+    updateAiChip() {
+      const chip = U.$('#aiChip');
+      const text = U.$('#aiChipText');
+      const online = root.navigator.onLine !== false;
+      chip.classList.toggle('offline', !online);
+      text.textContent = !online ? 'Sin conexión' : this.brain.geminiApiKey ? 'Gemini' : 'IA gratuita';
+    },
+
+    bindPwa() {
+      root.addEventListener('online', () => this.updateAiChip());
+      root.addEventListener('offline', () => this.updateAiChip());
+      root.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        this.installPrompt = e;
+      });
+      root.addEventListener('appinstalled', () => {
+        this.installPrompt = null;
+        U.toast('¡YARBIS instalado! 🎉', { type: 'ok' });
+      });
+
+      const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(root.location.hostname);
+      if ('serviceWorker' in root.navigator && (root.location.protocol === 'https:' || isLocal)) {
+        root.navigator.serviceWorker.register('sw.js').then(reg => {
+          if (!reg) return;
+          reg.addEventListener('updatefound', () => {
+            const worker = reg.installing;
+            if (!worker) return;
+            worker.addEventListener('statechange', () => {
+              if (worker.state === 'installed' && root.navigator.serviceWorker.controller) {
+                U.toast('Hay una versión nueva de YARBIS.', { actionLabel: 'Actualizar', onAction: () => root.location.reload(), duration: 10000 });
+              }
+            });
+          });
+        }).catch(err => console.warn('Service worker:', err));
+      }
+    },
+
+    async install() {
+      if (this.installPrompt) {
+        this.installPrompt.prompt();
+        try { await this.installPrompt.userChoice; } catch (e) { /* ignorar */ }
+        this.installPrompt = null;
+        return;
+      }
+      const isIos = /iphone|ipad|ipod/i.test(root.navigator.userAgent);
+      U.$('#installIos').hidden = !isIos && /android/i.test(root.navigator.userAgent);
+      U.$('#installAndroid').hidden = isIos;
+      U.$('#dlgInstall').showModal();
+    }
   };
 
-  appPills.forEach(pill => {
-    pill.addEventListener('click', () => {
-      audioSynth.playClickSound();
-      const appKey = pill.getAttribute('data-launch');
-      const target = appLinksMap[appKey];
-      if (target) {
-        launchApp(target.url, target.deep);
-      }
-    });
-  });
+  root.YarbisApp = App;
 
-  // Attach Camera Modal Trigger
-  const btnCamera = document.getElementById('btnCamera');
-  if (btnCamera) btnCamera.addEventListener('click', openCameraModal);
-
-  // Alarms Scheduler Controller
-  let activeAlarms = JSON.parse(localStorage.getItem('yarbis_alarms') || '[]');
-  const alarmsContainer = document.getElementById('alarmsContainer');
-  const alarmsList = document.getElementById('alarmsList');
-
-  function saveAlarms() {
-    localStorage.setItem('yarbis_alarms', JSON.stringify(activeAlarms));
-    renderAlarms();
+  if (root.document.readyState === 'loading') {
+    root.document.addEventListener('DOMContentLoaded', () => App.init());
+  } else {
+    App.init();
   }
-
-  function addAlarm(alarmData) {
-    activeAlarms.push({
-      id: Date.now(),
-      timeStr: alarmData.timeStr,
-      timestamp: alarmData.timestamp,
-      note: alarmData.note || 'Alarma YARBIS'
-    });
-    saveAlarms();
-  }
-
-  function removeAlarm(id) {
-    activeAlarms = activeAlarms.filter(a => a.id !== id);
-    saveAlarms();
-  }
-
-  function renderAlarms() {
-    if (!alarmsContainer || !alarmsList) return;
-    if (activeAlarms.length === 0) {
-      alarmsContainer.style.display = 'none';
-      alarmsList.innerHTML = '';
-      return;
-    }
-    alarmsContainer.style.display = 'block';
-    alarmsList.innerHTML = activeAlarms.map(a => `
-      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(var(--color-primary-rgb),0.15); border:1px solid var(--hud-glass-border); padding:6px 10px; border-radius:8px; font-size:0.75rem;">
-        <span>⏰ <strong>${a.timeStr}</strong> — ${a.note}</span>
-        <button onclick="window.removeAlarm(${a.id})" style="background:transparent; border:none; color:var(--color-danger); cursor:pointer; font-size:0.8rem;">✕</button>
-      </div>
-    `).join('');
-  }
-
-  window.removeAlarm = removeAlarm;
-  renderAlarms();
-
-  // Check alarms interval
-  setInterval(() => {
-    const now = Date.now();
-    const triggered = activeAlarms.filter(a => now >= a.timestamp);
-    if (triggered.length > 0) {
-      triggered.forEach(a => {
-        audioSynth.playSuccessChime();
-        const alarmMsg = `⏰ ¡Alarma activa! Son las ${a.timeStr}: ${a.note}, ${brain.userName}.`;
-        appendMessage(brain.assistantName, alarmMsg, true);
-        speechEngine.speak(alarmMsg);
-        removeAlarm(a.id);
-      });
-    }
-  }, 5000);
-
-  // Voice Pitch and Rate Modulators
-  const sliderVoicePitch = document.getElementById('sliderVoicePitch');
-  const valVoicePitch = document.getElementById('valVoicePitch');
-  const sliderVoiceRate = document.getElementById('sliderVoiceRate');
-  const valVoiceRate = document.getElementById('valVoiceRate');
-
-  if (sliderVoicePitch && valVoicePitch) {
-    sliderVoicePitch.value = speechEngine.pitch;
-    valVoicePitch.textContent = speechEngine.pitch;
-    sliderVoicePitch.addEventListener('input', (e) => {
-      speechEngine.setPitch(e.target.value);
-      valVoicePitch.textContent = e.target.value;
-    });
-  }
-
-  if (sliderVoiceRate && valVoiceRate) {
-    sliderVoiceRate.value = speechEngine.rate;
-    valVoiceRate.textContent = speechEngine.rate + 'x';
-    sliderVoiceRate.addEventListener('input', (e) => {
-      speechEngine.setRate(e.target.value);
-      valVoiceRate.textContent = e.target.value + 'x';
-    });
-  }
-
-  // PWA Install Modal Controller
-  const btnInstallPwa = document.getElementById('btnInstallPwa');
-
-  if (btnInstallPwa && modalInstallPwa) {
-    btnInstallPwa.addEventListener('click', () => {
-      audioSynth.playClickSound();
-      modalInstallPwa.classList.add('active');
-    });
-  }
-  if (btnCloseInstallPwa && modalInstallPwa) {
-    btnCloseInstallPwa.addEventListener('click', () => {
-      audioSynth.playClickSound();
-      modalInstallPwa.classList.remove('active');
-    });
-  }
-
-  // Initial Load Render
-  renderNotes();
-
-  // Startup Greeting
-  setTimeout(() => {
-    audioSynth.playStartupSound();
-    const greet = brain.getVenezuelanGreeting();
-    appendMessage(brain.assistantName, greet, true);
-  }, 800);
-}
-
-// Guarantee execution on all browsers and mobile WebKit
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initYarbisApp);
-} else {
-  initYarbisApp();
-}
+})(window);
