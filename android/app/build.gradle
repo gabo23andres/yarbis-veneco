@@ -20,7 +20,7 @@ android {
         minSdk 21
         targetSdk 34
         versionCode((System.getenv('VERSION_CODE') ?: '1').toInteger())
-        versionName(System.getenv('VERSION_NAME') ?: '13.0.0')
+        versionName(System.getenv('VERSION_NAME') ?: '14.0.0')
 
         resValue 'string', 'appName', 'YARBIS'
         resValue 'string', 'launchUrl', twa.startUrl

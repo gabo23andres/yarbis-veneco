@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=13.0.0" />
+  <link rel="stylesheet" href="styles.css?v=14.0.0" />
 </head>
 <body>
   <!-- Íconos (estilo Lucide) -->
@@ -467,7 +467,7 @@
           <a class="app-tile" href="https://mail.google.com" target="_blank" rel="noopener"><span>✉️</span>Gmail</a>
         </div>
 
-        <p class="about">YARBIS v13 · Hecho en 🇻🇪 · Tus datos se guardan sólo en este dispositivo.</p>
+        <p class="about">YARBIS v14 · Hecho en 🇻🇪 · Tus datos se guardan sólo en este dispositivo.</p>
       </section>
     </main>
 
@@ -544,8 +544,13 @@
       </section>
 
       <section class="settings-section">
-        <h3>Inteligencia artificial</h3>
-        <p class="hint">Sin clave, YARBIS usa una IA gratuita (puede fallar a veces). Con tu clave gratuita de <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a> las respuestas y la visión son más rápidas y estables.</p>
+        <h3>Cerebro: Google Gemini</h3>
+        <p class="hint">Con Gemini, YARBIS entiende cualquier forma de pedir las cosas, <strong>actúa</strong> (alarmas, notas, gastos, mensajes, apps, calendario), busca en Google noticias y datos actuales, y recuerda lo que le cuentes. Sin clave usa una IA gratuita más limitada.</p>
+        <ol class="key-steps small">
+          <li>Abre <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a> con tu cuenta de Google.</li>
+          <li>Toca <strong>Create API key</strong> y cópiala (es gratis).</li>
+          <li>Pégala aquí y toca <strong>Guardar y probar</strong>.</li>
+        </ol>
         <div class="inline-form">
           <input type="password" id="setGeminiKey" placeholder="Clave de Gemini (AIza… o AQ.…)" autocomplete="off" spellcheck="false" aria-label="Clave de Gemini" />
           <button type="button" class="btn btn-ghost btn-sm" id="btnToggleKey">Mostrar</button>
@@ -555,6 +560,44 @@
           <button type="button" class="btn btn-ghost btn-sm" id="btnRemoveKey">Quitar clave</button>
           <span class="muted small" id="keyStatus"></span>
         </div>
+        <label class="field"><span>Modelo</span>
+          <select id="setGeminiPref">
+            <option value="auto">Automático: rápido y listo (Flash)</option>
+            <option value="pro">Más inteligente (Pro, menos cupo gratis)</option>
+            <option value="lite">Ahorro (Flash-Lite, más cupo gratis)</option>
+          </select>
+        </label>
+        <h4 class="settings-sub">🔌 Otra API de IA (opcional)</h4>
+        <p class="hint">Usa tu clave de ChatGPT (OpenAI), Claude, Groq, OpenRouter, DeepSeek, Mistral, Grok o cualquier API compatible con OpenAI. También puede actuar con las herramientas. Pega la clave y se detecta sola.</p>
+        <div class="field-grid">
+          <label class="field"><span>Proveedor</span>
+            <select id="setProvider"></select>
+          </label>
+          <label class="field"><span>Modelo <small class="muted">(opcional)</small></span>
+            <input type="text" id="setProviderModel" placeholder="Automático" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+        <label class="field" id="providerBaseField" hidden><span>URL base de la API</span>
+          <input type="url" id="setProviderBase" placeholder="https://mi-servidor.com/v1" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="inline-form">
+          <input type="password" id="setProviderKey" placeholder="Clave de la API (sk-…, gsk_…, sk-ant-…)" autocomplete="off" spellcheck="false" aria-label="Clave de otra API" />
+          <a class="btn btn-ghost btn-sm" id="providerKeyLink" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">Obtener clave</a>
+        </div>
+        <label class="switch"><input type="checkbox" id="setProviderPrimary" /><span>Usarla primero (antes que Gemini)</span></label>
+        <div class="row">
+          <button type="button" class="btn btn-primary btn-sm" id="btnSaveProvider">Guardar y probar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnRemoveProvider">Quitar</button>
+          <span class="muted small" id="providerStatus"></span>
+        </div>
+
+        <h4 class="settings-sub">🧠 Lo que YARBIS recuerda de ti</h4>
+        <p class="hint">Di "recuerda que…" o cuéntale datos tuyos. Puedes borrarlos cuando quieras.</p>
+        <ul class="list memory-list" id="memoryList"></ul>
+        <form class="inline-form" id="formMemory">
+          <input type="text" id="memoryText" placeholder="Ej: Mi cumpleaños es el 5 de mayo" aria-label="Nuevo recuerdo" />
+          <button type="submit" class="btn btn-primary btn-sm">Agregar</button>
+        </form>
       </section>
 
       <section class="settings-section">
@@ -775,24 +818,26 @@
     </div>
   </dialog>
 
-  <script src="js/utils.js?v=13.0.0"></script>
-  <script src="js/audioEffects.js?v=13.0.0"></script>
-  <script src="js/mathEngine.js?v=13.0.0"></script>
-  <script src="js/finance.js?v=13.0.0"></script>
-  <script src="js/reminders.js?v=13.0.0"></script>
-  <script src="js/cleaner.js?v=13.0.0"></script>
-  <script src="js/camera.js?v=13.0.0"></script>
-  <script src="js/voiceOrb.js?v=13.0.0"></script>
-  <script src="js/speechEngine.js?v=13.0.0"></script>
-  <script src="js/charts.js?v=13.0.0"></script>
-  <script src="js/expenses.js?v=13.0.0"></script>
-  <script src="js/pagomovil.js?v=13.0.0"></script>
-  <script src="js/appLauncher.js?v=13.0.0"></script>
-  <script src="js/yarbisBrain.js?v=13.0.0"></script>
-  <script src="js/financeView.js?v=13.0.0"></script>
-  <script src="js/settings.js?v=13.0.0"></script>
-  <script src="js/home.js?v=13.0.0"></script>
-  <script src="js/voicetools.js?v=13.0.0"></script>
-  <script src="js/app.js?v=13.0.0"></script>
+  <script src="js/utils.js?v=14.0.0"></script>
+  <script src="js/audioEffects.js?v=14.0.0"></script>
+  <script src="js/mathEngine.js?v=14.0.0"></script>
+  <script src="js/finance.js?v=14.0.0"></script>
+  <script src="js/reminders.js?v=14.0.0"></script>
+  <script src="js/cleaner.js?v=14.0.0"></script>
+  <script src="js/camera.js?v=14.0.0"></script>
+  <script src="js/voiceOrb.js?v=14.0.0"></script>
+  <script src="js/speechEngine.js?v=14.0.0"></script>
+  <script src="js/charts.js?v=14.0.0"></script>
+  <script src="js/expenses.js?v=14.0.0"></script>
+  <script src="js/pagomovil.js?v=14.0.0"></script>
+  <script src="js/appLauncher.js?v=14.0.0"></script>
+  <script src="js/aiProviders.js?v=14.0.0"></script>
+  <script src="js/geminiAgent.js?v=14.0.0"></script>
+  <script src="js/yarbisBrain.js?v=14.0.0"></script>
+  <script src="js/financeView.js?v=14.0.0"></script>
+  <script src="js/settings.js?v=14.0.0"></script>
+  <script src="js/home.js?v=14.0.0"></script>
+  <script src="js/voicetools.js?v=14.0.0"></script>
+  <script src="js/app.js?v=14.0.0"></script>
 </body>
 </html>

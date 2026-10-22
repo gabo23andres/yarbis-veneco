@@ -336,6 +336,24 @@
       else S.remove('yarbis_gemini_api_key');
     }
 
+    // Motores con clave, en orden de preferencia
+    brainOrder() {
+      const order = [];
+      const P = root.YarbisAIProviders;
+      const other = P && P.isReady();
+      if (other && P.config().primary) order.push('provider');
+      if (this.geminiApiKey && root.YarbisGemini) order.push('gemini');
+      if (other && !order.includes('provider')) order.push('provider');
+      return order;
+    }
+
+    aiLabel() {
+      const first = this.brainOrder()[0];
+      if (first === 'gemini') return 'Gemini';
+      if (first === 'provider') return root.YarbisAIProviders.label();
+      return 'IA gratuita';
+    }
+
     greeting() {
       const hour = new Date().getHours();
       const saludo = hour < 12 ? '¡Buenos días' : hour < 19 ? '¡Buenas tardes' : '¡Buenas noches';
@@ -404,7 +422,7 @@
           text: results.map(r => r.text).join('\n\n'),
           speak: results.map(r => U.toSpeech(r.speak || r.text)).join(' '),
           actions: results.flatMap(r => r.actions || []).slice(0, 4),
-          effects: results.map(r => r.effect).filter(Boolean),
+          effects: results.flatMap(r => r.effects || (r.effect ? [r.effect] : [])),
           sound: results.some(r => r.sound === 'success') ? 'success' : undefined,
           error: results.every(r => r.error)
         };
@@ -480,6 +498,32 @@
       if (myName && !/^(la|el|un|una|que|como|cuanto)\b/i.test(myName)) {
         this.setNames(this.assistantName, U.capitalize(myName));
         return { text: `¡Mucho gusto, ${this.userName}! Lo recordaré.`, effect: { type: 'PROFILE' } };
+      }
+
+      /* ---------- Memoria: "recuerda que…" ---------- */
+      const mem = root.YarbisGemini && root.YarbisGemini.Memory;
+      if (mem) {
+        const fact = grab(/^(?:recuerda|acuerdate(?:\s+de)?|no\s+olvides|ten\s+en\s+cuenta|guarda\s+en\s+tu\s+memoria)\s+que\s+(.{3,})$/d);
+        // "recuerda que mañana a las 3 tengo dentista" es un aviso, no un dato para la memoria
+        if (fact && !/\b(a las \d|manana|hoy|esta (tarde|noche)|en \d+ (minutos?|horas?))\b/.test(U.normalize(fact))) {
+          const m = mem.add(fact);
+          return { text: m ? `🧠 Lo recordaré: _${m.text}_.` : 'No entendí qué debo recordar.', speak: m ? 'Listo, lo recordaré.' : undefined };
+        }
+        if (has(/^(?:que\s+(?:sabes|recuerdas)\s+(?:de\s+mi|sobre\s+mi)|que\s+recuerdas|que\s+te\s+he\s+dicho\s+de\s+mi)$/)) {
+          const all = mem.all();
+          return all.length
+            ? { text: `🧠 Esto es lo que recuerdo de ti:\n${all.map(m => `- ${m.text}`).join('\n')}`, speak: `Recuerdo ${all.length} cosa${all.length === 1 ? '' : 's'} de ti.`, actions: [{ label: 'Administrar recuerdos', view: 'settings' }] }
+            : { text: '🧠 Aún no me has pedido recordar nada. Di por ejemplo "recuerda que mi cumpleaños es el 5 de mayo".' };
+        }
+        if (has(/^olvida\s+(?:todo\s+lo\s+que\s+sabes\s+de\s+mi|todos\s+tus\s+recuerdos|todo\s+lo\s+que\s+te\s+dije)$/)) {
+          mem.clear();
+          return { text: '🧠 Listo, olvidé todo lo que me habías contado.' };
+        }
+        const forget = grab(/^olvida\s+(?:que|lo\s+de)\s+(.{3,})$/d);
+        if (forget) {
+          const k = mem.forget(forget);
+          return { text: k ? `🧠 Olvidado${k > 1 ? ` (${k} datos)` : ''}.` : 'No encontré nada parecido en mis recuerdos.' };
+        }
       }
 
       /* ---------- Hora y fecha ---------- */
@@ -1115,8 +1159,8 @@
       return null;
     }
 
-    calendarResponse(raw, n) {
-      const day = parseDay(n);
+    calendarResponse(raw, n, forcedDate = null) {
+      const day = forcedDate ? { date: forcedDate } : parseDay(n);
       const clock = parseClock(n);
       const date = day ? day.date : new Date(new Date().setHours(0, 0, 0, 0));
       let start = null;
@@ -1650,7 +1694,7 @@
       } catch (e) { /* sin datos */ }
       const today = new Date().toLocaleString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
       return `Eres ${this.assistantName}, un asistente personal venezolano: amable, claro, útil y con un toque criollo natural (sin exagerar ni ser vulgar).
-${this.userName ? `El usuario se llama ${this.userName}.` : ''} Hoy es ${today} (hora de Venezuela).${fxLine}${this.personalContext()}
+${this.userName ? `El usuario se llama ${this.userName}.` : ''} Hoy es ${today} (hora de Venezuela).${fxLine}${this.personalContext()}${root.YarbisGemini ? root.YarbisGemini.Memory.prompt() : ''}
 Reglas:
 - Responde en español, de forma breve y directa (2 a 6 frases) salvo que te pidan detalle. Tus respuestas también se leen en voz alta.
 - Usa Markdown simple (negritas, listas, tablas pequeñas) cuando ayude.
@@ -1664,21 +1708,37 @@ Reglas:
       let answer = null;
       let lastError = '';
 
-      // Respuesta en tiempo real: se va pintando mientras llega
-      if (typeof opts.onChunk === 'function') {
+      // Cerebro: Gemini u otra API con tu clave. Conversa y además actúa con las
+      // herramientas de la app. Si uno falla se prueba el otro.
+      const brainMessages = [...this.history.slice(-20), { role: 'user', text: userText }];
+      for (const engine of this.brainOrder()) {
         try {
-          answer = this.geminiApiKey
-            ? await this.streamGemini(messages, opts.onChunk)
-            : await this.streamFreeAI(messages, opts.onChunk);
-          this.lastAiEngine = this.geminiApiKey ? 'gemini' : 'free';
+          const r = engine === 'gemini'
+            ? await root.YarbisGemini.run(this, brainMessages, opts.onChunk)
+            : await root.YarbisGemini.runProvider(this, brainMessages, opts.onChunk);
+          this.lastAiEngine = engine;
+          this.remember('user', userText);
+          this.remember('assistant', r.text);
+          return { text: r.text, ai: true, actions: r.actions, effects: r.effects, sound: r.sound || undefined, tools: r.tools };
         } catch (e) {
-          lastError = this.geminiApiKey ? e.message : '';
+          const who = engine === 'gemini' ? 'Gemini' : root.YarbisAIProviders.label();
+          lastError = lastError ? `${lastError} · ${who}: ${e.message}` : `${who}: ${e.message}`;
+          console.warn(`${who} (cerebro) falló:`, e.message);
+        }
+      }
+
+      // Respuesta en tiempo real: se va pintando mientras llega
+      if (!answer && typeof opts.onChunk === 'function' && !this.brainOrder().length) {
+        try {
+          answer = await this.streamFreeAI(messages, opts.onChunk);
+          this.lastAiEngine = 'free';
+        } catch (e) {
           console.warn('Streaming falló, se usa respuesta normal:', e.message);
           answer = null;
         }
       }
 
-      if (!answer && this.geminiApiKey) {
+      if (!answer && this.geminiApiKey && !lastError) {
         try {
           answer = await this.queryGemini(messages);
           this.lastAiEngine = 'gemini';
@@ -1708,8 +1768,8 @@ Reglas:
         return {
           text: offline
             ? '📴 Estás sin conexión. Puedo hacer cálculos, notas, alarmas y temporizadores, pero para conversar con la IA necesito internet.'
-            : `⚠️ No pude conectar con la IA en este momento${lastError ? ` (Gemini: ${lastError})` : ''}. Inténtalo de nuevo en unos segundos${this.geminiApiKey ? '' : ', o agrega tu clave gratuita de Google Gemini en Ajustes para respuestas más estables'}.`,
-          actions: this.geminiApiKey ? [] : [{ label: 'Abrir Ajustes', view: 'settings' }],
+            : `⚠️ No pude conectar con la IA en este momento${lastError ? ` (${lastError})` : ''}. Inténtalo de nuevo en unos segundos${this.brainOrder().length ? '' : ', o agrega tu clave gratuita de Google Gemini en Ajustes para respuestas más estables'}.`,
+          actions: this.brainOrder().length ? [] : [{ label: 'Abrir Ajustes', view: 'settings' }],
           error: true
         };
       }
@@ -1722,8 +1782,12 @@ Reglas:
     // Una consulta suelta a la IA (sin historial) con instrucciones propias
     async completeOnce(system, userText) {
       const messages = [{ role: 'user', text: userText }];
-      if (this.geminiApiKey) {
-        try { return await this.geminiRequest(this.geminiChatBody(messages, system)); } catch (e) { console.warn('Gemini:', e.message); }
+      for (const engine of this.brainOrder()) {
+        try {
+          return engine === 'gemini'
+            ? await this.geminiRequest(this.geminiChatBody(messages, system))
+            : await root.YarbisAIProviders.complete(system, userText);
+        } catch (e) { console.warn(`${engine}:`, e.message); }
       }
       return this.queryFreeAI(messages, system);
     }
@@ -1885,15 +1949,27 @@ Reglas:
         .map(m => m.name.replace(/^models\//, ''));
     }
 
-    chooseModel(models) {
+    chooseModel(models, pref = S.getRaw('yarbis_gemini_pref', 'auto')) {
       const usable = models.filter(m => /^gemini-/.test(m) && !/(embedding|aqa|tts|image|audio|live|thinking|exp|preview|learnlm)/.test(m));
       const version = (m) => {
         const v = m.match(/^gemini-(\d+(?:\.\d+)?)/);
         return v ? parseFloat(v[1]) : 0;
       };
-      const rank = (m) => version(m) * 10 + (/-flash$/.test(m) ? 3 : /-flash-latest$/.test(m) ? 2.5 : /flash(?!-lite)/.test(m) ? 2 : /flash-lite/.test(m) ? 1 : /pro/.test(m) ? 0.5 : 0);
+      // auto: el Flash más nuevo · pro: el más inteligente · lite: el que más cupo gratis tiene
+      const tier = pref === 'pro'
+        ? (m) => (/-pro$/.test(m) ? 3 : /-pro-latest$/.test(m) ? 2.5 : /pro/.test(m) ? 2 : /flash(?!-lite)/.test(m) ? 1 : 0)
+        : pref === 'lite'
+          ? (m) => (/flash-lite$/.test(m) ? 3 : /flash-lite/.test(m) ? 2.5 : /-flash$/.test(m) ? 2 : 0)
+          : (m) => (/-flash$/.test(m) ? 3 : /-flash-latest$/.test(m) ? 2.5 : /flash(?!-lite)/.test(m) ? 2 : /flash-lite/.test(m) ? 1 : /pro/.test(m) ? 0.5 : 0);
+      const rank = (m) => version(m) * 10 + tier(m);
       const sorted = (usable.length ? usable : models).slice().sort((x, y) => rank(y) - rank(x));
       return sorted[0] || 'gemini-flash-latest';
+    }
+
+    setModelPreference(pref) {
+      S.setRaw('yarbis_gemini_pref', ['pro', 'lite'].includes(pref) ? pref : 'auto');
+      this.geminiModel = '';
+      S.remove('yarbis_gemini_model');
     }
 
     async resolveGeminiModel(key, force = false) {
@@ -2035,6 +2111,16 @@ Reglas:
           return { text, ok: true };
         } catch (e) {
           errors.push(`Gemini: ${e.message}`);
+        }
+      }
+
+      const P = root.YarbisAIProviders;
+      if (P && P.isReady()) {
+        try {
+          const text = await P.vision(prompt, dataUrl);
+          if (text) return { text, ok: true };
+        } catch (e) {
+          errors.push(`${P.label()}: ${e.message}`);
         }
       }
 

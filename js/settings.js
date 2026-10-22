@@ -158,6 +158,76 @@
         this.onAiChange();
       });
 
+      $('#setGeminiPref').addEventListener('change', (e) => {
+        brain.setModelPreference(e.target.value);
+        $('#keyStatus').textContent = brain.geminiApiKey ? 'Modelo cambiado. Se elegirá en tu próxima pregunta.' : '';
+      });
+
+      // Otra API de IA
+      const P = root.YarbisAIProviders;
+      const provSel = $('#setProvider');
+      provSel.replaceChildren(...Object.entries(P.PROVIDERS).map(([id, p]) => U.el('option', { value: id, text: p.name })));
+      const syncProvider = () => {
+        const p = P.PROVIDERS[provSel.value];
+        $('#providerBaseField').hidden = provSel.value !== 'custom';
+        $('#setProviderModel').placeholder = provSel.value === 'custom' ? 'Nombre del modelo (obligatorio)' : `Automático${p.fixed ? ` (${p.fixed})` : ''}`;
+        const link = $('#providerKeyLink');
+        link.hidden = !p.link;
+        if (p.link) link.href = p.link;
+      };
+      provSel.addEventListener('change', syncProvider);
+      $('#setProviderKey').addEventListener('input', (e) => {
+        const found = P.detect(e.target.value);
+        if (found === 'gemini') {
+          $('#providerStatus').textContent = 'Esa es una clave de Gemini: pégala arriba, en "Cerebro: Google Gemini".';
+        } else if (found && found !== provSel.value) {
+          provSel.value = found;
+          syncProvider();
+          $('#providerStatus').textContent = `Detectado: ${P.PROVIDERS[found].name}.`;
+        }
+      });
+      $('#btnSaveProvider').addEventListener('click', async () => {
+        const status = $('#providerStatus');
+        const cfg = {
+          provider: provSel.value,
+          key: $('#setProviderKey').value,
+          model: $('#setProviderModel').value,
+          base: $('#setProviderBase').value,
+          primary: $('#setProviderPrimary').checked
+        };
+        if (!cfg.key.trim()) { status.textContent = 'Pega tu clave primero.'; return; }
+        if (cfg.provider === 'custom' && (!/^https?:\/\//.test(cfg.base.trim()) || !cfg.model.trim())) {
+          status.textContent = 'Para "Otra" escribe la URL base y el nombre del modelo.';
+          return;
+        }
+        status.textContent = 'Probando…';
+        $('#btnSaveProvider').disabled = true;
+        const res = await P.test(cfg);
+        $('#btnSaveProvider').disabled = false;
+        status.textContent = res.message;
+        if (res.success) this.onAiChange();
+      });
+      $('#btnRemoveProvider').addEventListener('click', () => {
+        P.clear();
+        $('#setProviderKey').value = '';
+        $('#setProviderModel').value = '';
+        $('#setProviderBase').value = '';
+        $('#setProviderPrimary').checked = false;
+        $('#providerStatus').textContent = 'Quitada.';
+        this.onAiChange();
+      });
+      this.syncProvider = syncProvider;
+
+      // Memoria
+      $('#formMemory').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = $('#memoryText');
+        if (root.YarbisGemini.Memory.add(input.value)) {
+          input.value = '';
+          this.renderMemories();
+        }
+      });
+
       // Agenda
       $('#formContact').addEventListener('submit', (e) => {
         e.preventDefault();
@@ -191,9 +261,19 @@
       $('#setSfx').checked = !(root.audioSynth && root.audioSynth.muted);
       $('#setGeminiKey').value = this.brain.geminiApiKey;
       $('#keyStatus').textContent = this.brain.geminiApiKey ? `Clave guardada${this.brain.geminiModel ? ` · ${this.brain.geminiModel}` : ''}.` : '';
+      $('#setGeminiPref').value = S.getRaw('yarbis_gemini_pref', 'auto');
+      const prov = root.YarbisAIProviders.config();
+      $('#setProvider').value = prov ? prov.provider : 'openai';
+      $('#setProviderKey').value = prov ? prov.key : '';
+      $('#setProviderModel').value = prov ? prov.model : '';
+      $('#setProviderBase').value = prov ? prov.base : '';
+      $('#setProviderPrimary').checked = !!(prov && prov.primary);
+      $('#providerStatus').textContent = prov ? `Guardada · ${root.YarbisAIProviders.PROVIDERS[prov.provider].name}${prov.primary ? ' (principal)' : ''}.` : '';
+      this.syncProvider();
       this.fillVoices();
       this.syncAppearance();
       this.renderContacts();
+      this.renderMemories();
       if (!this.dialog.open) this.dialog.showModal();
     }
 
@@ -237,6 +317,26 @@
       });
     }
 
+    renderMemories() {
+      const list = U.$('#memoryList');
+      if (!list || !root.YarbisGemini) return;
+      const Memory = root.YarbisGemini.Memory;
+      const items = Memory.all();
+      list.replaceChildren();
+      if (!items.length) {
+        list.appendChild(U.el('li', { class: 'empty-state small', text: 'Todavía no recuerda nada.' }));
+        return;
+      }
+      items.slice().reverse().forEach(m => {
+        list.appendChild(U.el('li', { class: 'memory-item' },
+          U.el('span', { text: m.text }),
+          U.el('button', {
+            type: 'button', class: 'icon-btn small danger', title: 'Olvidar', 'aria-label': `Olvidar "${m.text}"`,
+            onClick: () => { Memory.remove(m.id); this.renderMemories(); }
+          }, U.icon('x'))));
+      });
+    }
+
     async pickContacts() {
       if (!('contacts' in root.navigator) || !('select' in root.navigator.contacts)) {
         U.toast('Tu navegador no permite elegir contactos. Exporta tu agenda como .vcf e impórtala.', { type: 'warn', duration: 5000 });
@@ -271,7 +371,7 @@
 
     exportData() {
       const data = {};
-      S.keys().filter(k => k && k.startsWith('yarbis_') && k !== 'yarbis_gemini_api_key').forEach(k => {
+      S.keys().filter(k => k && k.startsWith('yarbis_') && k !== 'yarbis_gemini_api_key' && k !== 'yarbis_ai_provider').forEach(k => {
         data[k] = S.getRaw(k);
       });
       const blob = new Blob([JSON.stringify({ app: 'yarbis', version: 11, exportedAt: new Date().toISOString(), data }, null, 2)], { type: 'application/json' });
@@ -282,7 +382,7 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-      U.toast('Copia descargada (sin tu clave de Gemini).', { type: 'ok' });
+      U.toast('Copia descargada (sin tus claves de IA).', { type: 'ok' });
     }
 
     importData(input) {

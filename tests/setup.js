@@ -18,7 +18,7 @@ function loadApp() {
   globalThis.window = globalThis;
   globalThis.localStorage = createStorage();
   const root = path.join(__dirname, '..', 'js');
-  for (const file of ['utils.js', 'mathEngine.js', 'finance.js', 'reminders.js', 'cleaner.js', 'appLauncher.js', 'expenses.js', 'pagomovil.js', 'voicetools.js', 'yarbisBrain.js']) {
+  for (const file of ['utils.js', 'mathEngine.js', 'finance.js', 'reminders.js', 'cleaner.js', 'appLauncher.js', 'expenses.js', 'pagomovil.js', 'voicetools.js', 'aiProviders.js', 'geminiAgent.js', 'yarbisBrain.js']) {
     delete require.cache[require.resolve(path.join(root, file))];
     require(path.join(root, file));
   }

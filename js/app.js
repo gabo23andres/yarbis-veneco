@@ -1045,7 +1045,7 @@
       const text = U.$('#aiChipText');
       const online = root.navigator.onLine !== false;
       chip.classList.toggle('offline', !online);
-      text.textContent = !online ? 'Sin conexión' : this.brain.geminiApiKey ? 'Gemini' : 'IA gratuita';
+      text.textContent = !online ? 'Sin conexión' : this.brain.aiLabel();
     },
 
     bindPwa() {

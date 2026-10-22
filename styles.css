@@ -1234,3 +1234,14 @@ html, body { overscroll-behavior-y: none; }
   .sidebar { align-items: center; padding: 18px 10px; }
   .nav-item { justify-content: center; }
 }
+
+/* ===== v14: cerebro Gemini ===== */
+.key-steps { margin: 4px 0 10px; padding-left: 20px; color: var(--text-2); }
+.key-steps li + li { margin-top: 3px; }
+.settings-sub { font-size: 0.92rem; margin: 16px 0 2px; }
+.memory-list { max-height: 220px; overflow-y: auto; }
+.memory-item { display: flex; align-items: center; gap: 8px; }
+.memory-item span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.msg-tools { display: inline-flex; gap: 4px; align-items: center; font-size: 0.72rem; color: var(--text-3, var(--text-2)); }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 420px) { .field-grid { grid-template-columns: 1fr; } }
