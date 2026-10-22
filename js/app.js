@@ -48,6 +48,7 @@
       this.bindVoice();
       this.bindDelegation();
       this.bindDialogs();
+      this.bindGestures();
       this.bindReminders();
       this.bindFinance();
       this.bindPwa();
@@ -71,6 +72,56 @@
       if (root.YarbisPagoMovil) root.YarbisPagoMovil.mount();
       if (root.YarbisVoiceTools) root.YarbisVoiceTools.mount(this);
       this.handleLaunchParams();
+      this.adaptToPhone();
+    },
+
+    // Accesos rápidos de "Más": en Android abren la app instalada
+    adaptToPhone() {
+      const plat = root.YarbisApps ? root.YarbisApps.platform() : 'desktop';
+      root.document.documentElement.dataset.platform = plat;
+      U.$$('.app-tile').forEach(a => {
+        const web = a.getAttribute('href');
+        const appHref = root.YarbisApps.href(web, plat);
+        if (appHref !== web) {
+          a.setAttribute('href', appHref);
+          a.removeAttribute('target');
+        }
+        a.addEventListener('click', () => this.haptic());
+      });
+      const standalone = root.matchMedia && root.matchMedia('(display-mode: standalone)').matches || root.navigator.standalone;
+      if (standalone) U.$$('[data-action="install"]').forEach(b => { b.hidden = true; });
+    },
+
+    // Foto compartida desde otra app: el service worker la guardó en la caché
+    async receiveSharedMedia(caption) {
+      try {
+        const cache = await root.caches.open('yarbis-share');
+        const res = await cache.match('shared-media');
+        if (!res) return;
+        const blob = await res.blob();
+        await cache.delete('shared-media');
+        const dataUrl = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = reject;
+          r.readAsDataURL(blob);
+        });
+        this.sharedImage = await root.YarbisCamera.shrinkDataUrl(dataUrl);
+        this.showView('assistant');
+        this.addMessage({ role: 'user', text: `📥 Imagen compartida${caption ? `: ${caption}` : ''}`, image: this.sharedImage });
+        this.addMessage({
+          role: 'assistant',
+          text: '¿Qué hago con esta imagen?',
+          actions: [
+            { label: '🔍 Describir', command: 'analyze-shared', value: 'general' },
+            { label: '📄 Leer texto', command: 'analyze-shared', value: 'document' },
+            { label: '🌐 Traducir', command: 'analyze-shared', value: 'translate' },
+            { label: '📱 Leer QR', command: 'qr-shared' }
+          ]
+        });
+      } catch (e) {
+        console.warn('Imagen compartida:', e);
+      }
     },
 
     // Abre YARBIS desde "Compartir" de otra app o desde un atajo del ícono
@@ -78,6 +129,11 @@
       const params = new URLSearchParams(root.location.search);
       const shared = [params.get('title'), params.get('text'), params.get('url')].filter(Boolean).join('\n').trim();
       const accion = params.get('accion');
+      if (params.get('media')) {
+        root.history.replaceState(null, '', root.location.pathname + root.location.hash);
+        this.receiveSharedMedia(shared);
+        return;
+      }
       if (!shared && !accion) return;
       root.history.replaceState(null, '', root.location.pathname + root.location.hash);
       if (shared) {
@@ -357,6 +413,12 @@
           type: 'button', class: 'icon-btn', title: 'Leer en voz alta', 'aria-label': 'Leer en voz alta',
           onClick: () => { this.speech.primeSpeechSynthesis(); this.speech.speak(m.text, { force: true }); }
         }, U.icon('volume')));
+        if (root.navigator.share) {
+          meta.appendChild(el('button', {
+            type: 'button', class: 'icon-btn', title: 'Compartir', 'aria-label': 'Compartir respuesta',
+            onClick: () => this.shareText(m.text)
+          }, U.icon('share')));
+        }
         if ((m.ai || m.error) && m.prompt) {
           meta.appendChild(el('button', {
             type: 'button', class: 'icon-btn', title: 'Regenerar respuesta', 'aria-label': 'Regenerar respuesta',
@@ -375,11 +437,17 @@
       const cls = `btn btn-sm ${a.danger ? 'btn-secondary danger' : 'btn-secondary'}`;
       if (a.url && U.isSafeUrl(a.url)) {
         const external = /^https?:/i.test(a.url);
-        return U.el('a', {
-          class: cls, href: a.url,
-          target: external ? '_blank' : null,
+        const appHref = root.YarbisApps ? root.YarbisApps.href(a.url) : a.url;
+        const isIntent = appHref.startsWith('intent:');
+        const link = U.el('a', {
+          class: cls,
+          target: external && !isIntent ? '_blank' : null,
           rel: external ? 'noopener noreferrer' : null
         }, external ? U.icon('external') : null, a.label);
+        // intent:// no pasa el filtro de URLs seguras de el(); se asigna aquí porque lo generamos nosotros
+        link.setAttribute('href', isIntent ? appHref : a.url);
+        link.addEventListener('click', () => this.haptic());
+        return link;
       }
       return U.el('button', {
         type: 'button', class: cls,
@@ -388,6 +456,50 @@
           if (a.command) this.runCommand(a.command, a.value, e.currentTarget);
         }
       }, a.label);
+    },
+
+    // Evento de calendario (.ics): en iPhone abre "Agregar evento"; en Android, el calendario
+    downloadIcs({ title, start, end, allDay }) {
+      const pad = (x) => String(x).padStart(2, '0');
+      const utc = (t) => {
+        const d = new Date(t);
+        return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+      };
+      const day = (t) => {
+        const d = new Date(t);
+        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+      };
+      const esc = (x) => String(x).replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
+      const lines = [
+        'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//YARBIS//ES', 'BEGIN:VEVENT',
+        `UID:${U.uid()}@yarbis`, `DTSTAMP:${utc(Date.now())}`,
+        allDay ? `DTSTART;VALUE=DATE:${day(start)}` : `DTSTART:${utc(start)}`,
+        allDay ? `DTEND;VALUE=DATE:${day(end)}` : `DTEND:${utc(end)}`,
+        `SUMMARY:${esc(title)}`,
+        'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${esc(title)}`, 'END:VALARM',
+        'END:VEVENT', 'END:VCALENDAR'
+      ];
+      const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = U.el('a', { href: '#', download: `${title.replace(/[^\w\sáéíóúñ-]/gi, '').slice(0, 40) || 'evento'}.ics` });
+      a.href = url;
+      root.document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    },
+
+    async shareText(text) {
+      const plain = text.replace(/\*\*/g, '').replace(/^_|_$/gm, '');
+      if (root.navigator.share) {
+        try {
+          await root.navigator.share({ text: plain });
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') return;
+        }
+      }
+      U.toast(await U.copyText(plain) ? 'Copiado para compartir.' : 'No se pudo copiar.');
     },
 
     openTool(tool, value) {
@@ -413,6 +525,19 @@
         U.toast('Notas borradas.');
       } else if (command === 'copy') {
         U.copyText(value).then(ok => U.toast(ok ? 'Copiado.' : 'No se pudo copiar.'));
+      } else if (command === 'ics' && value) {
+        this.downloadIcs(value);
+      } else if (command === 'alarm-at' && value) {
+        this.reminders.schedule.addAlarm(value.at, value.label);
+        this.reminders.requestNotificationPermission();
+        if (button) button.disabled = true;
+        U.toast(`Te aviso a las ${U.fmtTime(value.at)}.`, { type: 'ok' });
+      } else if (command === 'analyze-shared' && this.sharedImage) {
+        this.analyzeImage(this.sharedImage, value || 'general');
+      } else if (command === 'qr-shared' && this.sharedImage) {
+        root.YarbisCamera.decodeDataUrl(this.sharedImage)
+          .then(t => (t ? this.showScannedCode(t) : U.toast('No encontré un código QR en la imagen.', { type: 'warn' })))
+          .catch(e => U.toast(e.message, { type: 'error' }));
       } else if (command === 'open-tool') {
         this.openTool(value);
       } else if (command === 'pm-share') {
@@ -490,16 +615,15 @@
 
     openUrl(url) {
       if (!url || !U.isSafeUrl(url)) return;
-      if (/^(tel|sms|mailto):/i.test(url)) {
-        root.location.href = url;
-        return;
-      }
-      let win = null;
-      try { win = root.open(url, '_blank'); } catch (e) { win = null; }
-      if (win) {
-        try { win.opener = null; } catch (e) { /* ignorar */ }
-      } else {
-        U.toast('Toca el botón de la respuesta para abrirlo.');
+      const opened = root.YarbisApps ? root.YarbisApps.open(url) : !!root.open(url, '_blank');
+      if (!opened) U.toast('Toca el botón de la respuesta para abrirlo.');
+    },
+
+    // Vibración corta al tocar (sólo Android; respeta el silencio de efectos)
+    haptic(ms = 8) {
+      if (this.audio && this.audio.muted) return;
+      if (this.audio && this.audio.canVibrate && this.audio.canVibrate()) {
+        try { root.navigator.vibrate(ms); } catch (e) { /* ignorar */ }
       }
     },
 
@@ -658,6 +782,88 @@
           if (dlg) dlg.close();
         }
       });
+
+      // Botón "atrás" del teléfono: cierra la ventana abierta en vez de salir de la app
+      this.ignorePop = false;
+      const observer = new MutationObserver((records) => {
+        records.forEach(r => {
+          const dlg = r.target;
+          if (dlg.open && !(root.history.state && root.history.state.dlg === dlg.id)) {
+            root.history.pushState({ dlg: dlg.id }, '', root.location.href);
+          }
+        });
+      });
+      U.$$('dialog').forEach(dlg => {
+        observer.observe(dlg, { attributes: true, attributeFilter: ['open'] });
+        dlg.addEventListener('close', () => {
+          if (root.history.state && root.history.state.dlg === dlg.id) {
+            this.ignorePop = true;
+            root.history.back();
+          }
+        });
+      });
+      root.addEventListener('popstate', () => {
+        // Una entrada de una ventana que ya está cerrada no debe quedar en el historial
+        const st = root.history.state;
+        if (st && st.dlg && !(U.$(`#${st.dlg}`) || {}).open) root.history.replaceState(null, '', root.location.href);
+        if (this.ignorePop) { this.ignorePop = false; return; }
+        const open = U.$$('dialog').filter(d => d.open).pop();
+        if (open) {
+          if (open.id === 'dlgRinging') { this.stopRinging(); return; }
+          open.close();
+        }
+      });
+    },
+
+    /* ==========================================
+       GESTOS (móvil): deslizar entre pestañas y
+       jalar hacia abajo para actualizar Finanzas
+       ========================================== */
+    bindGestures() {
+      const ORDER = ['assistant', 'notes', 'finance', 'more'];
+      const views = U.$('.views');
+      const SKIP = 'input, textarea, select, button, a, .crypto-row, .list-chips, .segmented, .suggestions, .line-chart, .chip-row, .md-table-wrap, pre, .composer, .voice-bar, .pl-row, .home-grid .bento-quick';
+      let start = null;
+      views.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1 || root.innerWidth > 860) { start = null; return; }
+        const t = e.touches[0];
+        const skip = e.target.closest(SKIP);
+        start = { x: t.clientX, y: t.clientY, time: Date.now(), skip: !!skip, view: U.$('.view.active') };
+      }, { passive: true });
+      views.addEventListener('touchmove', (e) => {
+        if (!start || this.view !== 'finance') return;
+        const dy = e.touches[0].clientY - start.y;
+        const v = start.view;
+        if (v && v.scrollTop <= 0 && dy > 0) {
+          v.style.transform = `translateY(${Math.min(70, dy * 0.4)}px)`;
+          start.pull = dy;
+        }
+      }, { passive: true });
+      views.addEventListener('touchend', (e) => {
+        if (!start) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - start.x;
+        const dy = t.clientY - start.y;
+        const v = start.view;
+        if (v) v.style.transform = '';
+        if (this.view === 'finance' && start.pull > 140 && v && v.scrollTop <= 0) {
+          this.haptic(12);
+          root.YarbisFinanceView.refresh(true);
+        } else if (!start.skip && Math.abs(dx) > 80 && Math.abs(dy) < 60 && Date.now() - start.time < 600) {
+          const idx = ORDER.indexOf(this.view);
+          const next = ORDER[idx + (dx < 0 ? 1 : -1)];
+          if (next) {
+            this.haptic();
+            this.showView(next);
+          }
+        }
+        start = null;
+      }, { passive: true });
+
+      // Vibración corta en los toques principales
+      root.document.addEventListener('click', (e) => {
+        if (e.target.closest('.tab, .nav-item, .mic-btn, .quick-btn, .chip-btn, .note-check, .suggestion, .list-chip, .segmented button, .btn-primary')) this.haptic();
+      });
     },
 
     /* ==========================================
@@ -676,6 +882,11 @@
           b.hidden = n === 0;
           b.textContent = n > 99 ? '99+' : String(n);
         });
+        // Contador en el ícono de la app instalada (Android/escritorio)
+        try {
+          if (n && root.navigator.setAppBadge) root.navigator.setAppBadge(n).catch(() => {});
+          else if (!n && root.navigator.clearAppBadge) root.navigator.clearAppBadge().catch(() => {});
+        } catch (e) { /* no soportado */ }
       };
       R.notes.onChange(updateBadges);
       updateBadges();

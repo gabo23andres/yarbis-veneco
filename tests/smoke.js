@@ -411,7 +411,17 @@ async function run() {
       await say('cóbrale 5 dólares a mamá', 'Cobro para');
     });
 
+    await check('botón atrás del teléfono cierra la ventana abierta', async () => {
+      await page.evaluate(() => window.YarbisApp.openTool('translate'));
+      await page.waitForSelector('#dlgTranslate[open]');
+      await page.goBack();
+      await page.waitForFunction(() => !document.querySelector('#dlgTranslate').open);
+      assert.ok(await page.evaluate(() => !!window.YarbisApp && !!document.querySelector('#messages')));
+    });
+
     await check('compartir hacia YARBIS y atajos del ícono', async () => {
+      // Esperar a que el "atrás" de la ventana cerrada termine antes de navegar
+      await page.waitForFunction(() => !(history.state && history.state.dlg));
       await page.goto(`${BASE}?text=${encodeURIComponent('Reunión mañana a las 3')}`);
       await page.waitForFunction(() => document.querySelector('#messages').textContent.includes('Compartido'));
       assert.match(await page.textContent('#messages'), /Guardar como nota/);

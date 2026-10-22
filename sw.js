@@ -5,33 +5,34 @@
    Nunca guarda llamadas a APIs externas.
    ========================================================================== */
 
-const VERSION = 'yarbis-v12.0.0';
+const VERSION = 'yarbis-v13.0.0';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=12.0.0',
+  './styles.css?v=13.0.0',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './js/utils.js?v=12.0.0',
-  './js/audioEffects.js?v=12.0.0',
-  './js/mathEngine.js?v=12.0.0',
-  './js/finance.js?v=12.0.0',
-  './js/reminders.js?v=12.0.0',
-  './js/cleaner.js?v=12.0.0',
-  './js/camera.js?v=12.0.0',
-  './js/voiceOrb.js?v=12.0.0',
-  './js/speechEngine.js?v=12.0.0',
-  './js/charts.js?v=12.0.0',
-  './js/expenses.js?v=12.0.0',
-  './js/pagomovil.js?v=12.0.0',
-  './js/yarbisBrain.js?v=12.0.0',
-  './js/financeView.js?v=12.0.0',
-  './js/settings.js?v=12.0.0',
-  './js/home.js?v=12.0.0',
-  './js/voicetools.js?v=12.0.0',
-  './js/app.js?v=12.0.0'
+  './js/utils.js?v=13.0.0',
+  './js/audioEffects.js?v=13.0.0',
+  './js/mathEngine.js?v=13.0.0',
+  './js/finance.js?v=13.0.0',
+  './js/reminders.js?v=13.0.0',
+  './js/cleaner.js?v=13.0.0',
+  './js/camera.js?v=13.0.0',
+  './js/voiceOrb.js?v=13.0.0',
+  './js/speechEngine.js?v=13.0.0',
+  './js/charts.js?v=13.0.0',
+  './js/expenses.js?v=13.0.0',
+  './js/pagomovil.js?v=13.0.0',
+  './js/appLauncher.js?v=13.0.0',
+  './js/yarbisBrain.js?v=13.0.0',
+  './js/financeView.js?v=13.0.0',
+  './js/settings.js?v=13.0.0',
+  './js/home.js?v=13.0.0',
+  './js/voicetools.js?v=13.0.0',
+  './js/app.js?v=13.0.0'
 ];
 
 self.addEventListener('install', (event) => {
@@ -45,13 +46,34 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== 'yarbis-share').map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
+// "Compartir → YARBIS" con una foto: se guarda en caché y se abre la app
+async function handleShareTarget(req) {
+  const form = await req.formData();
+  const params = new URLSearchParams();
+  ['title', 'text', 'url'].forEach((k) => {
+    const v = form.get(k);
+    if (v) params.set(k, String(v).slice(0, 2000));
+  });
+  const file = form.get('media');
+  if (file && typeof file === 'object' && file.size) {
+    const cache = await caches.open('yarbis-share');
+    await cache.put('shared-media', new Response(file, { headers: { 'Content-Type': file.type || 'image/jpeg' } }));
+    params.set('media', '1');
+  }
+  return Response.redirect(`./?${params.toString()}`, 303);
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  if (req.method === 'POST' && new URL(req.url).searchParams.has('share-target')) {
+    event.respondWith(handleShareTarget(req));
+    return;
+  }
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // APIs y CDNs: directo a la red

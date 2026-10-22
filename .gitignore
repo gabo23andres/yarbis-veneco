@@ -1,2 +1,7 @@
 node_modules/
 tests/screenshots/
+android/.gradle/
+android/build/
+android/app/build/
+*.keystore
+*.jks

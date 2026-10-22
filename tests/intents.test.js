@@ -231,3 +231,53 @@ test('dictado: puntuación por voz', () => {
   assert.strictEqual(p('hola coma qué tal punto nos vemos'), 'Hola, qué tal. Nos vemos');
   assert.strictEqual(p('lista dos puntos pan punto y aparte fin'), 'Lista: pan.\nFin');
 });
+
+test('apps del teléfono: enlaces que abren la app instalada', () => {
+  const A = win.YarbisApps;
+  assert.strictEqual(
+    A.href('https://wa.me/584141234567?text=hola', 'android'),
+    'intent://wa.me/584141234567?text=hola#Intent;scheme=https;package=com.whatsapp;S.browser_fallback_url=https%3A%2F%2Fwa.me%2F584141234567%3Ftext%3Dhola;end');
+  assert.match(A.href('https://www.google.com/maps/search/farmacia', 'android'), /package=com\.google\.android\.apps\.maps/);
+  assert.match(A.href('https://open.spotify.com/search/salsa', 'android'), /package=com\.spotify\.music/);
+  // En iPhone y computadora se deja el enlace normal
+  assert.strictEqual(A.href('https://wa.me/58414', 'ios'), 'https://wa.me/58414');
+  assert.strictEqual(A.href('https://wa.me/58414', 'desktop'), 'https://wa.me/58414');
+  // Sitios sin app conocida y enlaces que no son web quedan igual
+  assert.strictEqual(A.href('https://www.bcv.org.ve/', 'android'), 'https://www.bcv.org.ve/');
+  assert.strictEqual(A.href('tel:04141234567', 'android'), 'tel:04141234567');
+  assert.strictEqual(A.appName('https://www.youtube.com/watch?v=1'), 'YouTube');
+  assert.match(A.storeSearch('banco', 'ios'), /apps\.apple\.com/);
+  assert.match(A.storeSearch('banco', 'android'), /play\.google\.com/);
+});
+
+test('fechas habladas', () => {
+  const parseDay = win.YARBISBrain.parseDay;
+  const now = new Date(2026, 9, 22, 10, 0); // jueves 22 de octubre
+  const ymd = (r) => r && [r.date.getFullYear(), r.date.getMonth() + 1, r.date.getDate()];
+  assert.deepStrictEqual(ymd(parseDay('manana', now)), [2026, 10, 23]);
+  assert.deepStrictEqual(ymd(parseDay('pasado manana', now)), [2026, 10, 24]);
+  assert.deepStrictEqual(ymd(parseDay('el lunes', now)), [2026, 10, 26]);
+  assert.deepStrictEqual(ymd(parseDay('el 25 de diciembre', now)), [2026, 12, 25]);
+  assert.deepStrictEqual(ymd(parseDay('el 3 de enero', now)), [2027, 1, 3]);
+  assert.strictEqual(parseDay('sin fecha', now), null);
+});
+
+test('calendario, SMS, correo y lugares cercanos', async () => {
+  const cal = await ask('agenda dentista el 25 de diciembre a las 3 pm');
+  assert.match(cal.text, /\*\*Dentista\*\*/);
+  const gcal = cal.actions[0].url;
+  assert.match(gcal, /calendar\.google\.com\/calendar\/render\?action=TEMPLATE&text=Dentista&dates=\d{4}1225T150000\/\d{4}1225T160000/);
+  assert.ok(cal.actions.some(x => x.command === 'ics'));
+
+  const sms = await ask('mándale un mensaje de texto a mamá que diga ya llegué');
+  assert.strictEqual(sms.effect.url, 'sms:04141234567?body=ya%20llegu%C3%A9');
+  const msg = await ask('mándale un mensaje a mamá que diga voy saliendo');
+  assert.match(msg.effect.url, /^https:\/\/wa\.me\/584141234567\?text=voy%20saliendo/);
+
+  const mail = await ask('manda un correo a ana@ejemplo.com con asunto informe mensual');
+  assert.strictEqual(mail.effect.url, 'mailto:ana@ejemplo.com?subject=informe%20mensual');
+
+  const near = await ask('busca farmacias cerca de mí');
+  assert.match(near.effect.url, /google\.com\/maps\/search\/farmacias/);
+  assert.match(near.actions[1].url, /waze\.com\/ul\?q=farmacias/);
+});

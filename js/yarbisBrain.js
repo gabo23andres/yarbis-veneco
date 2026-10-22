@@ -203,6 +203,39 @@
     return { h, m: min, explicit, before: s.slice(0, m.index), after: s.slice(m.index + m[0].length) };
   }
 
+  const MONTHS = { enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5, julio: 6, agosto: 7, septiembre: 8, setiembre: 8, octubre: 9, noviembre: 10, diciembre: 11 };
+
+  // "mañana", "pasado mañana", "el viernes", "el 25", "el 3 de noviembre" -> fecha (00:00)
+  function parseDay(n, now = new Date()) {
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const add = (d) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + d);
+    const s = n.replace(/de la manana/g, '');
+    let m;
+    if (/\bpasado\s+manana\b/.test(s)) return { date: add(2), match: 'pasado manana' };
+    if (/\bmanana\b/.test(s)) return { date: add(1), match: 'manana' };
+    if (/\bhoy\b/.test(s)) return { date: base, match: 'hoy' };
+    if ((m = s.match(/\b(?:el\s+)?(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/))) {
+      let d = new Date(base.getFullYear(), MONTHS[m[2]], Number(m[1]));
+      if (d < base) d = new Date(base.getFullYear() + 1, MONTHS[m[2]], Number(m[1]));
+      return { date: d, match: m[0] };
+    }
+    if ((m = s.match(/\b(?:el\s+)?(?:proximo\s+)?(domingo|lunes|martes|miercoles|jueves|viernes|sabado)(?:\s+que\s+viene)?\b/))) {
+      const target = DAY_WORDS[m[1]];
+      let diff = (target - base.getDay() + 7) % 7;
+      if (diff === 0) diff = 7;
+      return { date: add(diff), match: m[0] };
+    }
+    if ((m = s.match(/\bel\s+(?:dia\s+)?(\d{1,2})\b(?!\s*(?::|h\b|horas?|minutos?))/))) {
+      const day = Number(m[1]);
+      if (day >= 1 && day <= 31) {
+        let d = new Date(base.getFullYear(), base.getMonth(), day);
+        if (d < base) d = new Date(base.getFullYear(), base.getMonth() + 1, day);
+        return { date: d, match: m[0] };
+      }
+    }
+    return null;
+  }
+
   const DAY_WORDS = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
   const REPEAT_WORDS_RE = /\b(todos los dias|todo los dias|diariamente|diario|a diario|cada dia|de lunes a viernes|entre semana|dias de semana|dias laborables|dias habiles|los fines? de semana|fines? de semana|sabados y domingos|(todos los|cada)\s+(lunes|martes|miercoles|jueves|viernes|sabados?|domingos?)((\s*,\s*|\s+y\s+)(lunes|martes|miercoles|jueves|viernes|sabados?|domingos?))*)\b/g;
 
@@ -467,6 +500,10 @@
       /* ---------- Gastos ---------- */
       const exp = this.expenseIntent(text, a, n);
       if (exp) return exp;
+
+      /* ---------- Teléfono: calendario, SMS, correo y ubicación ---------- */
+      const phone = await this.phoneIntent(text, a, n);
+      if (phone) return phone;
 
       /* ---------- Alertas del dólar ---------- */
       const fxAlert = n.match(/\b(?:avisame|alertame|alerta|notificame|aviso)\b.*\b(dolar|bcv|paralelo|tasa|usdt|binance|euro)\b.*?\b(pase|pasa|supere|supera|suba|sube|llegue|llega|este por encima|este sobre|baje|baja|caiga|cae|este por debajo|bajo)\s+(?:de\s+|a\s+|los\s+)*(?:bs\s*)?(\d[\d.,]*)/);
@@ -901,9 +938,13 @@
           const url = `https://${t.replace(/\s/g, '')}`;
           return this.openUrlResponse(`Abriendo ${url}…`, url, 'Abrir página');
         }
+        const store = root.YarbisApps ? root.YarbisApps.storeSearch(target) : `https://play.google.com/store/search?q=${encodeURIComponent(target)}&c=apps`;
         return {
-          text: `No tengo un acceso directo para "${target}". ¿Lo busco en Google?`,
-          actions: [{ label: `Buscar "${target}"`, url: `https://www.google.com/search?q=${encodeURIComponent(target)}` }]
+          text: `No tengo un acceso directo para "${target}". Puedo buscarla en la tienda de apps o en Google.`,
+          actions: [
+            { label: `Buscar "${target}" en la tienda`, url: store },
+            { label: 'Buscar en Google', url: `https://www.google.com/search?q=${encodeURIComponent(target)}` }
+          ]
         };
       }
 
@@ -1021,6 +1062,172 @@
         speak: speak.replace(/\s+/g, ' ').trim(),
         actions: [{ label: 'Abrir convertidor', view: 'finance' }]
       };
+    }
+
+    /* ------------------------------------------
+       FUNCIONES DEL TELÉFONO
+       ------------------------------------------ */
+    async phoneIntent(text, a, n) {
+      // Calendario: "agenda reunión con Pedro mañana a las 3 pm"
+      const cal = /^(?:agenda(?:me)?|agendar|anota\s+en\s+(?:el|mi)\s+calendario|pon(?:me)?\s+en\s+(?:el|mi)\s+calendario|crea(?:r)?\s+(?:un\s+)?evento(?:\s+de)?|programa(?:r)?\s+(?:una\s+)?(?=reunion|cita))\s*:?\s+([\s\S]{3,})$/d.exec(a);
+      if (cal) return this.calendarResponse(text.slice(cal.indices[1][0]), U.normalize(text.slice(cal.indices[1][0])));
+
+      // Correo: "manda un correo a ana@x.com con asunto informe"
+      const mail = /^(?:manda(?:le)?|envia(?:le)?|escribe(?:le)?)\s+(?:un\s+)?(?:correo|email|e-mail|mail)\s+(?:a|al|para)\s+([^\s]+@[^\s]+)(?:\s+(?:con\s+(?:el\s+)?asunto|que\s+diga|diciendo|sobre)\s+([\s\S]+))?$/d.exec(a);
+      if (mail) {
+        const to = text.slice(mail.indices[1][0], mail.indices[1][1]);
+        const subject = mail[2] ? text.slice(mail.indices[2][0], mail.indices[2][1]) : '';
+        const url = `mailto:${to}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`;
+        return { text: `✉️ Correo para **${to}**${subject ? ` · asunto "${subject}"` : ''}.`, actions: [{ label: 'Abrir correo', url }], effect: { type: 'OPEN_URL', url } };
+      }
+
+      // SMS o mensaje: "mándale un mensaje de texto a mamá que diga ya llegué"
+      const msgM = /^(?:manda(?:le)?|envia(?:le)?|escribe(?:le)?)\s+(?:un\s+)?(sms|mensaje\s+de\s+texto|mensajito|mensaje)\s+(?:a|al|para)\s+(?:mi\s+)?(.+?)\s+(?:que\s+diga|diciendo|:)\s*([\s\S]+)$/d.exec(a);
+      if (msgM) {
+        const who = text.slice(msgM.indices[2][0], msgM.indices[2][1]).trim();
+        const body = text.slice(msgM.indices[3][0], msgM.indices[3][1]).trim();
+        const digits = who.replace(/[^\d+]/g, '');
+        const found = digits.length >= 7 ? [{ name: who, phone: digits }] : this.findContacts(who);
+        if (!found.length) {
+          return { text: `No tengo el número de ${U.capitalize(who)}. Guárdalo en Ajustes o di "guarda el contacto ${who} 0414 1234567".`, actions: [{ label: 'Abrir agenda', view: 'settings' }] };
+        }
+        const num = found[0].phone;
+        const sms = `sms:${num}?body=${encodeURIComponent(body)}`;
+        const wa = `https://wa.me/${venezuelanPhone(num)}?text=${encodeURIComponent(body)}`;
+        const isSms = msgM[1] !== 'mensaje';
+        return {
+          text: `${isSms ? '💬 SMS' : '💬 Mensaje'} para **${U.capitalize(found[0].name)}**: "${body}".`,
+          actions: isSms
+            ? [{ label: 'Enviar SMS', url: sms }, { label: 'Mejor por WhatsApp', url: wa }]
+            : [{ label: 'Enviar por WhatsApp', url: wa }, { label: 'Enviar por SMS', url: sms }],
+          effect: { type: 'OPEN_URL', url: isSms ? sms : wa }
+        };
+      }
+
+      // Ubicación
+      if (has(n, /\b(donde estoy|mi ubicacion|en que (ciudad|lugar|sitio|parte) estoy|ubicame|cual es mi direccion)\b/) && !has(n, /\b(comparte|compartir|manda|envia)\b/)) {
+        return this.whereAmI();
+      }
+      const shareLoc = /\b(?:comparte|compartir|manda|mandale|envia|enviale)\s+(?:mi\s+)?ubicacion(?:\s+(?:a|con|al)\s+(?:mi\s+)?([a-z ]{2,40}))?/.exec(n);
+      if (shareLoc) return this.shareLocation(shareLoc[1]);
+      const near = n.match(/^(?:busca(?:me)?|buscar|donde\s+hay|hay|encuentra(?:me)?|muestrame)?\s*(?:una?s?\s+|el\s+|la\s+|los\s+|las\s+)?(.{3,40}?)\s+(?:cerca(?:\s+de\s+(?:mi|aqui|donde\s+estoy))?|por\s+aqui|cercan[oa]s?)$/);
+      if (near && !/\b(alarma|nota|temporizador)\b/.test(near[1])) return this.nearby(near[1]);
+      return null;
+    }
+
+    calendarResponse(raw, n) {
+      const day = parseDay(n);
+      const clock = parseClock(n);
+      const date = day ? day.date : new Date(new Date().setHours(0, 0, 0, 0));
+      let start = null;
+      if (clock) {
+        start = new Date(date);
+        let h = clock.h;
+        if (!clock.explicit && h >= 1 && h <= 7) h += 12; // "a las 3" casi siempre es de la tarde
+        start.setHours(h, clock.m, 0, 0);
+        if (!day && start.getTime() < Date.now()) start.setDate(start.getDate() + 1);
+      }
+      const title = U.capitalize(raw
+        .replace(/\ba\s+las?\s+\d{1,2}([:.h]\d{2})?(\s+y\s+(media|cuarto))?(\s*(a\.?\s*m\.?|p\.?\s*m\.?|de\s+la\s+(mañana|tarde|noche)))?/gi, ' ')
+        .replace(/\b(pasado\s+)?mañana\b|\bhoy\b/gi, ' ')
+        .replace(/\b(el\s+)?(pr[oó]ximo\s+)?(domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado)(\s+que\s+viene)?\b/gi, ' ')
+        .replace(/\b(el\s+)?\d{1,2}\s+de\s+[a-záéíóú]+\b/gi, ' ')
+        .replace(/\ba\s+las?\s+\d{1,2}([:.h]\d{2})?(\s+y\s+(media|cuarto))?(\s*(a\.?\s*m\.?|p\.?\s*m\.?|de\s+la\s+(mañana|tarde|noche)))?/gi, ' ')
+        .replace(/\bal\s+mediod[ií]a\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^(para|de|que|una?|el|la)\s+/i, '')
+        .trim()) || 'Evento';
+      const pad = (x) => String(x).padStart(2, '0');
+      const fmt = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+      const fmtT = (d) => `${fmt(d)}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+      let dates;
+      let end;
+      if (start) {
+        end = new Date(start.getTime() + 3600000);
+        dates = `${fmtT(start)}/${fmtT(end)}`;
+      } else {
+        const next = new Date(date.getTime() + 86400000);
+        dates = `${fmt(date)}/${fmt(next)}`;
+      }
+      const gcal = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${dates}&ctz=America/Caracas`;
+      const when = start
+        ? start.toLocaleString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })
+        : date.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' }) + ' (todo el día)';
+      const actions = [
+        { label: '📅 Agregar al calendario', url: gcal },
+        { label: 'Descargar evento (.ics)', command: 'ics', value: { title, start: (start || date).getTime(), end: start ? end.getTime() : date.getTime() + 86400000, allDay: !start } }
+      ];
+      if (start && start.getTime() - 30 * 60000 > Date.now()) {
+        actions.push({ label: 'Avisarme 30 min antes', command: 'alarm-at', value: { at: start.getTime() - 30 * 60000, label: title } });
+      }
+      return { text: sentence(`📅 **${title}** · ${when}`), speak: sentence(`Listo: ${title}, ${when}`), actions };
+    }
+
+    getPosition() {
+      return new Promise((resolve, reject) => {
+        const geo = root.navigator && root.navigator.geolocation;
+        if (!geo) { reject(new Error('Tu navegador no permite saber la ubicación.')); return; }
+        geo.getCurrentPosition(
+          (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }),
+          (e) => reject(new Error(e.code === 1 ? 'Permiso de ubicación denegado. Actívalo en el navegador.' : 'No pude obtener tu ubicación.')),
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 5 * 60000 });
+      });
+    }
+
+    async reverseGeocode(lat, lon) {
+      try {
+        const d = await this.fetchJson(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=es&zoom=17`, 7000, 1);
+        const ad = (d && d.address) || {};
+        const parts = [ad.road, ad.suburb || ad.neighbourhood, ad.city || ad.town || ad.village || ad.municipality, ad.state].filter(Boolean);
+        return { label: parts.join(', ') || d.display_name || '', city: ad.city || ad.town || ad.village || ad.state || '' };
+      } catch (e) {
+        return { label: '', city: '' };
+      }
+    }
+
+    async whereAmI() {
+      try {
+        const p = await this.getPosition();
+        const place = await this.reverseGeocode(p.lat, p.lon);
+        const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+        if (place.city) S.setRaw('yarbis_weather_city', place.city);
+        return {
+          text: `📍 ${place.label ? `Estás en **${place.label}**` : `Tu ubicación: ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`} (precisión ~${Math.round(p.acc)} m).`,
+          actions: [{ label: 'Ver en el mapa', url: maps }, { label: 'Compartir por WhatsApp', url: `https://wa.me/?text=${encodeURIComponent(`📍 Estoy aquí: ${maps}`)}` }]
+        };
+      } catch (e) {
+        return { text: `📍 ${e.message}` };
+      }
+    }
+
+    async shareLocation(who) {
+      try {
+        const p = await this.getPosition();
+        const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+        const msg = `📍 Mi ubicación: ${maps}`;
+        let url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+        let name = '';
+        if (who) {
+          const found = this.findContacts(who);
+          if (found.length) {
+            url = `https://wa.me/${venezuelanPhone(found[0].phone)}?text=${encodeURIComponent(msg)}`;
+            name = U.capitalize(found[0].name);
+          }
+        }
+        return { text: `📍 Ubicación lista para enviar${name ? ` a **${name}**` : ''}.`, actions: [{ label: 'Enviar por WhatsApp', url }, { label: 'Ver en el mapa', url: maps }], effect: { type: 'OPEN_URL', url } };
+      } catch (e) {
+        return { text: `📍 ${e.message}` };
+      }
+    }
+
+    async nearby(what) {
+      const q = what.replace(/^(una?s?|el|la|los|las)\s+/, '').trim();
+      let url = `https://www.google.com/maps/search/${encodeURIComponent(q)}`;
+      try {
+        const p = await Promise.race([this.getPosition(), new Promise((_, rej) => setTimeout(() => rej(new Error('lento')), 6000))]);
+        url = `https://www.google.com/maps/search/${encodeURIComponent(q)}/@${p.lat},${p.lon},15z`;
+      } catch (e) { /* Maps usará la ubicación del teléfono */ }
+      return { text: `🗺️ Buscando **${q}** cerca de ti.`, actions: [{ label: 'Abrir en Maps', url }, { label: 'Abrir en Waze', url: `https://waze.com/ul?q=${encodeURIComponent(q)}` }], effect: { type: 'OPEN_URL', url } };
     }
 
     /* ------------------------------------------
@@ -1202,6 +1409,14 @@
 
     async weatherIntent(n) {
       const tomorrow = /\bmanana\b/.test(n);
+      if (/\b(aqui|donde estoy|mi ubicacion|por aca)\b/.test(n)) {
+        try {
+          const p = await this.getPosition();
+          const place = await this.reverseGeocode(p.lat, p.lon);
+          if (place.city) S.setRaw('yarbis_weather_city', place.city);
+          n = `clima en ${U.normalize(place.city || 'caracas')}${tomorrow ? ' manana' : ''}`;
+        } catch (e) { /* sin ubicación: ciudad guardada */ }
+      }
       let city = '';
       const m = n.match(/^.*\b(?:en|de|para|por)\s+([a-z ]{3,40}?)(?:\s+(?:hoy|manana|ahora|esta semana|este momento))?$/);
       if (m) city = m[1].replace(/^(el|la)\s+/, '').trim();
@@ -1856,6 +2071,7 @@ Reglas:
   YARBISBrain.parseClock = parseClock;
   YARBISBrain.parseAmount = parseAmount;
   YARBISBrain.parseRepeat = parseRepeat;
+  YARBISBrain.parseDay = parseDay;
   YARBISBrain.venezuelanPhone = venezuelanPhone;
   YARBISBrain.align = align;
 

@@ -282,5 +282,23 @@
     }
   }
 
+  // Utilidades para imágenes que llegan por "Compartir"
+  CameraController.prototype.loadImage = function (dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('No se pudo abrir la imagen.'));
+      img.src = dataUrl;
+    });
+  };
+  CameraController.prototype.shrinkDataUrl = async function (dataUrl) {
+    const img = await this.loadImage(dataUrl);
+    return toJpeg(img, img.naturalWidth, img.naturalHeight).dataUrl;
+  };
+  CameraController.prototype.decodeDataUrl = async function (dataUrl) {
+    const img = await this.loadImage(dataUrl);
+    return this.decode(img, img.naturalWidth, img.naturalHeight);
+  };
+
   root.YarbisCamera = new CameraController();
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -45,41 +45,114 @@
     {
       "name": "Dólar hoy",
       "short_name": "Dólar",
-      "url": "./?accion=dolar"
+      "url": "./?accion=dolar",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "Nueva nota",
       "short_name": "Nota",
-      "url": "./?accion=nota"
+      "url": "./?accion=nota",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "Lista de compras",
       "short_name": "Compras",
-      "url": "./?accion=compras"
+      "url": "./?accion=compras",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "Escanear QR",
       "short_name": "QR",
-      "url": "./?accion=qr"
+      "url": "./?accion=qr",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "Registrar gasto",
       "short_name": "Gasto",
-      "url": "./?accion=gasto"
+      "url": "./?accion=gasto",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "Dictado",
       "short_name": "Dictado",
-      "url": "./?accion=dictado"
+      "url": "./?accion=dictado",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Traductor",
+      "short_name": "Traducir",
+      "url": "./?accion=traductor",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ],
   "share_target": {
-    "action": "./",
-    "method": "GET",
+    "action": "./?share-target=1",
+    "method": "POST",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
       "text": "text",
-      "url": "url"
+      "url": "url",
+      "files": [
+        {
+          "name": "media",
+          "accept": [
+            "image/*"
+          ]
+        }
+      ]
     }
-  }
+  },
+  "launch_handler": {
+    "client_mode": [
+      "navigate-existing",
+      "auto"
+    ]
+  },
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ]
 }
