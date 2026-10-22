@@ -30,10 +30,11 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      # Firma: usa la llave guardada en los secretos del repo si existe
-      # (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD).
-      # Si no, crea una llave temporal: el APK funciona, pero para instalar
-      # una versión nueva hay que desinstalar la anterior.
+      # Firma: usa la llave fija guardada en el secreto KEYSTORE_BASE64 (las
+      # contraseñas y el alias son opcionales: KEYSTORE_PASSWORD, KEY_ALIAS,
+      # KEY_PASSWORD). Sin ese secreto se crea una llave temporal: el APK
+      # funciona, pero para instalar una versión nueva hay que desinstalar la
+      # anterior y se ve la barra de dirección.
       - name: Preparar llave de firma
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -43,12 +44,13 @@ jobs:
         run: |
           KS="$RUNNER_TEMP/release.keystore"
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
-            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$KS"
+            PASS="${KEYSTORE_PASSWORD:-yarbis-firma}"
+            echo "KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=${KEY_ALIAS:-yarbis}" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=${KEY_PASSWORD:-$PASS}" >> "$GITHUB_ENV"
           else
-            echo "::warning::Sin llave guardada en los secretos: se usa una llave temporal."
+            echo "::warning::Falta el secreto KEYSTORE_BASE64: se usa una llave temporal."
             PASS="yarbis-$(openssl rand -hex 12)"
             keytool -genkeypair -v -keystore "$KS" -alias yarbis -keyalg RSA -keysize 2048 \
               -validity 10000 -storepass "$PASS" -keypass "$PASS" \

@@ -88,12 +88,16 @@ Run workflow*. En `main` además lo publica en **Releases**. La app abre YARBIS 
 completa con Chrome por dentro (Trusted Web Activity), así funcionan el micrófono, la cámara
 y las notificaciones.
 
-- Para que las actualizaciones se instalen encima sin desinstalar, guarda una llave de firma
-  fija en *Settings → Secrets → Actions*: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`
-  y `KEY_PASSWORD`. Sin ellas se usa una llave temporal en cada compilación.
-- Para quitar la barra de dirección dentro de la app hace falta publicar
-  `.well-known/assetlinks.json` en la raíz del dominio (`gabo23andres.github.io`), con la
-  huella SHA‑256 que imprime el flujo.
+- **Llave de firma fija**: guarda la llave en el secreto `KEYSTORE_BASE64`
+  (*Settings → Secrets and variables → Actions → New repository secret*). Con ella las
+  actualizaciones se instalan encima sin desinstalar. Sin el secreto se usa una llave
+  temporal en cada compilación. Guarda también una copia del archivo `.keystore`: si se
+  pierde, no se podrá actualizar la app instalada.
+- **Sin barra de dirección**: Android comprueba que la app y la web son del mismo dueño
+  con `https://gabo23andres.github.io/.well-known/assetlinks.json`. El archivo listo está
+  en `android/assetlinks.json` (huella de la llave fija); se publica en el repositorio
+  `gabo23andres.github.io` junto con un `.nojekyll` para que GitHub Pages sirva la
+  carpeta `.well-known`.
 - Alternativa sin APK: en Chrome de Android, menú ⋮ → *Instalar app*.
 
 ## Estructura
