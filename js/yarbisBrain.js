@@ -1,2207 +1,1347 @@
 /* ==========================================================================
-   YARBIS - ADVANCED CONVERSATIONAL BRAIN 8.0 ULTIMATE
-   Vision IA, Trivia por Voz, Alarmas Exactas, Bancos, Delivery & Cerebro Criollo
+   YARBIS - CEREBRO CONVERSACIONAL
+   1. Intenciones locales (rápidas y sin internet cuando es posible):
+      dólar/conversiones, cálculos, timers, alarmas, notas, clima, llamadas,
+      WhatsApp, apps, música, búsquedas, cámara, temas, juegos...
+   2. IA con memoria de conversación: Google Gemini (con tu clave) o IA
+      gratuita. Si nada responde, lo dice claramente.
+
+   Cada respuesta tiene la forma:
+   { text, speak?, actions?: [{ label, url? , view?, command? }], effect?, sound? }
    ========================================================================== */
 
-class YARBISBrain {
-  constructor() {
-    this.geminiApiKey = localStorage.getItem('yarbis_gemini_api_key') || '';
-    this.assistantName = localStorage.getItem('yarbis_assistant_name') || 'YARBIS Veneco';
-    this.userName = localStorage.getItem('yarbis_user_name') || 'Señor';
-    this.approxUsdRate = 48.50; // Reference USD to Bolívares VES
+(function (root) {
+  'use strict';
 
-    // Trivia Game State
-    this.triviaActive = false;
-    this.triviaScore = 0;
-    this.triviaIndex = 0;
-    this.triviaQuestions = [
-      {
-        q: '¿Cuál es la caída de agua más alta del mundo ubicada en Venezuela?',
-        a: ['salto angel', 'el salto angel', 'kerekupai vena'],
-        explain: '¡Correcto! El Salto Ángel tiene una altura de 979 metros.'
-      },
-      {
-        q: '¿Cómo se le llama en Venezuela a una persona de mucha confianza o mejor amigo?',
-        a: ['pana', 'mi pana', 'el mio', 'hermano', 'compadre'],
-        explain: '¡Exacto! "Pana" o "el mío" es la palabra clave del venezolano.'
-      },
-      {
-        q: '¿Cuál es el plato típico nacional de Venezuela compuesto por arroz, caraotas, carne mechada y tajadas?',
-        a: ['pabellon criollo', 'pabellon', 'el pabellon'],
-        explain: '¡De una! El Pabellón Criollo es nuestro plato insigne.'
-      },
-      {
-        q: '¿En qué año nació el Libertador Simón Bolívar?',
-        a: ['1783', 'mil setecientos ochenta y tres'],
-        explain: '¡Brillante! Nació el 24 de julio de 1783 en Caracas.'
-      },
-      {
-        q: '¿Cómo se llama la inteligencia artificial creada por Tony Stark en Marvel antes de Friday?',
-        a: ['jarvis', 'j.a.r.v.i.s', 'yarbis'],
-        explain: '¡Claro que sí! J.A.R.V.I.S. (Just A Rather Very Intelligent System).'
-      },
-      {
-        q: '¿Qué fruta se usa tradicionalmente para hacer la chicha andina o el dulce de lechosa en Navidad?',
-        a: ['lechosa', 'papaya', 'la lechosa'],
-        explain: '¡Así mismo es! El dulce de lechosa verde con papelón y clavitos.'
-      },
-      {
-        q: '¿Cuál es el pico más alto de Venezuela ubicado en el estado Mérida?',
-        a: ['pico bolivar', 'el pico bolivar', 'bolivar'],
-        explain: '¡Correcto! El Pico Bolívar mide 4.978 metros sobre el nivel del mar.'
-      }
-    ];
-  }
+  const U = root.YarbisUtils;
+  const S = U.storage;
 
-  setApiKey(key) {
-    this.geminiApiKey = key.trim();
-    if (this.geminiApiKey) {
-      localStorage.setItem('yarbis_gemini_api_key', this.geminiApiKey);
-    } else {
-      localStorage.removeItem('yarbis_gemini_api_key');
+  const HISTORY_KEY = 'yarbis_ai_history';
+  const MAX_HISTORY = 24;
+
+  const WORD_NUMBERS = {
+    cero: 0, un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8,
+    nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16,
+    diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20, veinticinco: 25, treinta: 30,
+    cuarenta: 40, cuarentaicinco: 45, cincuenta: 50, sesenta: 60, noventa: 90, cien: 100
+  };
+  const WORD_NUMBER_RE = new RegExp(`\\b(${Object.keys(WORD_NUMBERS).join('|')})\\b`, 'g');
+
+  const APPS = [
+    { keys: ['whatsapp', 'wasap', 'guasap', 'whats'], name: 'WhatsApp', url: 'https://wa.me/' },
+    { keys: ['youtube', 'yutub'], name: 'YouTube', url: 'https://www.youtube.com' },
+    { keys: ['spotify'], name: 'Spotify', url: 'https://open.spotify.com' },
+    { keys: ['gmail', 'correo', 'email'], name: 'Gmail', url: 'https://mail.google.com' },
+    { keys: ['netflix'], name: 'Netflix', url: 'https://www.netflix.com' },
+    { keys: ['instagram', 'insta'], name: 'Instagram', url: 'https://www.instagram.com' },
+    { keys: ['twitter', 'x'], name: 'X (Twitter)', url: 'https://x.com' },
+    { keys: ['facebook', 'face'], name: 'Facebook', url: 'https://www.facebook.com' },
+    { keys: ['tiktok', 'tik tok'], name: 'TikTok', url: 'https://www.tiktok.com' },
+    { keys: ['telegram'], name: 'Telegram', url: 'https://web.telegram.org' },
+    { keys: ['waze'], name: 'Waze', url: 'https://www.waze.com/live-map' },
+    { keys: ['google maps', 'maps', 'mapa', 'mapas'], name: 'Google Maps', url: 'https://maps.google.com' },
+    { keys: ['uber'], name: 'Uber', url: 'https://m.uber.com' },
+    { keys: ['yummy'], name: 'Yummy', url: 'https://www.yummy.com.ve' },
+    { keys: ['ridery'], name: 'Ridery', url: 'https://ridery.app' },
+    { keys: ['pedidosya', 'pedidos ya'], name: 'PedidosYa', url: 'https://www.pedidosya.com.ve' },
+    { keys: ['mercado libre', 'mercadolibre'], name: 'Mercado Libre', url: 'https://www.mercadolibre.com.ve' },
+    { keys: ['amazon'], name: 'Amazon', url: 'https://www.amazon.com' },
+    { keys: ['google drive', 'drive'], name: 'Google Drive', url: 'https://drive.google.com' },
+    { keys: ['chatgpt', 'chat gpt'], name: 'ChatGPT', url: 'https://chatgpt.com' },
+    { keys: ['gemini'], name: 'Gemini', url: 'https://gemini.google.com' },
+    { keys: ['discord'], name: 'Discord', url: 'https://discord.com/app' },
+    { keys: ['zoom'], name: 'Zoom', url: 'https://zoom.us' },
+    { keys: ['canva'], name: 'Canva', url: 'https://www.canva.com' },
+    { keys: ['github'], name: 'GitHub', url: 'https://github.com' },
+    { keys: ['banco de venezuela', 'bdv'], name: 'BDV en Línea', url: 'https://bdvenlinea.banvenez.com/' },
+    { keys: ['banesco'], name: 'Banesco Online', url: 'https://www.banesconline.com/' },
+    { keys: ['mercantil'], name: 'Mercantil en Línea', url: 'https://www.mercantilbanco.com/' },
+    { keys: ['provincial', 'bbva'], name: 'BBVA Provincial', url: 'https://www.provincial.com/' },
+    { keys: ['bnc', 'banco nacional de credito'], name: 'BNC', url: 'https://www.bncenlinea.com/' },
+    { keys: ['patria', 'plataforma patria'], name: 'Plataforma Patria', url: 'https://www.patria.org.ve/' },
+    { keys: ['seniat'], name: 'SENIAT', url: 'https://www.seniat.gob.ve/' },
+    { keys: ['bcv', 'banco central'], name: 'Banco Central de Venezuela', url: 'https://www.bcv.org.ve/' }
+  ];
+
+  const VIEWS = [
+    { keys: ['notas', 'mis notas', 'recordatorios', 'pendientes'], view: 'notes', name: 'tus notas' },
+    { keys: ['finanzas', 'terminal financiero', 'calculadora', 'convertidor', 'tasas', 'monitor'], view: 'finance', name: 'Finanzas' },
+    { keys: ['ajustes', 'configuracion', 'opciones'], view: 'settings', name: 'Ajustes' },
+    { keys: ['purificador', 'limpiador', 'anti marcas'], view: 'cleaner', name: 'el purificador de texto' },
+    { keys: ['herramientas', 'mas opciones'], view: 'more', name: 'Herramientas' }
+  ];
+
+  const ACCENTS = {
+    neon: ['neon', 'azul', 'cian', 'normal', 'por defecto'],
+    mark85: ['mark 85', 'rojo', 'nano'],
+    warmachine: ['war machine', 'gris', 'plateado'],
+    spideriron: ['spider', 'spider iron'],
+    wakanda: ['wakanda', 'pantera', 'black panther', 'morado', 'violeta'],
+    stealth: ['sigilo', 'verde', 'matrix'],
+    hulkbuster: ['hulkbuster', 'dorado', 'amarillo', 'naranja']
+  };
+
+  const ACCENT_NAMES = {
+    neon: 'Neón', mark85: 'Mark 85', warmachine: 'War Machine', spideriron: 'Spider-Iron',
+    wakanda: 'Wakanda', stealth: 'Sigilo', hulkbuster: 'Hulkbuster'
+  };
+
+  const CURRENCY_WORDS = [
+    { re: /^(dolares?|usd|\$|verdes?|lechugas?)$/, code: 'USD' },
+    { re: /^(bolivares?|bs|bolos?|ves|bss)$/, code: 'VES' },
+    { re: /^(euros?|eur|€)$/, code: 'EUR' },
+    { re: /^(usdt|tether)$/, code: 'USDT' },
+    { re: /^(pesos? colombianos?|cop)$/, code: 'COP' },
+    { re: /^(pesos? mexicanos?|mxn)$/, code: 'MXN' },
+    { re: /^(pesos? chilenos?|clp)$/, code: 'CLP' },
+    { re: /^(pesos? argentinos?|ars)$/, code: 'ARS' },
+    { re: /^(soles|sol peruano|pen)$/, code: 'PEN' },
+    { re: /^(reales?|brl)$/, code: 'BRL' },
+    { re: /^(libras?|gbp)$/, code: 'GBP' },
+    { re: /^(bitcoins?|btc)$/, code: 'BTC' },
+    { re: /^(ethereum|eth|ether)$/, code: 'ETH' },
+    { re: /^(solana)$/, code: 'SOL' }
+  ];
+  const CURRENCY_ALT = '(?:dolares?|usd|\\$|verdes|bolivares?|bs|bolos?|ves|euros?|eur|€|usdt|tether|pesos? colombianos?|cop|pesos? mexicanos?|mxn|pesos? chilenos?|clp|pesos? argentinos?|ars|soles|reales?|brl|libras?|gbp|bitcoins?|btc|ethereum|eth|solana)';
+
+  const TRIVIA = [
+    { q: '¿Cuál es la caída de agua más alta del mundo, ubicada en Venezuela?', a: ['salto angel', 'kerepakupai', 'angel'], explain: 'El Salto Ángel mide 979 metros.' },
+    { q: '¿Cómo se le dice en Venezuela a un amigo de confianza?', a: ['pana', 'el mio', 'compadre', 'hermano', 'brother'], explain: '"Pana" o "el mío", ¡clásico!' },
+    { q: '¿Cuál es el plato nacional con arroz, caraotas, carne mechada y tajadas?', a: ['pabellon'], explain: 'El Pabellón Criollo.' },
+    { q: '¿En qué año nació Simón Bolívar?', a: ['1783'], explain: 'Nació el 24 de julio de 1783 en Caracas.' },
+    { q: '¿Cuál es el pico más alto de Venezuela?', a: ['pico bolivar', 'bolivar'], explain: 'El Pico Bolívar, con 4.978 metros.' },
+    { q: '¿Qué se come en Navidad envuelto en hojas de plátano?', a: ['hallaca', 'hallacas'], explain: '¡La hallaca, reina de diciembre!' },
+    { q: '¿Cuál es el lago más grande de Venezuela?', a: ['maracaibo', 'lago de maracaibo'], explain: 'El Lago de Maracaibo.' },
+    { q: '¿Cómo se llama el ave nacional de Venezuela?', a: ['turpial'], explain: 'El turpial.' }
+  ];
+
+  const JOKES = [
+    '¿Por qué la arepa no va al gimnasio? Porque ya está bien rellena. 🫓',
+    '¿Qué le dice un tequeño a otro? ¡Qué queso tan bueno tienes, chamo!',
+    'Mi jefe me dijo: "Ponte las pilas". Y aquí estoy, cargando al 1%. 🔋',
+    '¿Cuál es el colmo de un electricista? Que su esposa se llame Luz y los hijos le salgan con corriente. ⚡',
+    '—Doctor, me siento como una hallaca. —Tranquilo, eso es la temporada. 🎄'
+  ];
+
+  /* ------------------------------------------
+     TEXTO
+     ------------------------------------------ */
+  // Minúsculas y sin acentos, conservando la longitud (para recortar el original)
+  function align(text) {
+    let out = '';
+    for (const ch of text) {
+      let c = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      if (/[¿?¡!,;"“”«»()[\]{}]/.test(c)) c = ' ';
+      if (c.length !== ch.length) c = (c + ' '.repeat(ch.length)).slice(0, ch.length);
+      out += c;
     }
+    return out;
   }
 
-  setNames(assistantName, userName) {
-    this.assistantName = (assistantName || 'YARBIS Veneco').trim();
-    this.userName = (userName || 'Señor').trim();
-    localStorage.setItem('yarbis_assistant_name', this.assistantName);
-    localStorage.setItem('yarbis_user_name', this.userName);
+  function wordsToDigits(s) {
+    return s.replace(WORD_NUMBER_RE, w => String(WORD_NUMBERS[w]));
   }
 
-  /* ==========================================
-     VENEZUELAN PERSONALITY & SPEECH RESPONSES
-     ========================================== */
-  getVenezuelanGreeting() {
-    const greetings = [
-      `¡Épale, ${this.userName}! ¿Qué más pues? Sistemas de ${this.assistantName} 100% operativos.`,
-      `¡Háblame el mío! Aquí activo para lo que mandes, ${this.userName}.`,
-      `¡Buenas, ${this.userName}! Todo listo y sin novedad por acá. ¿Qué ejecutamos?`,
-      `¡Saludos mi pana! Listo para trabajar como un tiro, ${this.userName}.`
-    ];
-    return greetings[Math.floor(Math.random() * greetings.length)];
+  function parseAmount(raw) {
+    let s = String(raw).trim().replace(/\s+/g, '');
+    if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); // 1.500,50
+    else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, ''); // 1,500.50
+    else s = s.replace(',', '.');
+    const n = parseFloat(s);
+    return isFinite(n) ? n : null;
   }
 
-  getVenezuelanAcknowledge() {
-    const acks = [
-      `¡Fino de pana!`,
-      `¡Tranquilo que eso va volando como tequeño en fiesta!`,
-      `¡De una, mi pana!`,
-      `¡A la orden, el mío!`,
-      `¡Listo el pollo!`
-    ];
-    return acks[Math.floor(Math.random() * acks.length)];
-  }
-
-  /* ==========================================
-     TRIVIA & VOICE GAMES ENGINE
-     ========================================== */
-  startTrivia() {
-    this.triviaActive = true;
-    this.triviaScore = 0;
-    this.triviaIndex = 0;
-    const currentQ = this.triviaQuestions[0];
-    return {
-      textResponse: `¡Activando modo Trivia Venezolana & Cultura Pop! Pregunta 1: ${currentQ.q}`,
-      action: 'NONE',
-      themeChange: null,
-      soundFx: 'scan'
-    };
-  }
-
-  answerTrivia(spokenAnswer) {
-    const cleanSpoken = spokenAnswer.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '').trim();
-    const currentQ = this.triviaQuestions[this.triviaIndex];
-
-    const isCorrect = currentQ.a.some(ans => cleanSpoken.includes(ans) || ans.includes(cleanSpoken));
-
-    if (isCorrect) {
-      this.triviaScore++;
+  // "1 hora 30 minutos", "media hora", "5 min y medio" -> segundos
+  function parseDuration(n) {
+    const s = wordsToDigits(n);
+    let total = 0;
+    let found = false;
+    if (/\bmedia\s+hora\b/.test(s)) { total += 1800; found = true; }
+    if (/\b(un\s+)?cuarto\s+de\s+hora\b/.test(s)) { total += 900; found = true; }
+    const re = /(\d+(?:[.,]\d+)?)\s*(horas?|hrs?|h|minutos?|mins?|min|m|segundos?|segs?|seg|s)\b(\s+y\s+medi[ao])?/g;
+    let m;
+    while ((m = re.exec(s))) {
+      const v = parseFloat(m[1].replace(',', '.'));
+      const unit = m[2];
+      found = true;
+      if (unit.startsWith('h')) total += v * 3600 + (m[3] ? 1800 : 0);
+      else if (unit.startsWith('m')) total += v * 60 + (m[3] ? 30 : 0);
+      else total += v;
     }
+    return found ? Math.round(total) : null;
+  }
 
-    const resultMsg = isCorrect ? `🎉 ${currentQ.explain}` : `❌ No es correcto. La respuesta correcta era: "${currentQ.a[0]}".`;
-
-    this.triviaIndex++;
-
-    if (this.triviaIndex < this.triviaQuestions.length && this.triviaIndex < 5) {
-      const nextQ = this.triviaQuestions[this.triviaIndex];
+  // "a las 7:30 pm", "a las 6 de la mañana", "a la 1 y media", "al mediodia"
+  function parseClock(n) {
+    const s = wordsToDigits(n);
+    const special = s.match(/\b(?:al|a)\s+medio\s?dia\b/) || s.match(/\b(?:a\s+la\s+)?medianoche\b/);
+    if (special) {
       return {
-        textResponse: `${resultMsg} Siguiente pregunta (${this.triviaIndex + 1}): ${nextQ.q}`,
-        action: 'NONE',
-        themeChange: null,
-        soundFx: isCorrect ? 'success' : 'repulsor'
-      };
-    } else {
-      const finalScore = this.triviaScore;
-      this.triviaActive = false;
-      this.triviaIndex = 0;
-      return {
-        textResponse: `${resultMsg} ¡Juego terminado! Obtuviste ${finalScore} puntos de 5. ${finalScore >= 4 ? '¡Eres un crack total mi pana!' : '¡Buen intento, la próxima arrasas!'}`,
-        action: 'NONE',
-        themeChange: null,
-        soundFx: 'success'
+        h: /medianoche/.test(special[0]) ? 0 : 12, m: 0, explicit: true,
+        before: s.slice(0, special.index), after: s.slice(special.index + special[0].length)
       };
     }
+    const re = /\ba\s+las?\s+(\d{1,2})(?:\s*[:.h]\s*(\d{2}))?(\s+y\s+media|\s+y\s+cuarto|\s+menos\s+cuarto)?\s*(a\s*m|p\s*m|de\s+la\s+manana|de\s+la\s+madrugada|de\s+la\s+tarde|de\s+la\s+noche)?\b/;
+    const m = s.match(re);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    let min = m[2] ? parseInt(m[2], 10) : 0;
+    if (m[3]) {
+      if (/media/.test(m[3])) min = 30;
+      else if (/menos/.test(m[3])) { h = h - 1; min = 45; }
+      else min = 15;
+    }
+    const period = (m[4] || '').replace(/\s/g, '');
+    let explicit = false;
+    if (/pm|tarde|noche/.test(period)) { if (h < 12) h += 12; explicit = true; }
+    else if (/am|manana|madrugada/.test(period)) { if (h === 12) h = 0; explicit = true; }
+    if (h > 23 || min > 59 || h < 0) return null;
+    if (h >= 13 || h === 0) explicit = true;
+    return { h, m: min, explicit, before: s.slice(0, m.index), after: s.slice(m.index + m[0].length) };
   }
 
-  playRPS(userChoice) {
-    const options = ['piedra', 'papel', 'tijera'];
-    const botChoice = options[Math.floor(Math.random() * options.length)];
-    let outcome = '';
-
-    if (userChoice === botChoice) {
-      outcome = `Empate mi pana, ambos sacamos ${botChoice}. ¡Otra ronda! 🤝`;
-    } else if (
-      (userChoice === 'piedra' && botChoice === 'tijera') ||
-      (userChoice === 'papel' && botChoice === 'piedra') ||
-      (userChoice === 'tijera' && botChoice === 'papel')
-    ) {
-      outcome = `¡Me ganaste! Tú sacaste ${userChoice} y yo saqué ${botChoice}. ¡Buena jugada! 🏆`;
-    } else {
-      outcome = `¡Punto para YARBIS! Yo saqué ${botChoice} y le gana a tu ${userChoice}. 🤖`;
-    }
-
-    return {
-      textResponse: outcome,
-      action: 'NONE',
-      themeChange: null
+  // Próxima hora válida. Sin "am/pm": si la hora ya pasó, prueba la versión de la
+  // tarde antes que mañana (salvo para despertar). "mañana" fuerza el día siguiente.
+  function nextAlarmTime({ h, m, explicit }, opts = {}) {
+    const at = (hh, addDays = 0) => {
+      const d = new Date();
+      d.setDate(d.getDate() + addDays);
+      d.setHours(hh, m, 0, 0);
+      return d.getTime();
     };
+    const now = Date.now();
+    if (opts.tomorrow) return at(h, 1);
+    if (at(h) > now) return at(h);
+    if (!explicit && !opts.wake && h < 12 && at(h + 12) > now) return at(h + 12);
+    return at(h, 1);
+  }
+
+  function venezuelanPhone(raw) {
+    let digits = String(raw || '').replace(/[^\d+]/g, '');
+    if (digits.startsWith('+')) return digits.slice(1);
+    digits = digits.replace(/\D/g, '');
+    if (/^0(4\d{2})\d{7}$/.test(digits)) return '58' + digits.slice(1);
+    if (/^4\d{9}$/.test(digits)) return '58' + digits;
+    return digits;
+  }
+
+  // Agrega punto final salvo que ya termine en uno (p. ej. "8:00 p. m.")
+  function sentence(text) {
+    return /[.!?…](\*\*|_)?$/.test(text) ? text : `${text}.`;
+  }
+
+  function pick(list) {
+    return list[Math.floor(Math.random() * list.length)];
   }
 
   /* ==========================================
-     IMAGE / VISION MULTIMODAL SCANNER
+     CEREBRO
      ========================================== */
-  async analyzeImage(base64Data, mode = 'general') {
-    const key = this.cleanGeminiKey(this.geminiApiKey);
-    const cleanBase64 = base64Data.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
+  class YARBISBrain {
+    constructor(deps = {}) {
+      this.finance = deps.finance || root.YarbisFinance;
+      this.reminders = deps.reminders || root.YarbisReminders;
+      this.math = deps.math || root.YarbisMath;
 
-    let modePrompt = 'Describe lo que ves detalladamente en esta foto en español (si hay texto, léelo; si es un objeto o persona, identifícalo).';
-    if (mode === 'document') {
-      modePrompt = 'MODO DOCUMENTO / OCR: Transcribe con total exactitud todo el texto legible visible en esta foto, respetando títulos y formato. Si es un recibo, factura o documento, resume los datos clave.';
-    } else if (mode === 'translate') {
-      modePrompt = 'MODO TRADUCTOR VISUAL: Detecta cualquier texto en la imagen que esté en otro idioma (inglés, etc.) y tradúcelo fielmente al español.';
-    } else if (mode === 'qr') {
-      modePrompt = 'MODO CÓDIGO QR / BARRAS: Identifica si hay un código QR, código de barras o enlace URL en la imagen y extrae el texto o link exacto.';
+      this.assistantName = S.getRaw('yarbis_assistant_name', 'YARBIS');
+      this.userName = S.getRaw('yarbis_user_name', '');
+      this.geminiApiKey = S.getRaw('yarbis_gemini_api_key', '');
+      this.geminiModel = S.getRaw('yarbis_gemini_model', '');
+      this.history = S.get(HISTORY_KEY, []);
+      if (!Array.isArray(this.history)) this.history = [];
+
+      this.trivia = null;
+      this.lastAiEngine = '';
     }
 
-    if (key) {
-      if (!this.activeGeminiModel) {
-        await this.discoverWorkingGeminiModel(key);
+    get name() {
+      return this.userName || 'mi pana';
+    }
+
+    setNames(assistantName, userName) {
+      this.assistantName = String(assistantName || '').trim() || 'YARBIS';
+      this.userName = String(userName || '').trim();
+      S.setRaw('yarbis_assistant_name', this.assistantName);
+      S.setRaw('yarbis_user_name', this.userName);
+    }
+
+    cleanKey(raw) {
+      return String(raw || '').trim().replace(/^['"`]+|['"`]+$/g, '').replace(/^Bearer\s+/i, '').replace(/^key=/i, '').trim();
+    }
+
+    setApiKey(key) {
+      const clean = this.cleanKey(key);
+      if (clean !== this.geminiApiKey) {
+        this.geminiModel = '';
+        S.remove('yarbis_gemini_model');
+      }
+      this.geminiApiKey = clean;
+      if (clean) S.setRaw('yarbis_gemini_api_key', clean);
+      else S.remove('yarbis_gemini_api_key');
+    }
+
+    greeting() {
+      const hour = new Date().getHours();
+      const saludo = hour < 12 ? '¡Buenos días' : hour < 19 ? '¡Buenas tardes' : '¡Buenas noches';
+      const who = this.userName ? `, ${this.userName}` : '';
+      return pick([
+        `${saludo}${who}! ¿Qué hacemos hoy?`,
+        `¡Épale${who}! Aquí estoy, ¿en qué te ayudo?`,
+        `${saludo}${who}! Pregúntame lo que quieras o pídeme la tasa del dólar.`
+      ]);
+    }
+
+    /* ------------------------------------------
+       HISTORIAL
+       ------------------------------------------ */
+    remember(role, text) {
+      this.history.push({ role, text: String(text).slice(0, 4000) });
+      if (this.history.length > MAX_HISTORY) this.history = this.history.slice(-MAX_HISTORY);
+      S.set(HISTORY_KEY, this.history);
+    }
+
+    resetConversation() {
+      this.history = [];
+      this.trivia = null;
+      S.set(HISTORY_KEY, []);
+    }
+
+    /* ------------------------------------------
+       ENTRADA PRINCIPAL
+       ------------------------------------------ */
+    async process(userText) {
+      const original = String(userText || '').trim();
+      if (!original) return { text: '¿Qué necesitas?' };
+
+      let response = null;
+      try {
+        response = await this.localIntent(original);
+      } catch (e) {
+        console.warn('Error en intención local:', e);
       }
 
-      const modelsToTry = [
-        this.activeGeminiModel || 'gemini-3.6-flash',
-        'gemini-3.0-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-flash',
-        'gemini-1.5-flash-8b',
-        'gemini-1.5-pro'
-      ];
+      if (!response) {
+        response = await this.askAI(original);
+      } else {
+        // Los comandos locales también quedan en el historial para dar contexto a la IA
+        this.remember('user', original);
+        this.remember('assistant', response.text);
+      }
+      return response;
+    }
 
-      for (const model of modelsToTry) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-          const requestBody = {
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { text: `Eres YARBIS Veneco, un asistente de IA con visión artificial Stark. Analiza esta imagen con precisión y responde en español: ${modePrompt}` },
-                  {
-                    inlineData: {
-                      mimeType: 'image/jpeg',
-                      data: cleanBase64
-                    }
-                  }
-                ]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 400
-            }
-          };
+    async localIntent(original) {
+      // Quitar "oye yarbis", "hey jarvis"...
+      const wake = align(original).match(/^\s*(?:(?:oye|hey|ey|ok|hola)\s+)?(?:yarbis|jarvis|asistente)\b[\s,]*/);
+      const text = wake ? original.slice(wake[0].length).trim() : original;
+      if (!text) return { text: `¿Sí${this.userName ? ', ' + this.userName : ''}? Te escucho.` };
 
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-          });
+      const a = align(text);
+      const n = a.replace(/\s+/g, ' ').trim();
+      // Recorta del texto original lo capturado por un grupo (conserva acentos y mayúsculas)
+      const grab = (re, group = 1) => {
+        const m = re.exec(a);
+        if (!m || !m.indices || !m.indices[group]) return null;
+        return text.slice(m.indices[group][0], m.indices[group][1]).trim();
+      };
+      const has = (re) => re.test(n);
 
-          if (res.ok) {
-            const data = await res.json();
-            if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
-              this.activeGeminiModel = model;
-              return data.candidates[0].content.parts[0].text.trim();
-            }
+      /* ---------- Juego de trivia activo ---------- */
+      if (this.trivia) {
+        if (has(/\b(salir|cancelar|terminar|parar|ya no|basta)\b/)) {
+          this.trivia = null;
+          return { text: 'Listo, terminamos la trivia. ¿Qué más hacemos?' };
+        }
+        return this.answerTrivia(n);
+      }
+
+      /* ---------- Control de voz ---------- */
+      if (has(/^(para|parar|detente|silencio|callate|stop|basta|shh+)$/)) {
+        return { text: 'Ok, me callo. 🤐', effect: { type: 'STOP' }, silent: true };
+      }
+      if (has(/\b(activa|enciende|prende|inicia)\b.*\bmanos libres\b/)) {
+        return { text: 'Manos libres activado: te escucho después de cada respuesta. Di "desactiva manos libres" para parar.', effect: { type: 'HANDS_FREE', on: true } };
+      }
+      if (has(/\b(desactiva|apaga|quita|deten)\b.*\bmanos libres\b/)) {
+        return { text: 'Manos libres desactivado.', effect: { type: 'HANDS_FREE', on: false } };
+      }
+
+      /* ---------- Conversación básica ---------- */
+      if (n.split(' ').length <= 5 && has(/^(hola|epale|buenas|buenos dias|buenas tardes|buenas noches|que mas|que hubo|quiubo|saludos|hey|como estas|como andas|que tal)\b/)) {
+        return { text: this.greeting() };
+      }
+      if (has(/^(muchas )?gracias\b|^(mil gracias|te pasaste|eres lo maximo)/)) {
+        return { text: pick(['¡A la orden! 🙌', '¡Con gusto, para eso estoy!', '¡De nada, mi pana!']) };
+      }
+      if (has(/^(ayuda|que puedes hacer|que sabes hacer|comandos|como te uso|que haces)\b/)) {
+        return this.helpResponse();
+      }
+      if (has(/^(como te llamas|quien eres|cual es tu nombre)\b/)) {
+        return { text: `Soy ${this.assistantName}, tu asistente personal. Puedo darte la tasa del dólar, convertir montos, calcular, poner alarmas, tomar notas, escanear códigos QR y conversar contigo.` };
+      }
+      const myName = grab(/^(?:me llamo|mi nombre es|llamame)\s+([a-z ]{2,30})$/d);
+      if (myName && !/^(la|el|un|una|que|como|cuanto)\b/i.test(myName)) {
+        this.setNames(this.assistantName, U.capitalize(myName));
+        return { text: `¡Mucho gusto, ${this.userName}! Lo recordaré.`, effect: { type: 'PROFILE' } };
+      }
+
+      /* ---------- Hora y fecha ---------- */
+      if (has(/\b(que hora es|que horas son|dime la hora|la hora)\b/) && n.split(' ').length <= 6) {
+        return { text: sentence(`Son las ${new Date().toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })}`) };
+      }
+      if (has(/\b(que dia es hoy|que fecha es|fecha de hoy|en que dia estamos|a cuanto estamos)\b/)) {
+        const d = new Date().toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        return { text: `Hoy es ${d}.` };
+      }
+
+      /* ---------- Chat ---------- */
+      if (has(/\b(borra|limpia|elimina|vacia)\b.*\b(chat|conversacion|pantalla|historial)\b/) || has(/^nueva conversacion$/)) {
+        this.resetConversation();
+        return { text: 'Conversación nueva. ¿En qué te ayudo?', effect: { type: 'CLEAR_CHAT' } };
+      }
+
+      /* ---------- Temporizadores ---------- */
+      const isTimerWord = has(/\b(temporizador|temporizadores|timer|timers|cuenta regresiva|cronometro)\b/);
+      if (isTimerWord && has(/\b(cancela|cancelar|quita|quitar|borra|borrar|elimina|deten|detener|para|parar|apaga|apagar)\b/)) {
+        const count = this.reminders.schedule.cancelAllTimers();
+        return { text: count ? `Listo, cancelé ${count === 1 ? 'el temporizador' : `${count} temporizadores`}.` : 'No tienes temporizadores activos.' };
+      }
+      const relative = /^(?:avisame|recuerdame|recordarme|despiertame|alertame)\s+en\s+/.test(n);
+      if (isTimerWord || relative) {
+        const seconds = parseDuration(n);
+        if (seconds && seconds > 0) {
+          let label = '';
+          if (relative) {
+            const after = grab(/(?:segundos?|segs?|minutos?|mins?|min|horas?|hrs?|media\s+hora)(?:\s+y\s+medi[ao])?\s+(?:que\s+|para\s+|de\s+|a\s+)?(.+)$/d);
+            label = after ? U.capitalize(after) : '';
+          } else {
+            const lbl = grab(/\b(?:para|de nombre|llamado)\s+((?!\d)[a-zñ].{2,})$/d);
+            if (lbl && !/\b(minutos?|segundos?|horas?)\b/.test(align(lbl))) label = U.capitalize(lbl);
           }
-        } catch (err) {
-          console.warn(`Vision model ${model} exception:`, err);
-        }
-      }
-    }
-
-    return `He procesado el encuadre de visión en modo ${mode.toUpperCase()}, ${this.userName}. Imagen recibida con éxito.`;
-  }
-
-  /* ==========================================
-     WEATHER & METEOROLOGICAL RADAR
-     ========================================== */
-  async getWeatherInfo(cityName = 'Caracas') {
-    try {
-      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=es&format=json`);
-      if (geoRes.ok) {
-        const geoData = await geoRes.json();
-        if (geoData.results && geoData.results.length > 0) {
-          const { latitude, longitude, name, country } = geoData.results[0];
-          const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto`);
-          if (weatherRes.ok) {
-            const wData = await weatherRes.json();
-            const temp = Math.round(wData.current.temperature_2m);
-            const humidity = wData.current.relative_humidity_2m;
-            const wind = Math.round(wData.current.wind_speed_10m);
-            return `El clima actual en ${name} (${country}) registra ${temp}°C con ${humidity}% de humedad y vientos de ${wind} km/h, ${this.userName}. Sensores meteorológicos Stark activos.`;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Weather fetch error:', e);
-    }
-    return `Para información meteorológica en tiempo real de ${cityName}, te sugiero consultar los sensores locales, ${this.userName}.`;
-  }
-
-  /* ==========================================
-     QUANTITATIVE FINANCE, BURSÁTIL & BVC/FX RADAR
-     ========================================== */
-  async fetchLiveCryptoPrices() {
-    try {
-      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
-      const fetches = symbols.map(s => 
-        fetch(`https://data-api.binance.vision/api/v3/ticker/24hr?symbol=${s}`, { signal: AbortSignal.timeout(3500) })
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
-      );
-      const results = await Promise.all(fetches);
-      const data = {};
-      results.forEach((item) => {
-        if (item && item.symbol) {
-          const base = item.symbol.replace('USDT', '');
-          data[base] = {
-            price: parseFloat(item.lastPrice),
-            change24h: parseFloat(item.priceChangePercent),
-            high24h: parseFloat(item.highPrice),
-            low24h: parseFloat(item.lowPrice),
-            volume: parseFloat(item.volume)
+          const timer = this.reminders.schedule.addTimer(seconds, label);
+          const when = U.fmtTime(Date.now() + seconds * 1000);
+          return {
+            text: sentence(`⏱️ Temporizador de **${U.describeDuration(seconds)}**${label ? ` para "${label}"` : ''}. Sonará a las ${when}`),
+            speak: `Listo, temporizador de ${U.describeDuration(seconds)}${label ? ` para ${label}` : ''}.`,
+            effect: { type: 'REMINDER', id: timer && timer.id },
+            actions: [{ label: 'Ver temporizadores', view: 'notes' }],
+            sound: 'success'
           };
         }
-      });
+        if (isTimerWord) return { text: '¿De cuánto tiempo pongo el temporizador? Por ejemplo: "temporizador de 10 minutos".' };
+      }
 
-      if (Object.keys(data).length > 0) return data;
-    } catch (e) {
-      console.warn('Binance Vision ticker fetch error:', e);
-    }
-
-    // Fallback: CoinGecko API
-    try {
-      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,binancecoin,ripple&vs_currencies=usd&include_24hr_change=true', { signal: AbortSignal.timeout(3500) });
-      if (cgRes.ok) {
-        const cg = await cgRes.json();
+      /* ---------- Alarmas ---------- */
+      const isAlarmWord = has(/\b(alarma|alarmas|despiertame|despertador|recuerdame|recordarme|avisame)\b/);
+      if (isAlarmWord && has(/\b(cancela|borra|elimina|quita|apaga)\b.*\balarmas?\b/)) {
+        const list = this.reminders.schedule.alarms.slice();
+        list.forEach(a2 => this.reminders.schedule.removeAlarm(a2.id));
+        return { text: list.length ? `Eliminé ${list.length === 1 ? 'la alarma' : `${list.length} alarmas`}.` : 'No tienes alarmas programadas.' };
+      }
+      if (has(/\b(que|cuales|mis)\s+alarmas\b/)) {
+        const list = this.reminders.schedule.alarms;
+        if (!list.length) return { text: 'No tienes alarmas programadas.' };
         return {
-          BTC: { price: cg.bitcoin?.usd || 64792.0, change24h: cg.bitcoin?.usd_24h_change || 1.5 },
-          ETH: { price: cg.ethereum?.usd || 1910.5, change24h: cg.ethereum?.usd_24h_change || -0.2 },
-          SOL: { price: cg.solana?.usd || 76.77, change24h: cg.solana?.usd_24h_change || 0.8 },
-          BNB: { price: cg.binancecoin?.usd || 645.0, change24h: cg.binancecoin?.usd_24h_change || 0.5 },
-          XRP: { price: cg.ripple?.usd || 1.45, change24h: cg.ripple?.usd_24h_change || 0.0 }
+          text: `Tienes ${list.length === 1 ? 'una alarma' : `${list.length} alarmas`}:\n` + list.map(x => `- **${U.fmtTime(x.at)}** · ${x.label}`).join('\n'),
+          actions: [{ label: 'Ver alarmas', view: 'notes' }]
         };
       }
-    } catch (err) {
-      console.warn('CoinGecko fallback error:', err);
-    }
-
-    return {
-      BTC: { price: 64792.0, change24h: 1.5 },
-      ETH: { price: 1910.5, change24h: -0.2 },
-      SOL: { price: 76.77, change24h: 0.8 },
-      BNB: { price: 645.0, change24h: 0.5 },
-      XRP: { price: 1.45, change24h: 0.0 }
-    };
-  }
-
-  /* ==========================================
-     GLOBAL CURRENCY ENGINE & VENEZUELA FX RADAR
-     ========================================== */
-  async fetchLiveVenezuelaFX() {
-    const defaultFX = {
-      usdOfficialBCV: 773.31,
-      usdMarketParallel: 889.65,
-      eurOfficialBCV: 896.03,
-      usdtP2P: 889.65,
-      copVesRate: 0.187,
-      vesCopRate: 5.34,
-      brlVesRate: 136.7,
-      cnyVesRate: 114.75,
-      rubVesRate: 9.10,
-      spreadPercent: ((889.65 - 773.31) / 773.31) * 100,
-      lastUpdated: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
-      source: 'Banco Central de Venezuela (BCV Oficial)'
-    };
-
-    // 1. Primary: DolarApi Venezuela
-    try {
-      const res = await fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(3500) });
-      if (res.ok) {
-        const list = await res.json();
-        const bcvObj = list.find(x => x.fuente === 'oficial') || list.find(x => x.nombre?.toLowerCase().includes('oficial'));
-        const parObj = list.find(x => x.fuente === 'paralelo') || list.find(x => x.nombre?.toLowerCase().includes('paralelo'));
-
-        if (bcvObj && bcvObj.promedio) defaultFX.usdOfficialBCV = parseFloat(bcvObj.promedio);
-        if (parObj && parObj.promedio) {
-          defaultFX.usdMarketParallel = parseFloat(parObj.promedio);
-          defaultFX.usdtP2P = parseFloat(parObj.promedio);
+      if (isAlarmWord) {
+        const clock = parseClock(n);
+        if (clock) {
+          const tomorrow = /\bmanana\b/.test(n.replace(/de la manana/g, ''));
+          const at = nextAlarmTime(clock, { tomorrow, wake: has(/\b(despiertame|despertador|levantame)\b/) });
+          // Etiqueta: lo que viene después de la hora, o lo que hay entre el verbo y la hora
+          const stripDay = (x) => x.replace(/\b(para\s+)?(hoy|manana|en la manana|en la noche|en la tarde)\b/g, ' ').replace(/\s+/g, ' ').trim();
+          let label = stripDay(clock.after).replace(/^(para|que|de|y|a)\s+/, '').trim();
+          if (!label) {
+            label = stripDay(clock.before
+              .replace(/^(pon(me)?|programa(me)?|crea(me)?|agrega|configura|activa)?\s*((una|1)\s+)?(alarma|despertador)?\s*/, '')
+              .replace(/^(despiertame|recuerdame|recordarme|avisame)\s*/, ''))
+              .replace(/^(para|que|de)\s+/, '')
+              .trim();
+          }
+          if (label) {
+            // Recupera acentos y mayúsculas del texto original si es posible
+            const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
+            label = grab(new RegExp(`(${escaped})`, 'd')) || label;
+          }
+          label = label ? U.capitalize(label) : 'Alarma';
+          const alarm = this.reminders.schedule.addAlarm(at, label);
+          const isTomorrow = new Date(at).toDateString() !== new Date().toDateString();
+          return {
+            text: sentence(`⏰ Alarma para las **${U.fmtTime(at)}**${isTomorrow ? ' (mañana)' : ''}${label !== 'Alarma' ? ` · ${label}` : ''}`),
+            speak: sentence(`Alarma programada para las ${U.fmtTime(at)}${isTomorrow ? ' de mañana' : ''}`),
+            effect: { type: 'REMINDER', id: alarm && alarm.id },
+            actions: [{ label: 'Ver alarmas', view: 'notes' }],
+            sound: 'success'
+          };
         }
-        defaultFX.eurOfficialBCV = 896.03;
-        defaultFX.spreadPercent = ((defaultFX.usdMarketParallel - defaultFX.usdOfficialBCV) / defaultFX.usdOfficialBCV) * 100;
-        defaultFX.source = 'BCV Oficial (bcv.org.ve) & DolarAPI';
-        return defaultFX;
-      }
-    } catch (e) {
-      console.warn('DolarAPI fetch warning:', e);
-    }
-
-    // 2. Secondary: Currency API (jsdelivr)
-    try {
-      const res2 = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json', { signal: AbortSignal.timeout(3500) });
-      if (res2.ok) {
-        const d2 = await res2.json();
-        if (d2.usd && d2.usd.ves) {
-          defaultFX.usdOfficialBCV = parseFloat(d2.usd.ves);
-          defaultFX.usdMarketParallel = defaultFX.usdOfficialBCV * 1.15;
-          defaultFX.eurOfficialBCV = defaultFX.usdOfficialBCV * 1.087;
-          defaultFX.spreadPercent = 15.0;
-          defaultFX.source = 'Currency-API Global Feed';
-          return defaultFX;
+        if (has(/\b(alarma|despertador)\b/)) {
+          return { text: '¿A qué hora pongo la alarma? Por ejemplo: "alarma a las 6:30 de la mañana".' };
         }
       }
-    } catch (e2) {}
 
-    return defaultFX;
-  }
-
-  async fetchGlobalFiatRates() {
-    const defaultRates = {
-      USD: 1.0,
-      EUR: 0.92,
-      GBP: 0.79,
-      JPY: 154.5,
-      CAD: 1.38,
-      CHF: 0.88,
-      CNY: 7.24,
-      COP: 4120.0,
-      BRL: 5.65,
-      MXN: 19.80,
-      PEN: 3.75,
-      CLP: 940.0,
-      ARS: 1040.0,
-      RUB: 98.5,
-      TRY: 34.2
-    };
-
-    try {
-      const res = await fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(4000) });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.rates) return json.rates;
+      /* ---------- Notas ---------- */
+      const notes = this.reminders.notes;
+      if (has(/\b(lee|leeme|dime|cuales son|muestrame|ensename|ver|mostrar|abre|abrir)\s+(mis\s+|las\s+)?(notas|pendientes|recordatorios)\b/) || has(/\bque\s+(notas|pendientes|tareas)\s+tengo\b/) || has(/^mis (notas|pendientes)$/)) {
+        const pending = notes.pending();
+        const openIt = has(/^(abre|abrir|ver|mostrar|muestrame|ensename)\b/);
+        const effect = openIt ? { type: 'OPEN_VIEW', view: 'notes' } : undefined;
+        if (!pending.length) return { text: 'No tienes notas pendientes. 🎉', actions: [{ label: 'Abrir notas', view: 'notes' }], effect };
+        const top = pending.slice(0, 7);
+        return {
+          effect,
+          text: `Tienes ${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}:\n` + top.map(x => `- ${x.text}`).join('\n') + (pending.length > top.length ? `\n- …y ${pending.length - top.length} más` : ''),
+          speak: `Tienes ${pending.length} ${pending.length === 1 ? 'pendiente' : 'pendientes'}: ${top.map(x => x.text).join('. ')}.`,
+          actions: [{ label: 'Abrir notas', view: 'notes' }]
+        };
       }
-    } catch (e) {
-      console.warn('Global fiat rates error (using default rates):', e);
-    }
-    return defaultRates;
-  }
-
-  convertUniversalCurrency(amount, fromCode, toCode, fxRates, cryptoRates, fiatRates) {
-    if (!amount || amount <= 0) return 0;
-    const fx = fxRates || { usdOfficialBCV: 62.40, usdMarketParallel: 75.10, eurOfficialBCV: 67.85 };
-    const fiat = fiatRates || { EUR: 0.92, COP: 4120, BRL: 5.65, MXN: 19.8, GBP: 0.79, JPY: 154.5, ARS: 1040, PEN: 3.75, CLP: 940 };
-    const crypto = cryptoRates || { BTC: { price: 95000 }, ETH: { price: 3400 }, SOL: { price: 190 }, BNB: { price: 650 }, XRP: { price: 1.45 } };
-
-    // Step 1: Convert FROM currency to base USD
-    let inUSD = 0;
-    if (fromCode === 'USD' || fromCode === 'USDT' || fromCode === 'USDC') {
-      inUSD = amount;
-    } else if (fromCode === 'VES_BCV') {
-      inUSD = amount / fx.usdOfficialBCV;
-    } else if (fromCode === 'VES_PARALELO') {
-      inUSD = amount / fx.usdMarketParallel;
-    } else if (fromCode === 'EUR_BCV') {
-      inUSD = (amount / fx.eurOfficialBCV) * (fx.eurOfficialBCV / fx.usdOfficialBCV);
-    } else if (crypto[fromCode]) {
-      inUSD = amount * crypto[fromCode].price;
-    } else if (fiat[fromCode]) {
-      inUSD = amount / fiat[fromCode];
-    } else {
-      inUSD = amount;
-    }
-
-    // Step 2: Convert USD to TARGET currency
-    let outTarget = 0;
-    if (toCode === 'USD' || toCode === 'USDT' || toCode === 'USDC') {
-      outTarget = inUSD;
-    } else if (toCode === 'VES_BCV') {
-      outTarget = inUSD * fx.usdOfficialBCV;
-    } else if (toCode === 'VES_PARALELO') {
-      outTarget = inUSD * fx.usdMarketParallel;
-    } else if (toCode === 'EUR_BCV') {
-      outTarget = inUSD * (fx.usdOfficialBCV / fx.eurOfficialBCV);
-    } else if (crypto[toCode]) {
-      outTarget = inUSD / crypto[toCode].price;
-    } else if (fiat[toCode]) {
-      outTarget = inUSD * fiat[toCode];
-    } else {
-      outTarget = inUSD;
-    }
-
-    return outTarget;
-  }
-
-  getBVCSampleData() {
-    return {
-      stocks: [
-        { ticker: 'MVZ.A', name: 'Mercantil Servicios Fin. A', priceVes: 185.50, change: 1.64, volume: '14,200', sector: 'Banca' },
-        { ticker: 'MVZ.B', name: 'Mercantil Servicios Fin. B', priceVes: 172.00, change: -0.58, volume: '8,450', sector: 'Banca' },
-        { ticker: 'RST', name: 'Ron Santa Teresa', priceVes: 42.80, change: 2.15, volume: '32,100', sector: 'Industrial' },
-        { ticker: 'BNC', name: 'Banco Nacional de Crédito', priceVes: 2.45, change: 0.00, volume: '125,000', sector: 'Banca' },
-        { ticker: 'TDV.D', name: 'CANTV Clase D', priceVes: 16.90, change: -1.17, volume: '45,800', sector: 'Telecom' },
-        { ticker: 'FVI.B', name: 'Fondo Valores Inmobiliarios B', priceVes: 31.00, change: 0.85, volume: '11,300', sector: 'Inmobiliario' }
-      ],
-      ibcIndex: { points: '89,450.20', change: 0.94 }
-    };
-  }
-
-  getGlobalEquitiesSampleData() {
-    return [
-      { ticker: 'SPX', name: 'S&P 500', price: '5,980.50', change: 0.45, type: 'INDEX' },
-      { ticker: 'NDX', name: 'Nasdaq 100', price: '21,120.30', change: 0.82, type: 'INDEX' },
-      { ticker: 'DJI', name: 'Dow Jones 30', price: '43,890.10', change: -0.12, type: 'INDEX' },
-      { ticker: 'NVDA', name: 'Nvidia Corp', price: '142.50', change: 2.40, type: 'STOCK', pe: '48.2', div: '0.03%' },
-      { ticker: 'AAPL', name: 'Apple Inc', price: '232.80', change: 0.35, type: 'STOCK', pe: '34.1', div: '0.43%' },
-      { ticker: 'TSLA', name: 'Tesla Inc', price: '345.20', change: -1.25, type: 'STOCK', pe: '88.4', div: '0.00%' }
-    ];
-  }
-
-  getFXSampleRates() {
-    return {
-      usdOfficialBCV: 62.40,
-      usdMarketParallel: 75.10,
-      eurOfficialBCV: 67.85,
-      usdtP2P: 75.40,
-      spreadPercent: ((75.10 - 62.40) / 62.40) * 100
-    };
-  }
-
-  calculateDCA(purchases) {
-    if (!Array.isArray(purchases) || purchases.length === 0) return null;
-    let totalInvested = 0;
-    let totalUnits = 0;
-
-    purchases.forEach(p => {
-      const amount = parseFloat(p.amount) || 0;
-      const price = parseFloat(p.price) || 0;
-      if (amount > 0 && price > 0) {
-        totalInvested += amount;
-        totalUnits += amount / price;
+      if (has(/\b(borra|elimina|limpia|quita)\s+(todas\s+)?(mis\s+|las\s+)?notas\b/) && !has(/\bnota\s+(de|que)\b/)) {
+        return {
+          text: `¿Seguro que quieres borrar tus ${notes.items.length} notas? Esto no se puede deshacer.`,
+          actions: [{ label: 'Sí, borrar todas', command: 'notes-clear-all-confirmed', danger: true }]
+        };
       }
-    });
+      const doneQuery =
+        grab(/^(?:marca|tacha|completa)\s+(?:como\s+(?:hecha|lista|completada)\s+)?(?:la\s+nota|la\s+tarea|el\s+pendiente)\s+(?:de\s+|que\s+dice\s+|del?\s+|sobre\s+)?(.+?)(?:\s+como\s+(?:hecha|lista|completada))?$/d) ||
+        grab(/^(?:marca|tacha)\s+como\s+(?:hecha|lista|completada)\s+(?:la\s+(?:de\s+)?)?(.+)$/d) ||
+        grab(/^(?:marca|tacha)\s+(?:la\s+de\s+)(.+?)\s+como\s+(?:hecha|lista|completada)$/d);
+      const doneSoft = !doneQuery && grab(/^(?:ya\s+hice|termine|ya\s+compre)\s+(?:la\s+nota\s+de\s+|lo\s+de\s+)?(.+)$/d);
+      if (doneSoft) {
+        const note = notes.findByQuery(doneSoft);
+        if (note && !note.done) {
+          notes.toggle(note.id, true);
+          return { text: `✅ ¡Bien ahí! Marqué como hecha: "${note.text}".` };
+        }
+      }
+      if (doneQuery) {
+        const note = notes.findByQuery(doneQuery);
+        if (note) {
+          notes.toggle(note.id, true);
+          return { text: `✅ Marqué como hecha: "${note.text}".` };
+        }
+        return { text: `No encontré una nota sobre "${doneQuery}".`, actions: [{ label: 'Ver notas', view: 'notes' }] };
+      }
+      const delQuery = grab(/^(?:borra|elimina|quita)\s+la\s+nota\s+(?:de\s+|que\s+dice\s+|del?\s+|sobre\s+)?(.+)$/d);
+      if (delQuery) {
+        const note = notes.findByQuery(delQuery);
+        if (note) {
+          notes.remove(note.id);
+          return { text: `🗑️ Borré la nota "${note.text}".` };
+        }
+        return { text: `No encontré una nota sobre "${delQuery}".` };
+      }
+      const noteText = grab(/^(?:anota(?:me)?|apunta(?:me)?|toma\s+nota(?:\s+de)?|(?:agrega|agregar|anade|crea|crear|guarda|guardar|pon|nueva)\s+(?:una\s+)?(?:nota|tarea|pendiente)(?:\s+que\s+dice)?|nota|recuerdame|recordarme|no\s+me\s+dejes\s+olvidar)\s*:?\s+(?:que\s+)?(.{2,})$/d);
+      if (noteText) {
+        const note = notes.add(U.capitalize(noteText));
+        return {
+          text: `📝 Anotado: "${note.text}".`,
+          actions: [{ label: 'Ver notas', view: 'notes' }],
+          sound: 'success'
+        };
+      }
 
-    if (totalUnits === 0) return null;
-    const avgPrice = totalInvested / totalUnits;
-    return {
-      totalInvested,
-      totalUnits,
-      avgPrice
-    };
-  }
+      /* ---------- Contactos ---------- */
+      const saveContact = /^(?:guarda|agrega|anade|registra|nuevo)\s+(?:el\s+|un\s+)?(?:contacto|numero)\s+(?:de\s+)?(.+?)\s+(?:con\s+el\s+)?(?:numero|telefono|tlf|cel|celular)?\s*:?\s*(\+?[\d][\d\s-]{6,})$/d.exec(a);
+      if (saveContact) {
+        const cName = text.slice(saveContact.indices[1][0], saveContact.indices[1][1]).trim();
+        const phone = saveContact[2].replace(/[^\d+]/g, '');
+        this.saveContact(cName, phone);
+        return { text: `📇 Guardé a **${U.capitalize(cName)}** con el número ${phone}.`, effect: { type: 'CONTACTS' } };
+      }
 
-  calculateBVCValuation(shares, priceVes, buyPriceVes, bcvRate = 62.40, parallelRate = 74.80) {
-    const totalVes = shares * priceVes;
-    const buyTotalVes = shares * buyPriceVes;
-    const nominalProfitVes = totalVes - buyTotalVes;
-    const nominalRoiVes = buyTotalVes > 0 ? (nominalProfitVes / buyTotalVes) * 100 : 0;
+      /* ---------- Llamadas ---------- */
+      if (has(/^(llama|llamar|llamame|marca|marcar|telefonea)\b/) || has(/\bhaz(me)?\s+una\s+llamada\b/)) {
+        if (has(/\b(emergencia|policia|ambulancia|bomberos|911|171)\b/)) {
+          return { text: 'Para emergencias en Venezuela marca **911** (o 171). Toca el botón para llamar.', actions: [{ label: '📞 Llamar al 911', url: 'tel:911' }] };
+        }
+        const digits = wordsToDigits(n).match(/(\+?\d[\d\s-]{5,}\d)/);
+        if (digits) {
+          const num = digits[1].replace(/[\s-]/g, '');
+          return { text: `Llamando al ${num}…`, actions: [{ label: `📞 Llamar al ${num}`, url: `tel:${num}` }], effect: { type: 'OPEN_URL', url: `tel:${num}` } };
+        }
+        const who = grab(/^(?:llama|llamar|llamame|marca|marcar|telefonea|hazme\s+una\s+llamada|haz\s+una\s+llamada)\s+(?:a\s+|al\s+)?(?:mi\s+)?(.+)$/d);
+        if (who) return this.callContact(who);
+        return { text: '¿A quién llamo? Di por ejemplo "llama a mamá" o un número.' };
+      }
 
-    const usdOfficialValue = totalVes / bcvRate;
-    const usdParallelValue = totalVes / parallelRate;
+      /* ---------- WhatsApp ---------- */
+      if (has(/\b(whatsapp|wasap|guasap|whats|wsp)\b/)) {
+        return this.whatsappIntent(text, a, n);
+      }
 
-    return {
-      shares,
-      priceVes,
-      totalVes,
-      nominalProfitVes,
-      nominalRoiVes,
-      usdOfficialValue,
-      usdParallelValue
-    };
-  }
+      /* ---------- Dinero: conversiones ---------- */
+      const conversion = await this.conversionIntent(n);
+      if (conversion) return conversion;
 
-  calculateArbitrageSpread(priceA, priceB, feePercentA = 0.1, feePercentB = 0.1) {
-    if (!priceA || !priceB || priceA <= 0) return null;
-    const grossSpread = ((priceB - priceA) / priceA) * 100;
-    const netSpread = grossSpread - (feePercentA + feePercentB);
-    return {
-      priceA,
-      priceB,
-      grossSpread,
-      netSpread,
-      profitable: netSpread > 0
-    };
-  }
+      /* ---------- Tasas del dólar / euro ---------- */
+      if (has(/\b(dolar|dolares|tasa|tasas|bcv|paralelo|monitor|brecha|cambio del dia|euro|euros|bolivar|bolivares)\b/) && !has(/^(abre|abrir)\b/)) {
+        return this.ratesIntent(n);
+      }
 
-  calculateCryptoROI(initialUsd, buyPrice, sellPrice, feePercent = 0.2) {
-    if (!buyPrice || buyPrice <= 0 || !initialUsd) return null;
-    const tokens = initialUsd / buyPrice;
-    const grossFinal = tokens * sellPrice;
-    const fees = (initialUsd * (feePercent / 100)) + (grossFinal * (feePercent / 100));
-    const finalValue = grossFinal - fees;
-    const netProfit = finalValue - initialUsd;
-    const roiPercent = (netProfit / initialUsd) * 100;
-    return {
-      tokens,
-      initialUsd,
-      grossFinal,
-      fees,
-      finalValue,
-      netProfit,
-      roiPercent
-    };
-  }
+      /* ---------- Criptomonedas ---------- */
+      const cryptoMatch = n.match(/\b(bitcoin|btc|ethereum|eth|ether|solana|bnb|binance coin|xrp|ripple|cripto|criptos|criptomonedas?)\b/);
+      if (cryptoMatch) {
+        return this.cryptoIntent(cryptoMatch[1]);
+      }
 
-  calculateCompoundAPY(principal, ratePercent, compoundingFreq = 12, years = 1) {
-    const r = (ratePercent || 0) / 100;
-    const n = compoundingFreq || 12;
-    const t = years || 1;
-    const apy = (Math.pow(1 + r / n, n) - 1) * 100;
-    const finalAmount = (principal || 0) * Math.pow(1 + r / n, n * t);
-    const totalInterest = finalAmount - (principal || 0);
-    return {
-      principal: principal || 0,
-      ratePercent: ratePercent || 0,
-      compoundingFreq: n,
-      apy,
-      finalAmount,
-      totalInterest
-    };
-  }
+      /* ---------- Matemáticas ---------- */
+      const math = this.math.evaluateNatural(n);
+      if (math) {
+        return { text: `🧮 ${math.expression} = **${math.formatted}**`, speak: `El resultado es ${math.formatted}.` };
+      }
 
-  generateStructuredDataRequest(marketType, symbols = []) {
-    return {
-      schemaVersion: '1.0.0',
-      requestId: `req_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      marketType: marketType.toUpperCase(),
-      requiredMetrics: ['lastPrice', 'change24h', 'volume24h', 'high24h', 'low24h', 'bid', 'ask', 'marketCap'],
-      webhookFormat: 'JSON_STARK_FEED'
-    };
-  }
+      /* ---------- Clima ---------- */
+      if (has(/\b(clima|temperatura|pronostico|va a llover|esta lloviendo|llueve|lluvia|hace calor|hace frio|el tiempo (en|de|para|hoy|manana))\b/)) {
+        return this.weatherIntent(n);
+      }
 
-  evaluateMathExpression(expr) {
-    if (!expr || typeof expr !== 'string') return null;
-    try {
-      let clean = expr.trim()
-        .replace(/×/g, '*')
-        .replace(/÷/g, '/')
-        .replace(/\^/g, '**')
-        .replace(/(\d+)%/g, '($1/100)')
-        .replace(/\bsqrt\(([^)]+)\)/gi, 'Math.sqrt($1)')
-        .replace(/\bcbrt\(([^)]+)\)/gi, 'Math.cbrt($1)')
-        .replace(/\babs\(([^)]+)\)/gi, 'Math.abs($1)')
-        .replace(/\bsin\(([^)]+)\)/gi, 'Math.sin($1)')
-        .replace(/\bcos\(([^)]+)\)/gi, 'Math.cos($1)')
-        .replace(/\btan\(([^)]+)\)/gi, 'Math.tan($1)')
-        .replace(/\blog\(([^)]+)\)/gi, 'Math.log10($1)')
-        .replace(/\bln\(([^)]+)\)/gi, 'Math.log($1)')
-        .replace(/\bpi\b/gi, 'Math.PI')
-        .replace(/\be\b/gi, 'Math.E');
+      /* ---------- Navegación GPS ---------- */
+      const dest = grab(/^(?:como\s+(?:llego|llegar|voy|ir)\s+(?:a|al|hasta)|ruta\s+(?:a|al|hacia|para)|llevame\s+(?:a|al)|navega(?:r)?\s+(?:a|al|hacia)|direccion\s+(?:a|al|de|del|hacia)|ir\s+(?:a|al))\s+(.+)$/d);
+      if (dest) {
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+        return {
+          text: `🗺️ Ruta hacia **${dest}**.`,
+          actions: [
+            { label: 'Abrir en Google Maps', url },
+            { label: 'Abrir en Waze', url: `https://waze.com/ul?q=${encodeURIComponent(dest)}&navigate=yes` }
+          ],
+          effect: { type: 'OPEN_URL', url }
+        };
+      }
 
-      if (/[^0-9\.\+\-\*\/\(\)\,\s\%\^Math\.sqrtcbrtabsincostanlogEPI]/.test(clean)) {
+      /* ---------- Cámara / escáner ---------- */
+      if (has(/\b(qr|codigo de barras|escanea(r)? (un |el |este )?codigo)\b/)) {
+        return { text: 'Abriendo el lector de códigos QR…', effect: { type: 'OPEN_CAMERA', mode: 'qr' } };
+      }
+      if (has(/\b(traduce|traducir)\b.*\b(letrero|cartel|foto|imagen|texto de la camara|menu)\b/)) {
+        return { text: 'Abriendo la cámara en modo traductor…', effect: { type: 'OPEN_CAMERA', mode: 'translate' } };
+      }
+      if (has(/\b(escanea(r)?|digitaliza(r)?|lee(r)?)\b.*\b(documento|factura|recibo|papel)\b/)) {
+        return { text: 'Abriendo la cámara en modo documento…', effect: { type: 'OPEN_CAMERA', mode: 'document' } };
+      }
+      if (has(/\b(abre|abrir|activa|usa|enciende)\s+(la\s+)?(camara|vision|escaner)\b/) || has(/^(camara|escaner|que es esto|que estoy viendo)$/)) {
+        return { text: 'Abriendo la cámara…', effect: { type: 'OPEN_CAMERA', mode: 'general' } };
+      }
+
+      /* ---------- Purificador de texto ---------- */
+      const toClean = grab(/^(?:limpia|purifica|desinfecta|sanitiza|quita\s+las\s+marcas\s+de(?:\s+agua)?\s+de)\s+(?:este\s+)?texto\s*:\s*([\s\S]{5,})$/d);
+      if (toClean && root.YarbisCleaner) {
+        const res = root.YarbisCleaner.clean(toClean, { humanize: true });
+        return { text: `🧹 Texto limpio (${res.stats.invisible} caracteres invisibles eliminados):\n\n${res.text}`, speak: 'Listo, aquí tienes el texto limpio.' };
+      }
+      if (has(/\b(purificador|marcas de agua|anti marcas|limpiar texto|limpia texto|limpiador de texto)\b/)) {
+        return { text: 'Abriendo el purificador de texto. Pega ahí el texto a limpiar.', effect: { type: 'OPEN_VIEW', view: 'cleaner' } };
+      }
+
+      /* ---------- Linterna y batería ---------- */
+      if (has(/\b(linterna|flash|luz del telefono)\b/)) {
+        const off = has(/\b(apaga|apagar|desactiva|quita)\b/);
+        return { text: off ? 'Apagando la linterna.' : 'Encendiendo la linterna (si tu teléfono lo permite).', effect: { type: 'TORCH', on: !off } };
+      }
+      if (has(/\b(bateria|cuanta carga|nivel de carga)\b/)) {
+        return this.batteryIntent();
+      }
+
+      /* ---------- Temas ---------- */
+      if (has(/\b(modo|tema)\s+(oscuro|noche|negro)\b/)) return { text: 'Modo oscuro activado. 🌙', effect: { type: 'THEME', mode: 'dark' } };
+      if (has(/\b(modo|tema)\s+(claro|dia|blanco)\b/)) return { text: 'Modo claro activado. ☀️', effect: { type: 'THEME', mode: 'light' } };
+      if (has(/\b(tema|color|protocolo|modo)\b/)) {
+        for (const [accent, words] of Object.entries(ACCENTS)) {
+          if (words.some(w => new RegExp(`\\b${w}\\b`).test(n))) {
+            return { text: `Tema ${ACCENT_NAMES[accent]} activado.`, effect: { type: 'THEME', accent }, sound: 'success' };
+          }
+        }
+      }
+
+      /* ---------- Juegos y humor ---------- */
+      if (has(/\b(trivia|juego de preguntas|preguntame algo)\b/)) {
+        this.trivia = { index: 0, score: 0, order: TRIVIA.map((_, i) => i).sort(() => Math.random() - 0.5).slice(0, 5) };
+        return { text: `🎲 ¡Trivia venezolana! Son 5 preguntas. Di "salir" para terminar.\n\n**Pregunta 1:** ${TRIVIA[this.trivia.order[0]].q}` };
+      }
+      if (has(/\bpiedra,? papel( o|,)? tijeras?\b/) && !has(/^(piedra|papel|tijeras?)$/)) {
+        return { text: '¡Dale! Di "piedra", "papel" o "tijera".' };
+      }
+      if (has(/^(piedra|papel|tijeras?)$/)) {
+        return this.rps(n.startsWith('tijera') ? 'tijera' : n);
+      }
+      if (has(/\b(chiste|algo gracioso|hazme reir)\b/)) {
+        return { text: pick(JOKES) };
+      }
+      if (has(/\b(lanza|tira)\s+(una\s+)?moneda\b|\bcara o sello\b/)) {
+        return { text: `🪙 ¡${Math.random() < 0.5 ? 'Cara' : 'Sello'}!` };
+      }
+      if (has(/\b(lanza|tira)\s+(un\s+)?dado\b/)) {
+        return { text: `🎲 Salió **${1 + Math.floor(Math.random() * 6)}**.` };
+      }
+
+      /* ---------- Música ---------- */
+      const ytQuery = grab(/^(?:busca(?:me)?|buscar|pon(?:me)?|reproduce|ver)\s+(.+?)\s+en\s+youtube$/d);
+      if (ytQuery) return this.openUrlResponse(`Buscando "${ytQuery}" en YouTube.`, `https://www.youtube.com/results?search_query=${encodeURIComponent(ytQuery)}`, 'Abrir YouTube');
+      const music = grab(/^(?:pon(?:me)?|reproduce|reproducir|toca|quiero\s+escuchar)\s+(?:musica\s+de\s+|la\s+cancion\s+|el\s+tema\s+|canciones\s+de\s+)?(.+?)(?:\s+en\s+spotify)?$/d);
+      if (music && !/^(un|una|el|la)\s+(alarma|temporizador|timer|nota|tema|modo)\b/.test(align(music))) {
+        return this.openUrlResponse(`🎵 Buscando "${music}" en Spotify.`, `https://open.spotify.com/search/${encodeURIComponent(music)}`, 'Abrir Spotify', [
+          { label: 'Buscar en YouTube', url: `https://www.youtube.com/results?search_query=${encodeURIComponent(music)}` }
+        ]);
+      }
+
+      /* ---------- Abrir apps y secciones ---------- */
+      const target = grab(/^(?:abre|abrir|abreme|lanza|inicia|entra\s+a|entrar\s+a|ve\s+a|vamos\s+a|muestrame)\s+(?:la\s+app\s+de\s+|la\s+aplicacion\s+de\s+|la\s+pagina\s+de\s+|el\s+|la\s+|mi\s+)?(.+)$/d);
+      if (target) {
+        const t = U.normalize(target);
+        const view = VIEWS.find(v => v.keys.some(k => t === k || t.startsWith(k + ' ')));
+        if (view) return { text: `Abriendo ${view.name}.`, effect: { type: 'OPEN_VIEW', view: view.view } };
+        const app = APPS.find(ap => ap.keys.some(k => new RegExp(`^${k}\\b`).test(t)));
+        if (app) return this.openUrlResponse(`Abriendo ${app.name}…`, app.url, `Abrir ${app.name}`);
+        if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/.test(t.replace(/\s/g, ''))) {
+          const url = `https://${t.replace(/\s/g, '')}`;
+          return this.openUrlResponse(`Abriendo ${url}…`, url, 'Abrir página');
+        }
+        return {
+          text: `No tengo un acceso directo para "${target}". ¿Lo busco en Google?`,
+          actions: [{ label: `Buscar "${target}"`, url: `https://www.google.com/search?q=${encodeURIComponent(target)}` }]
+        };
+      }
+
+      /* ---------- Búsquedas ---------- */
+      const search = grab(/^(?:busca(?:me)?|buscar|googlea|investiga)\s+(?:en\s+google\s+)?(.+?)(?:\s+en\s+google)?$/d);
+      if (search) {
+        return this.openUrlResponse(`🔎 Buscando "${search}" en Google.`, `https://www.google.com/search?q=${encodeURIComponent(search)}`, 'Ver resultados');
+      }
+
+      /* ---------- Wikipedia (respaldo rápido antes de la IA) ---------- */
+      const topic = grab(/^(?:quien\s+es|quien\s+fue|que\s+es|que\s+fue|que\s+son|que\s+significa|hablame\s+de|cuentame\s+(?:sobre|de)|informacion\s+sobre)\s+(?:el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.{3,60})$/d);
+      if (topic && !this.hasAI()) {
+        const wiki = await this.wikipedia(topic);
+        if (wiki) return wiki;
+      }
+
+      return null;
+    }
+
+    hasAI() {
+      return !!this.geminiApiKey || (root.navigator ? root.navigator.onLine !== false : true);
+    }
+
+    helpResponse() {
+      return {
+        text: [
+          '**Esto es lo que puedo hacer:**',
+          '- 💵 "¿A cómo está el dólar?" · "100 dólares a bolívares" · "5000 bs a dólares a tasa paralela"',
+          '- 🧮 "¿Cuánto es 15% de 340?" · "raíz cuadrada de 81"',
+          '- ⏱️ "Temporizador de 10 minutos" · "Recuérdame en 20 minutos sacar la pizza"',
+          '- ⏰ "Alarma a las 6:30 de la mañana" · "¿Qué alarmas tengo?"',
+          '- 📝 "Anota comprar harina PAN" · "Lee mis notas" · "Marca como hecha la de harina"',
+          '- 🌦️ "¿Cómo está el clima en Maracaibo?" · "¿Va a llover mañana?"',
+          '- 📞 "Llama a mamá" · "Manda un WhatsApp a Carlos que diga ya voy"',
+          '- 🗺️ "Cómo llego al Sambil" · 🎵 "Pon salsa baúl"',
+          '- 📷 "Escanea un QR" · "Traduce este letrero"',
+          '- 💬 Y cualquier pregunta: te respondo con IA y recuerdo la conversación.'
+        ].join('\n'),
+        speak: 'Puedo darte la tasa del dólar, convertir montos, calcular, poner temporizadores y alarmas, tomar notas, darte el clima, llamar, enviar WhatsApp, escanear códigos QR y responder cualquier pregunta.'
+      };
+    }
+
+    openUrlResponse(text, url, label, extraActions = []) {
+      return { text, actions: [{ label, url }, ...extraActions], effect: { type: 'OPEN_URL', url } };
+    }
+
+    /* ------------------------------------------
+       DINERO
+       ------------------------------------------ */
+    currencyCode(word) {
+      const w = String(word || '').trim();
+      const found = CURRENCY_WORDS.find(c => c.re.test(w));
+      return found ? found.code : null;
+    }
+
+    async conversionIntent(n) {
+      const s = wordsToDigits(n).replace(/(\d)\s+mil\b/g, (m, d) => `${d}000`).replace(/\bmil\b/g, '1000');
+      const amountRe = '(\\$?\\s?\\d[\\d.,]*)\\s*(mil(?:es)?\\s+)?(?:de\\s+)?';
+      let m = s.match(new RegExp(`${amountRe}(${CURRENCY_ALT.slice(3, -1)})(?=\\s|$)`));
+      if (!m) {
+        const dollar = s.match(/\$\s?(\d[\d.,]*)/);
+        if (!dollar) return null;
+        m = [dollar[0], dollar[1], '', 'usd'];
+        m.index = dollar.index;
+      }
+
+      // Debe parecer una conversión, no "tengo 3 dólares de deuda" dentro de otra cosa
+      const isQuestion = /\b(cuanto|cuantos|cuanta|convierte|convertir|pasa|pasame|equivale|equivalen|son|serian|a|en|al cambio|a bolivares|a dolares)\b/.test(s);
+      if (!isQuestion) return null;
+
+      let amount = parseAmount(m[1].replace('$', ''));
+      if (amount === null) return null;
+      if (m[2]) amount *= 1000;
+      let from = this.currencyCode(m[3]);
+      if (m[1].includes('$') && !from) from = 'USD';
+      if (!from) return null;
+
+      const rest = s.slice(m.index + m[0].length);
+      const toMatch = rest.match(new RegExp(`\\b(?:a|en|para|por)\\s+(?:cuantos?\\s+)?(${CURRENCY_ALT.slice(3, -1)})(?=\\s|$)`));
+      let to = toMatch ? this.currencyCode(toMatch[1]) : null;
+      if (!to || to === from) to = from === 'VES' ? 'USD' : 'VES';
+
+      const parallel = /\b(paralelo|paralela|monitor|binance|usdt|calle|p2p)\b/.test(s);
+      const rates = await this.finance.ensureFresh(10 * 60 * 1000);
+      const meta = this.finance.statusLabel(rates.fx);
+      const F = this.finance;
+
+      const fromCode = from === 'VES' ? (parallel ? 'VES_PAR' : 'VES_BCV') : from;
+      const toCode = to === 'VES' ? (parallel ? 'VES_PAR' : 'VES_BCV') : to;
+      const result = F.convert(amount, fromCode, toCode, rates);
+      if (result === null) return null;
+
+      const fromLabel = from === 'VES' ? U.fmtBs(amount) : F.format(amount, fromCode);
+      let text = `💱 **${fromLabel} = ${F.format(result, toCode)}**`;
+      let speak = `${fromLabel.replace('Bs.', '')} ${from === 'VES' ? 'bolívares' : ''} son ${F.format(result, toCode).replace('Bs.', '')} ${to === 'VES' ? 'bolívares' : ''}`;
+
+      if (from === 'VES' || to === 'VES') {
+        const other = parallel ? 'BCV' : 'paralela';
+        const otherFrom = from === 'VES' ? (parallel ? 'VES_BCV' : 'VES_PAR') : fromCode;
+        const otherTo = to === 'VES' ? (parallel ? 'VES_BCV' : 'VES_PAR') : toCode;
+        const alt = F.convert(amount, otherFrom, otherTo, rates);
+        text += ` (tasa ${parallel ? 'paralela' : 'BCV'})\n- A tasa ${other}: ${F.format(alt, otherTo)}`;
+        text += `\n- BCV ${U.fmtBs(rates.bcv)} · Paralelo ${U.fmtBs(rates.paralelo)}`;
+        speak += parallel ? ' a tasa paralela.' : ' a tasa BCV.';
+      }
+      text += `\n\n_${meta}_`;
+      return {
+        text,
+        speak: speak.replace(/\s+/g, ' ').trim(),
+        actions: [{ label: 'Abrir convertidor', view: 'finance' }]
+      };
+    }
+
+    async ratesIntent(n) {
+      const r = await this.finance.ensureFresh(10 * 60 * 1000);
+      const meta = this.finance.statusLabel(r.fx);
+      const warn = r.fx.status === 'default' ? '\n\n⚠️ No pude conectarme para obtener la tasa de hoy; este valor es aproximado.' : '';
+      if (/\beuros?\b/.test(n) && !/\bdolar/.test(n)) {
+        return {
+          text: `💶 **Euro BCV:** ${U.fmtBs(r.eur)}\n\n_${meta}_${warn}`,
+          speak: `El euro oficial está en ${U.fmtNumber(r.eur, 2)} bolívares.`,
+          actions: [{ label: 'Ver Finanzas', view: 'finance' }]
+        };
+      }
+      return {
+        text: [
+          `💵 **Dólar BCV:** ${U.fmtBs(r.bcv)}`,
+          `📈 **Paralelo:** ${U.fmtBs(r.paralelo)} (brecha ${U.fmtNumber(r.spread, 1)} %)`,
+          `💶 **Euro BCV:** ${U.fmtBs(r.eur)}`,
+          '',
+          `_${meta}_${warn}`
+        ].join('\n'),
+        speak: `El dólar BCV está en ${U.fmtNumber(r.bcv, 2)} bolívares y el paralelo en ${U.fmtNumber(r.paralelo, 2)}.`,
+        actions: [{ label: 'Ver Finanzas', view: 'finance' }]
+      };
+    }
+
+    async cryptoIntent(word) {
+      const map = { bitcoin: 'BTC', btc: 'BTC', ethereum: 'ETH', eth: 'ETH', ether: 'ETH', solana: 'SOL', bnb: 'BNB', 'binance coin': 'BNB', xrp: 'XRP', ripple: 'XRP' };
+      const r = await this.finance.ensureFresh(5 * 60 * 1000);
+      const meta = this.finance.statusLabel(r.cryptoMeta);
+      const line = (code) => {
+        const c = r.crypto[code];
+        const sign = c.change >= 0 ? '+' : '';
+        return `- **${code}:** ${U.fmtUsd(c.price)} (${sign}${U.fmtNumber(c.change, 2)} % 24h) · ${U.fmtBs(c.price * r.bcv)}`;
+      };
+      const code = map[word];
+      if (code) {
+        const c = r.crypto[code];
+        return {
+          text: `${line(code)}\n\n_${meta}_`,
+          speak: `${code} está en ${U.fmtNumber(c.price, c.price < 10 ? 4 : 2)} dólares.`,
+          actions: [{ label: 'Ver Finanzas', view: 'finance' }]
+        };
+      }
+      return {
+        text: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'].map(line).join('\n') + `\n\n_${meta}_`,
+        speak: `Bitcoin está en ${U.fmtNumber(r.crypto.BTC.price, 0)} dólares y Ethereum en ${U.fmtNumber(r.crypto.ETH.price, 0)}.`,
+        actions: [{ label: 'Ver Finanzas', view: 'finance' }]
+      };
+    }
+
+    /* ------------------------------------------
+       CLIMA (Open-Meteo, sin clave)
+       ------------------------------------------ */
+    weatherCode(code) {
+      const map = {
+        0: 'despejado ☀️', 1: 'mayormente despejado 🌤️', 2: 'parcialmente nublado ⛅', 3: 'nublado ☁️',
+        45: 'con neblina 🌫️', 48: 'con neblina 🌫️', 51: 'con llovizna ligera 🌦️', 53: 'con llovizna 🌦️', 55: 'con llovizna intensa 🌧️',
+        61: 'con lluvia ligera 🌧️', 63: 'con lluvia 🌧️', 65: 'con lluvia fuerte 🌧️', 80: 'con chubascos 🌦️', 81: 'con chubascos 🌧️',
+        82: 'con chubascos fuertes ⛈️', 95: 'con tormenta eléctrica ⛈️', 96: 'con tormenta y granizo ⛈️', 99: 'con tormenta fuerte ⛈️'
+      };
+      return map[code] || 'estable';
+    }
+
+    async weatherIntent(n) {
+      const tomorrow = /\bmanana\b/.test(n);
+      let city = '';
+      const m = n.match(/^.*\b(?:en|de|para|por)\s+([a-z ]{3,40}?)(?:\s+(?:hoy|manana|ahora|esta semana|este momento))?$/);
+      if (m) city = m[1].replace(/^(el|la)\s+/, '').trim();
+      if (!city || /^(hoy|manana|ahora|momento)$/.test(city)) city = S.getRaw('yarbis_weather_city', '') || 'Caracas';
+
+      try {
+        const geo = await (await U.fetchWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=es&format=json`, {}, 7000)).json();
+        const place = geo && geo.results && geo.results[0];
+        if (!place) return { text: `No encontré la ciudad "${city}". Prueba con otro nombre.` };
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2`;
+        const w = await (await U.fetchWithTimeout(url, {}, 7000)).json();
+        S.setRaw('yarbis_weather_city', place.name);
+        const where = `${place.name}${place.admin1 && place.admin1 !== place.name ? `, ${place.admin1}` : ''}`;
+        if (tomorrow && w.daily) {
+          const i = 1;
+          const rain = w.daily.precipitation_probability_max ? w.daily.precipitation_probability_max[i] : null;
+          return {
+            text: `🌦️ **Mañana en ${where}:** ${this.weatherCode(w.daily.weather_code[i])}, entre ${Math.round(w.daily.temperature_2m_min[i])}° y ${Math.round(w.daily.temperature_2m_max[i])}°C${rain !== null ? ` · probabilidad de lluvia ${rain} %` : ''}.`,
+            speak: `Mañana en ${place.name}: ${U.toSpeech(this.weatherCode(w.daily.weather_code[i]))}, entre ${Math.round(w.daily.temperature_2m_min[i])} y ${Math.round(w.daily.temperature_2m_max[i])} grados${rain !== null ? `, con ${rain} por ciento de probabilidad de lluvia` : ''}.`
+          };
+        }
+        const c = w.current;
+        const rainToday = w.daily && w.daily.precipitation_probability_max ? w.daily.precipitation_probability_max[0] : null;
+        return {
+          text: `🌡️ **${where}:** ${Math.round(c.temperature_2m)}°C (sensación ${Math.round(c.apparent_temperature)}°), ${this.weatherCode(c.weather_code)}.\nHumedad ${c.relative_humidity_2m} % · viento ${Math.round(c.wind_speed_10m)} km/h${rainToday !== null ? ` · lluvia hoy ${rainToday} %` : ''}.`,
+          speak: `En ${place.name} hay ${Math.round(c.temperature_2m)} grados, ${U.toSpeech(this.weatherCode(c.weather_code))}${rainToday !== null ? `, con ${rainToday} por ciento de probabilidad de lluvia hoy` : ''}.`
+        };
+      } catch (e) {
+        return { text: 'No pude consultar el clima ahora mismo. Revisa tu conexión a internet.' };
+      }
+    }
+
+    /* ------------------------------------------
+       CONTACTOS, LLAMADAS Y WHATSAPP
+       ------------------------------------------ */
+    getAllContacts() {
+      const c = S.get('yarbis_contacts', {});
+      return c && typeof c === 'object' ? c : {};
+    }
+
+    saveContact(name, phone) {
+      const cleanName = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const cleanPhone = String(phone || '').replace(/[^\d+]/g, '');
+      if (!cleanName || !cleanPhone) return false;
+      const contacts = this.getAllContacts();
+      // Evita duplicados que sólo difieren en acentos (mama / mamá)
+      Object.keys(contacts).forEach(k => { if (U.normalize(k) === U.normalize(cleanName)) delete contacts[k]; });
+      contacts[cleanName] = cleanPhone;
+      S.set('yarbis_contacts', contacts);
+      return true;
+    }
+
+    deleteContact(name) {
+      const contacts = this.getAllContacts();
+      Object.keys(contacts).forEach(k => { if (U.normalize(k) === U.normalize(name)) delete contacts[k]; });
+      S.set('yarbis_contacts', contacts);
+    }
+
+    findContacts(query) {
+      const q = U.normalize(query).replace(/^(a|al|mi|la|el)\s+/, '').trim();
+      if (!q) return [];
+      const entries = Object.entries(this.getAllContacts()).map(([name, phone]) => ({ name, phone, key: U.normalize(name) }));
+      const exact = entries.filter(e => e.key === q);
+      if (exact.length) return exact;
+      return entries.filter(e => e.key.includes(q) || q.includes(e.key) || e.key.split(' ')[0] === q.split(' ')[0]);
+    }
+
+    callContact(who) {
+      const matches = this.findContacts(who);
+      if (matches.length === 1) {
+        const c = matches[0];
+        return {
+          text: `📞 Llamando a **${U.capitalize(c.name)}** (${c.phone})…`,
+          actions: [{ label: `Llamar a ${U.capitalize(c.name)}`, url: `tel:${c.phone}` }],
+          effect: { type: 'OPEN_URL', url: `tel:${c.phone}` }
+        };
+      }
+      if (matches.length > 1) {
+        return {
+          text: `Encontré varios contactos para "${who}". ¿A cuál llamo?`,
+          actions: matches.slice(0, 5).map(c => ({ label: `📞 ${U.capitalize(c.name)}`, url: `tel:${c.phone}` }))
+        };
+      }
+      return {
+        text: `No tengo a "${who}" en tu agenda. Agrégalo en Ajustes o di: "guarda el contacto ${who} 0414 1234567".`,
+        actions: [{ label: 'Abrir agenda', view: 'settings' }]
+      };
+    }
+
+    whatsappIntent(text, a) {
+      // Mensaje: lo que va después de "que diga", "diciendo", ":" ...
+      let message = '';
+      const msgM = /\b(?:que\s+diga|que\s+dice|diciendo(?:le)?|con\s+el\s+(?:mensaje|texto)|el\s+mensaje)\s*:?\s+([\s\S]+)$/d.exec(a) || /:\s*([\s\S]+)$/d.exec(a);
+      let head = a;
+      if (msgM) {
+        message = text.slice(msgM.indices[1][0], msgM.indices[1][1]).trim();
+        head = a.slice(0, msgM.index);
+      }
+      const headWords = head.replace(/\s+/g, ' ').trim();
+
+      let phone = '';
+      let contactName = '';
+      const num = wordsToDigits(headWords).match(/(\+?\d[\d\s-]{6,}\d)/);
+      if (num) {
+        phone = venezuelanPhone(num[1]);
+      } else {
+        const toM = headWords.match(/^.*\b(?:a|al|para)\s+(?:mi\s+)?([a-z ]{2,40}?)\s*(?:por\s+(?:whatsapp|wasap|guasap|whats|wsp))?$/) ||
+          headWords.match(/\b(?:whatsapp|wasap|guasap|whats|wsp)\s+(?:a|al|para)\s+(?:mi\s+)?([a-z ]{2,40})$/);
+        const candidate = toM ? toM[1].replace(/\b(whatsapp|wasap|guasap|whats|wsp|por)\b/g, '').trim() : '';
+        if (candidate && !/^(un|una|el|mensaje|abre|abrir)$/.test(candidate)) {
+          const found = this.findContacts(candidate);
+          contactName = U.capitalize(candidate);
+          if (found.length) {
+            phone = venezuelanPhone(found[0].phone);
+            contactName = U.capitalize(found[0].name);
+          }
+        }
+      }
+
+      if (contactName && !phone) {
+        return {
+          text: `No tengo el número de ${contactName}. Guárdalo en Ajustes o dime: "guarda el contacto ${contactName} 0414 1234567".`,
+          actions: [
+            { label: 'Abrir agenda', view: 'settings' },
+            message ? { label: 'Elegir chat en WhatsApp', url: `https://wa.me/?text=${encodeURIComponent(message)}` } : { label: 'Abrir WhatsApp', url: 'https://wa.me/' }
+          ]
+        };
+      }
+
+      let url = 'https://wa.me/';
+      if (phone) url += phone;
+      if (message) url += `?text=${encodeURIComponent(message)}`;
+      const target = contactName || (phone ? `+${phone}` : '');
+      const reply = message
+        ? `💬 Mensaje listo${target ? ` para **${target}**` : ''}: "${message}". Toca para enviarlo.`
+        : target ? `💬 Abriendo el chat de **${target}** en WhatsApp.` : '💬 Abriendo WhatsApp.';
+      return { text: reply, actions: [{ label: 'Abrir WhatsApp', url }], effect: { type: 'OPEN_URL', url } };
+    }
+
+    /* ------------------------------------------
+       OTROS
+       ------------------------------------------ */
+    async batteryIntent() {
+      if (root.navigator && 'getBattery' in root.navigator) {
+        try {
+          const b = await root.navigator.getBattery();
+          const pct = Math.round(b.level * 100);
+          return { text: `🔋 Batería al **${pct} %**${b.charging ? ', cargando ⚡' : ''}.` };
+        } catch (e) { /* sin acceso */ }
+      }
+      return { text: 'Este navegador no permite leer el nivel de batería (Safari/iPhone no lo comparte).' };
+    }
+
+    answerTrivia(n) {
+      const t = this.trivia;
+      const q = TRIVIA[t.order[t.index]];
+      const ok = q.a.some(ans => n.includes(ans));
+      if (ok) t.score++;
+      const feedback = ok ? `✅ ¡Correcto! ${q.explain}` : `❌ No era. ${q.explain}`;
+      t.index++;
+      if (t.index < t.order.length) {
+        return { text: `${feedback}\n\n**Pregunta ${t.index + 1}:** ${TRIVIA[t.order[t.index]].q}`, sound: ok ? 'success' : null };
+      }
+      const score = t.score;
+      this.trivia = null;
+      return { text: `${feedback}\n\n🏁 Terminamos: **${score} de ${t.order.length}**. ${score >= 4 ? '¡Eres un crack! 🏆' : '¡Buen intento! La próxima la rompes.'}`, sound: 'success' };
+    }
+
+    rps(choice) {
+      const options = ['piedra', 'papel', 'tijera'];
+      const bot = pick(options);
+      const emoji = { piedra: '✊', papel: '✋', tijera: '✌️' };
+      let result;
+      if (bot === choice) result = '¡Empate! 🤝';
+      else if ((choice === 'piedra' && bot === 'tijera') || (choice === 'papel' && bot === 'piedra') || (choice === 'tijera' && bot === 'papel')) result = '¡Ganaste! 🏆';
+      else result = '¡Gané yo! 😎';
+      return { text: `Tú: ${emoji[choice]} · Yo: ${emoji[bot]} — ${result}` };
+    }
+
+    async wikipedia(topic) {
+      try {
+        const res = await U.fetchWithTimeout(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic.trim())}`, {}, 6000);
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || !data.extract || data.type === 'disambiguation') return null;
+        const url = data.content_urls && data.content_urls.mobile && data.content_urls.mobile.page;
+        return { text: `📚 **${data.title}:** ${data.extract}`, actions: url ? [{ label: 'Leer en Wikipedia', url }] : [] };
+      } catch (e) {
         return null;
       }
-
-      const res = Function(`'use strict'; return (${clean});`)();
-      if (typeof res === 'number' && !isNaN(res) && isFinite(res)) {
-        return {
-          expression: expr,
-          result: res,
-          formatted: Number.isInteger(res) ? res.toString() : (Math.abs(res) < 0.0001 ? res.toExponential(4) : res.toLocaleString('en-US', { maximumFractionDigits: 6 }))
-        };
-      }
-    } catch (err) {
-      return null;
-    }
-    return null;
-  }
-
-  calculateLoanPayment(principal, annualRatePercent, months) {
-    const p = parseFloat(principal) || 0;
-    const r = (parseFloat(annualRatePercent) || 0) / 100 / 12;
-    const n = parseInt(months) || 12;
-    if (p <= 0 || n <= 0) return null;
-    if (r === 0) {
-      const monthly = p / n;
-      return { monthlyPayment: monthly, totalPayment: p, totalInterest: 0 };
-    }
-    const monthlyPayment = (p * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-    const totalPayment = monthlyPayment * n;
-    const totalInterest = totalPayment - p;
-    return {
-      principal: p,
-      annualRatePercent,
-      months: n,
-      monthlyPayment,
-      totalPayment,
-      totalInterest
-    };
-  }
-
-  calculateRuleOfThree(a, b, c) {
-    if (!a || a === 0) return null;
-    const result = (b * c) / a;
-    return { a, b, c, result };
-  }
-
-  calculateInflationDevaluation(initialVes, initialBcvRate, finalBcvRate, nominalInterestRate = 0) {
-    if (!initialVes || !initialBcvRate || !finalBcvRate) return null;
-    const initialUsd = initialVes / initialBcvRate;
-    const devaluationPercent = ((finalBcvRate - initialBcvRate) / initialBcvRate) * 100;
-    const finalVesWithInterest = initialVes * (1 + nominalInterestRate / 100);
-    const finalUsd = finalVesWithInterest / finalBcvRate;
-    const purchasingPowerLossPercent = ((finalUsd - initialUsd) / initialUsd) * 100;
-    return {
-      initialVes,
-      initialUsd,
-      finalVesWithInterest,
-      finalUsd,
-      devaluationPercent,
-      purchasingPowerLossPercent,
-      realYieldUsdPercent: purchasingPowerLossPercent
-    };
-  }
-
-  /* ==========================================
-     CONTACTS AGENDA & HELPER UTILITIES
-     ========================================== */
-  parseSpokenNumbers(text) {
-    if (!text) return '';
-    let str = text.toLowerCase();
-    const wordMap = {
-      'cero': '0', 'uno': '1', 'un': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
-      'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9', 'diez': '10',
-      'catorce': '14', 'quince': '15', 'veinte': '20', 'treinta': '30', 'cuarenta': '40', 'cincuenta': '50'
-    };
-
-    for (const [word, digit] of Object.entries(wordMap)) {
-      const reg = new RegExp(`\\b${word}\\b`, 'gi');
-      str = str.replace(reg, digit);
-    }
-    return str.replace(/(\d)\s+(?=\d)/g, '$1');
-  }
-
-  saveContact(name, phone) {
-    if (!name || !phone) return;
-    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-    contacts[name.toLowerCase().trim()] = phone.replace(/[^0-9\+]/g, '');
-    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
-  }
-
-  getContactPhone(name) {
-    const matches = this.getContactMatches(name);
-    return matches.length > 0 ? matches[0].phone : null;
-  }
-
-  getContactMatches(name) {
-    if (!name) return [];
-    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-    const cleanName = name.toLowerCase().replace(/^(?:a\s+|mi\s+|al\s+|contacto\s+)/g, '').trim();
-
-    if (contacts[cleanName]) {
-      return [{ name: cleanName, phone: contacts[cleanName] }];
     }
 
-    const matches = [];
-    for (const [k, v] of Object.entries(contacts)) {
-      if (k.includes(cleanName) || cleanName.includes(k)) {
-        matches.push({ name: k, phone: v });
-      }
-    }
-    return matches;
-  }
-
-  getAllContacts() {
-    return JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-  }
-
-  deleteContact(name) {
-    const contacts = JSON.parse(localStorage.getItem('yarbis_contacts') || '{}');
-    delete contacts[name.toLowerCase().trim()];
-    localStorage.setItem('yarbis_contacts', JSON.stringify(contacts));
-  }
-
-  /* ==========================================
-     LIVE ENGINES: WEATHER, CRYPTO, DOLAR, WIKI
-     ========================================== */
-  getWeatherCodeDesc(code) {
-    const map = {
-      0: 'Cielo totalmente despejado y soleado ☀️',
-      1: 'Mayormente despejado con pocas nubes 🌤️',
-      2: 'Parcialmente nublado ⛅',
-      3: 'Cielo nublado ☁️',
-      45: 'Neblina 🌫️',
-      48: 'Niebla densa 🌫️',
-      51: 'Llovizna ligera 🌦️',
-      53: 'Llovizna moderada 🌦️',
-      55: 'Llovizna densa 🌧️',
-      61: 'Lluvia ligera 🌧️',
-      63: 'Lluvia moderada 🌧️',
-      65: 'Lluvia fuerte 🌧️',
-      80: 'Chubascos leves 🌦️',
-      81: 'Chubascos moderados 🌧️',
-      82: 'Chubascos torrenciales ⛈️',
-      95: 'Tormenta eléctrica ⚡⛈️',
-      96: 'Tormenta con granizo ⛈️',
-      99: 'Tormenta severa con granizo ⛈️'
-    };
-    return map[code] || 'Condiciones estables';
-  }
-
-  async fetchWeather(cityName = 'Caracas') {
-    try {
-      const cityCoords = {
-        'caracas': { lat: 10.4880, lon: -66.8792, name: 'Caracas' },
-        'valencia': { lat: 10.1620, lon: -68.0077, name: 'Valencia' },
-        'maracaibo': { lat: 10.6427, lon: -71.6125, name: 'Maracaibo' },
-        'barquisimeto': { lat: 10.0678, lon: -69.3474, name: 'Barquisimeto' },
-        'maracay': { lat: 10.2469, lon: -67.5958, name: 'Maracay' },
-        'san cristobal': { lat: 7.7669, lon: -72.2250, name: 'San Cristóbal' },
-        'puerto la cruz': { lat: 10.2138, lon: -64.6328, name: 'Puerto La Cruz' },
-        'merida': { lat: 8.5983, lon: -71.1450, name: 'Mérida' },
-        'miami': { lat: 25.7617, lon: -80.1918, name: 'Miami' },
-        'madrid': { lat: 40.4168, lon: -3.7038, name: 'Madrid' },
-        'bogota': { lat: 4.7110, lon: -74.0721, name: 'Bogotá' },
-        'medellin': { lat: 6.2442, lon: -75.5812, name: 'Medellín' },
-        'buenos aires': { lat: -34.6037, lon: -58.3816, name: 'Buenos Aires' },
-        'santiago': { lat: -33.4489, lon: -70.6693, name: 'Santiago' },
-        'lima': { lat: -12.0464, lon: -77.0428, name: 'Lima' },
-        'mexico': { lat: 19.4326, lon: -99.1332, name: 'Ciudad de México' },
-        'cdmx': { lat: 19.4326, lon: -99.1332, name: 'Ciudad de México' }
-      };
-
-      const key = cityName.toLowerCase().trim();
-      let coords = cityCoords[key];
-      let displayName = coords ? coords.name : cityName;
-
-      if (!coords) {
-        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=es`);
-        if (geoRes.ok) {
-          const geoData = await geoRes.json();
-          if (geoData.results && geoData.results.length > 0) {
-            coords = {
-              lat: geoData.results[0].latitude,
-              lon: geoData.results[0].longitude
-            };
-            displayName = geoData.results[0].name;
-          }
-        }
-      }
-
-      if (!coords) {
-        coords = cityCoords['caracas'];
-        displayName = 'Caracas';
-      }
-
-      const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`);
-      if (!weatherRes.ok) throw new Error('Weather API error');
-      const wData = await weatherRes.json();
-      const current = wData.current;
-
-      const temp = Math.round(current.temperature_2m);
-      const humidity = current.relative_humidity_2m;
-      const wind = Math.round(current.wind_speed_10m);
-      const desc = this.getWeatherCodeDesc(current.weather_code);
-
-      return `En ${displayName} hay actualmente ${temp}°C con ${desc}. Humedad del ${humidity}% y viento de ${wind} km/h, ${this.userName}.`;
-    } catch (e) {
-      console.warn('Weather fetch error:', e);
-      return `No pude obtener el reporte meteorológico en vivo, ${this.userName}.`;
-    }
-  }
-
-  async fetchWikipediaSummary(query) {
-    try {
-      const cleanQ = query.trim();
-      const res = await fetch(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanQ)}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data && data.extract) {
-        return `${data.title}: ${data.extract}`;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async fetchCryptoPrice(coinName = 'bitcoin') {
-    try {
-      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,solana&vs_currencies=usd');
-      if (!res.ok) throw new Error('Crypto API error');
-      const data = await res.json();
-      
-      const btc = data.bitcoin ? data.bitcoin.usd.toLocaleString() : 'N/A';
-      const eth = data.ethereum ? data.ethereum.usd.toLocaleString() : 'N/A';
-      const sol = data.solana ? data.solana.usd.toLocaleString() : 'N/A';
-
-      if (coinName.includes('eth')) {
-        return `El precio actual de Ethereum es de $${eth} USD, ${this.userName}.`;
-      } else if (coinName.includes('sol')) {
-        return `El precio actual de Solana es de $${sol} USD, ${this.userName}.`;
-      } else {
-        return `El precio de Bitcoin es de $${btc} USD, y Ethereum cotiza en $${eth} USD, ${this.userName}.`;
-      }
-    } catch (e) {
-      return `No pude conectar con el servidor de cotizaciones en tiempo real, ${this.userName}.`;
-    }
-  }
-
-  /* ==========================================
-     MAIN PROCESS COMMAND
-     ========================================== */
-  async processCommand(userText) {
-    let text = userText.toLowerCase().trim();
-
-    // Strip optional "Oye Yarbis" / "Hey Yarbis" prefix
-    text = text.replace(/^(?:oye|hey|ey|ok)\s+(?:yarbis|jarvis|asistente)\s*/i, '').trim();
-
-    // Check if Trivia is active
-    if (this.triviaActive) {
-      if (text.includes('cancelar') || text.includes('salir') || text.includes('terminar juego') || text.includes('parar')) {
-        this.triviaActive = false;
-        return {
-          textResponse: `Juego de Trivia cancelado. De vuelta a los comandos principales, ${this.userName}.`,
-          action: 'NONE',
-          themeChange: null
-        };
-      }
-      return this.answerTrivia(userText);
-    }
-
-    // 1. Direct Rule & Intent Matching
-    const localMatch = await this.checkLocalIntents(text, userText);
-    if (localMatch) {
-      return localMatch;
-    }
-
-    // 2. If Gemini API Key exists, query Gemini API
-    if (this.geminiApiKey) {
+    /* ==========================================
+       INTELIGENCIA ARTIFICIAL
+       ========================================== */
+    systemPrompt() {
+      let fxLine = '';
       try {
-        const aiResponse = await this.queryGeminiAI(userText);
-        return {
-          textResponse: aiResponse,
-          action: 'NONE',
-          themeChange: null
-        };
-      } catch (err) {
-        console.warn('Gemini API query failed, falling back to free AI engine:', err);
-      }
+        const r = this.finance.getRates();
+        fxLine = `\nDatos actuales (úsalos si te preguntan): dólar BCV Bs. ${U.fmtNumber(r.bcv, 2)}, paralelo Bs. ${U.fmtNumber(r.paralelo, 2)}, euro BCV Bs. ${U.fmtNumber(r.eur, 2)} (${this.finance.statusLabel(r.fx)}); BTC $${U.fmtNumber(r.crypto.BTC.price, 0)}.`;
+      } catch (e) { /* sin datos */ }
+      const today = new Date().toLocaleString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+      return `Eres ${this.assistantName}, un asistente personal venezolano: amable, claro, útil y con un toque criollo natural (sin exagerar ni ser vulgar).
+${this.userName ? `El usuario se llama ${this.userName}.` : ''} Hoy es ${today} (hora de Venezuela).${fxLine}
+Reglas:
+- Responde en español, de forma breve y directa (2 a 6 frases) salvo que te pidan detalle. Tus respuestas también se leen en voz alta.
+- Usa Markdown simple (negritas, listas, tablas pequeñas) cuando ayude.
+- En matemáticas y finanzas muestra el cálculo paso a paso y el resultado final claro.
+- Si no sabes algo o necesitas datos en tiempo real que no tienes, dilo con honestidad; nunca inventes precios ni cifras.`;
     }
 
-    // 3. Query Free Public AI Engine (No API Key Required!)
-    try {
-      const freeAiResponse = await this.queryFreeAI(userText);
-      if (freeAiResponse) {
-        return {
-          textResponse: freeAiResponse,
-          action: 'NONE',
-          themeChange: null
-        };
-      }
-    } catch (err) {
-      console.warn('Free AI query failed:', err);
-    }
-
-    // 4. Fallback Smart Response with Venezuelan Flavor
-    return {
-      textResponse: `Copiado mi pana. He procesado tu orden: "${userText}". Todo registrado en el sistema. ¿Qué más se te ofrece, ${this.userName}?`,
-      action: 'NONE',
-      themeChange: null
-    };
-  }
-
-  async queryGeminiAI(userText) {
-    if (!this.geminiApiKey) {
-      return this.queryFreeAI(userText);
-    }
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(this.geminiApiKey)}`;
-    
-    const systemPrompt = `Eres YARBIS (Yet Another Rather Brilliant Intelligent System), la IA venezolana más avanzada con estética futurista de Iron Man / Stark Industries.
-Usuario actual: "${this.userName}".
-Reglas de respuesta:
-1. Responde en español con tono educado, inteligente, leal y con sutil carisma venezolano (usa términos como "mi pana", "al pelo", "plomo", "de una" de forma natural y elegante, nunca vulgar).
-2. Si el usuario te hace una consulta matemática o financiera, resuélvela con precisión absoluta mostrando:
-   - Fórmulas y variables.
-   - Paso a paso algebraico o aritmético.
-   - Resultado final exacto con unidades monetarias ($ USD, Bs. VES, etc.).
-   - Conclusión financiera.
-3. Sé directo, conciso y estructurado.`;
-
-    const body = {
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: `${systemPrompt}\n\nConsulta del usuario:\n${userText}` }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1024
-      }
-    };
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) {
-      return data.candidates[0].content.parts.map(p => p.text).join('\n');
-    }
-    throw new Error('No valid response from Gemini API');
-  }
-
-  async queryFreeAI(userText) {
-    const mathRes = this.evaluateMathExpression(userText);
-    if (mathRes) {
-      return `🎯 RESULTADO EXACTO STARK:\n\nFórmula: ${mathRes.expression}\nResultado = ${mathRes.formatted}\n\n[Precisión Stark 100% verificada]`;
-    }
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const systemPrompt = `Eres YARBIS, la IA analista financiera y matemática con precisión Stark al servicio de ${this.userName}. Resuelve de forma estructurada con paso a paso y conclusiones exactas.`;
-      const fullPrompt = `${systemPrompt}\n\nPregunta:\n${userText}`;
-
-      const res = await fetch(`https://text.pollinations.ai/${encodeURIComponent(fullPrompt)}?model=openai`, {
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().length > 10) {
-          return text.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Free AI proxy unavailable:', e);
-    }
-
-    const cleanLower = (userText || '').toLowerCase();
-    if (cleanLower.includes('interes') || cleanLower.includes('interés') || cleanLower.includes('capital') || cleanLower.includes('rendimiento')) {
-      return `📊 AUDITORÍA DE RENDIMIENTO FINANCIERO:\n\nFórmula de Interés Compuesto: A = P · (1 + r/n)^(n·t)\n\n• Capital (P): Evaluado según datos de entrada.\n• Tasa Anual (r): Tasa nominal del mercado.\n• Frecuencia (n): Capitalización periódica.\n\nPara cálculos exactos en tiempo real, puedes usar los botones predefinidos en la parte superior.`;
-    }
-
-    if (cleanLower.includes('devaluacion') || cleanLower.includes('devaluación') || cleanLower.includes('bcv') || cleanLower.includes('paralelo')) {
-      const fx = this.getFXSampleRates ? this.getFXSampleRates() : { usdOfficialBCV: 62.40, usdMarketParallel: 75.10, spreadPercent: 20.3 };
-      return `🇻🇪 AUDITORÍA CAMBIARIA VENEZUELA:\n\n• Tasa Oficial BCV: Bs. ${fx.usdOfficialBCV.toFixed(2)}\n• Dólar Paralelo / P2P: Bs. ${fx.usdMarketParallel.toFixed(2)}\n• Brecha Cambiaria: +${fx.spreadPercent.toFixed(1)}%\n\nFórmula de Devaluación: Brecha (%) = ((Paralelo - BCV) / BCV) * 100\n\nPérdida real de poder adquisitivo mitigada mediante cobertura en divisas y activos refugio.`;
-    }
-
-    return `Análisis Stark procesado para "${userText}". Sistema de cómputo en línea y verificado, ${this.userName}.`;
-  }
-
-  /* ==========================================
-     WATERMARKS & AI PROVENANCE SANITIZER
-     ========================================== */
-  cleanAIWatermarks(text, options = {}) {
-    if (!text || typeof text !== 'string') {
-      return {
-        cleanedText: '',
-        zeroWidthCount: 0,
-        stats: { originalLength: 0, cleanedLength: 0, zeroWidthCount: 0, aiPatternsFound: 0 }
-      };
-    }
-
-    // 1. Zero-width and steganographic invisible characters
-    const zeroWidthRegex = /[\u200B-\u200D\u200E\u200F\uFEFF\u2060\u202A-\u202E\u2066-\u2069\u180E\u00AD]/g;
-    const matches = text.match(zeroWidthRegex) || [];
-    const zeroWidthCount = matches.length;
-
-    let cleaned = text.replace(zeroWidthRegex, '');
-
-    // 2. Normalize non-standard unicode whitespace
-    cleaned = cleaned.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
-
-    // 3. Normalize quotes and dashes
-    cleaned = cleaned
-      .replace(/[\u2018\u2019]/g, "'")
-      .replace(/[\u201C\u201D]/g, '"')
-      .replace(/[\u2013\u2014]/g, '-');
-
-    // 4. Clean multiple spaces and normalize newlines
-    cleaned = cleaned.replace(/[ \t]+/g, ' ').replace(/\n\s+\n/g, '\n\n').trim();
-
-    // 5. Optional humanization of typical AI transitions
-    let aiPatternsFound = 0;
-    if (options.humanize) {
-      const aiPhrases = [
-        { regex: /\b(en conclusión|a modo de conclusión|en resumen),?\s*/gi, rep: '' },
-        { regex: /\b(es crucial (destacar|entender|mencionar) que|cabe destacar que)\s*/gi, rep: '' },
-        { regex: /\b(en el panorama actual|en el mundo actual),?\s*/gi, rep: 'Actualmente, ' },
-        { regex: /\b(desempeña un papel crucial|juega un papel fundamental)\b/gi, rep: 'es muy importante' },
-        { regex: /\b(es importante tener en cuenta que)\s*/gi, rep: '' },
-        { regex: /\b(sin lugar a dudas|indudablemente),?\s*/gi, rep: 'claramente, ' }
-      ];
-
-      aiPhrases.forEach(p => {
-        if (p.regex.test(cleaned)) {
-          aiPatternsFound++;
-          cleaned = cleaned.replace(p.regex, p.rep);
-        }
-      });
-      cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
-    }
-
-    return {
-      cleanedText: cleaned,
-      zeroWidthCount: zeroWidthCount,
-      stats: {
-        originalLength: text.length,
-        cleanedLength: cleaned.length,
-        zeroWidthCount: zeroWidthCount,
-        aiPatternsFound: aiPatternsFound
-      }
-    };
-  }
-
-  /**
-   * Main Intent Classifier & Parser
-   */
-  async checkLocalIntents(text, originalUserText) {
-    const clean = text.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '');
-
-    // -------------------------------------------------------------
-    // INTENT: CLEAN AI WATERMARKS & PROVENANCE TOKENS
-    // -------------------------------------------------------------
-    if (clean.includes('limpiar marcas') || clean.includes('quitar marcas') || clean.includes('marcas de agua') || clean.includes('desinfectar texto') || clean.includes('anti marcas') || clean.includes('quitar rastros de ia') || clean.includes('purificar texto') || clean.includes('sanitizar')) {
-      const extractedText = (originalUserText || text).replace(/.*?(?:marcas de agua|marcas de ia|limpiar marcas|quitar marcas|desinfectar texto|limpia este texto|purificar texto|sanitizar texto):?\s*/i, '').trim();
-      
-      if (extractedText.length > 5) {
-        const res = this.cleanAIWatermarks(extractedText, { humanize: true });
-        return {
-          textResponse: `🛡️ Protocolo Anti-Marcas completado, ${this.userName}. Se eliminaron ${res.zeroWidthCount} caracteres invisibles/tokens de rastreo. Aquí tienes tu texto 100% limpio y natural:\n\n${res.cleanedText}`,
-          action: 'NONE',
-          soundFx: 'success'
-        };
-      }
-
-      return {
-        textResponse: `¡Abriendo el Escáner y Purificador Anti-Marcas de Agua IA, ${this.userName}! Pega el texto que deseas desinfectar.`,
-        action: 'OPEN_WATERMARK_CLEANER',
-        soundFx: 'scan'
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: CAMERA VISION / SCANNER
-    // -------------------------------------------------------------
-    if (clean.includes('escanear objeto') || clean.includes('escanear') || clean.includes('activar vision') || clean.includes('abrir camara') || clean.includes('abre camara') || clean.includes('que es esto') || clean.includes('leer texto')) {
-      return {
-        textResponse: `Activando escáner de visión artificial Stark, ${this.userName}.`,
-        action: 'OPEN_CAMERA',
-        themeChange: null,
-        soundFx: 'scan'
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: LIVE WEATHER & ATMOSPHERIC RADAR
-    // -------------------------------------------------------------
-    if (clean.includes('clima') || clean.includes('temperatura') || clean.includes('esta lloviendo') || clean.includes('pronostico') || clean.includes('hace frio') || clean.includes('hace calor')) {
-      const cityMatch = (originalUserText || text).match(/(?:clima|temperatura|tiempo|pronostico)\s+(?:en|de|para)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i);
-      const targetCity = cityMatch ? cityMatch[1].trim() : 'Caracas';
-      const weatherReport = await this.getWeatherInfo(targetCity);
-      return {
-        textResponse: weatherReport,
-        action: 'NONE',
-        themeChange: null,
-        soundFx: 'scan'
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: CRYPTOCURRENCY & QUANTITATIVE FINANCIAL RADAR
-    // -------------------------------------------------------------
-    if (clean.includes('cripto') || clean.includes('bitcoin') || clean.includes('btc') || clean.includes('ethereum') || clean.includes('eth') || clean.includes('solana') || clean.includes('sol') || clean.includes('binance') || clean.includes('bnb') || clean.includes('xrp') || clean.includes('tokenomics')) {
-      if (clean.includes('precio') || clean.includes('cuanto vale') || clean.includes('cotizacion') || clean.includes('cotización') || clean.includes('valor de') || clean.includes('cuanto esta')) {
-        const prices = await this.fetchLiveCryptoPrices();
-        if (prices) {
-          let asset = 'BTC';
-          if (clean.includes('ethereum') || clean.includes('eth')) asset = 'ETH';
-          else if (clean.includes('solana') || clean.includes('sol')) asset = 'SOL';
-          else if (clean.includes('bnb') || clean.includes('binance')) asset = 'BNB';
-          else if (clean.includes('xrp') || clean.includes('ripple')) asset = 'XRP';
-
-          const d = prices[asset];
-          if (d) {
-            const sign = d.change24h >= 0 ? '+' : '';
-            const fmtPrice = d.price >= 1 ? d.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : d.price.toFixed(4);
-            return {
-              textResponse: `📊 Cotización en tiempo real de ${asset}/USDT: $${fmtPrice} (${sign}${d.change24h.toFixed(2)}% en 24h), ${this.userName}. Radar cuantitativo Stark en línea.`,
-              action: 'NONE',
-              themeChange: null,
-              soundFx: 'success'
-            };
-          }
-        }
-      }
-
-      if (clean.includes('abrir cripto') || clean.includes('modulo cripto') || clean.includes('panel financiero') || clean.includes('calculadora cripto')) {
-        return {
-          textResponse: `Abriendo el Terminal Financiero y Bursátil Stark, ${this.userName}.`,
-          action: 'OPEN_CRYPTO_HUB',
-          themeChange: null,
-          soundFx: 'scan'
-        };
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: VENEZUELA FX & GLOBAL CURRENCIES MONITOR
-    // -------------------------------------------------------------
-    if (clean.includes('bvc') || clean.includes('bolsa de caracas') || clean.includes('mercantil') || clean.includes('santa teresa') || clean.includes('bnc') || clean.includes('cantv') || clean.includes('dolar') || clean.includes('bcv') || clean.includes('tasa') || clean.includes('paralelo') || clean.includes('brecha') || clean.includes('euro') || clean.includes('peso colombiano') || clean.includes('pesos') || clean.includes('real brasileño') || clean.includes('divisas') || clean.includes('monedas')) {
-      const fx = await this.fetchLiveVenezuelaFX();
-      const bvc = this.getBVCSampleData();
-
-      if (clean.includes('euro')) {
-        return {
-          textResponse: `💶 Tasa Euro Oficial BCV: Bs. ${fx.eurOfficialBCV.toFixed(2)} por Euro (€). Brecha con dólar oficial: +${(fx.eurOfficialBCV - fx.usdOfficialBCV).toFixed(2)} Bs, ${this.userName}.`,
-          action: 'OPEN_CRYPTO_HUB',
-          themeChange: null,
-          soundFx: 'success'
-        };
-      }
-
-      if (clean.includes('peso') || clean.includes('cop')) {
-        return {
-          textResponse: `🇨🇴 Monitor Cambiario Frontera: 1 COP ≈ Bs. ${fx.copVesRate.toFixed(4)} | 1 VES ≈ ${fx.vesCopRate.toFixed(2)} COP (Tasa referencial frontera), ${this.userName}.`,
-          action: 'OPEN_CRYPTO_HUB',
-          themeChange: null,
-          soundFx: 'success'
-        };
-      }
-
-      if (clean.includes('real') || clean.includes('brl')) {
-        return {
-          textResponse: `🇧🇷 Tasa Real Brasileño / Bolívar: 1 BRL ≈ Bs. ${fx.brlVesRate.toFixed(2)}, ${this.userName}.`,
-          action: 'OPEN_CRYPTO_HUB',
-          themeChange: null,
-          soundFx: 'success'
-        };
-      }
-
-      if (clean.includes('dolar') || clean.includes('bcv') || clean.includes('tasa') || clean.includes('paralelo') || clean.includes('brecha') || clean.includes('cambiaria') || clean.includes('divisas') || clean.includes('monedas')) {
-        return {
-          textResponse: `💵 Monitor FX Venezuela: Dólar BCV: Bs. ${fx.usdOfficialBCV.toFixed(2)} | Paralelo / USDT P2P: Bs. ${fx.usdMarketParallel.toFixed(2)} | Brecha Cambiaria: +${fx.spreadPercent.toFixed(2)}% | Euro BCV: Bs. ${fx.eurOfficialBCV.toFixed(2)}, ${this.userName}.`,
-          action: 'OPEN_CRYPTO_HUB',
-          themeChange: null,
-          soundFx: 'success'
-        };
-      }
-
-      if (clean.includes('mercantil') || clean.includes('mvz')) {
-        const stock = bvc.stocks.find(s => s.ticker === 'MVZ.A');
-        const usdVal = (stock.priceVes / fx.usdOfficialBCV).toFixed(2);
-        return {
-          textResponse: `🏛️ BVC: Mercantil (MVZ.A) cotiza en Bs. ${stock.priceVes.toFixed(2)} ($${usdVal} USD Oficial) con variación de +${stock.change}%, ${this.userName}.`,
-          action: 'OPEN_CRYPTO_HUB',
-          themeChange: null,
-          soundFx: 'success'
-        };
-      }
-
-      if (clean.includes('santa teresa') || clean.includes('rst')) {
-        const stock = bvc.stocks.find(s => s.ticker === 'RST');
-        const usdVal = (stock.priceVes / fx.usdOfficialBCV).toFixed(2);
-        return {
-          textResponse: `🏛️ BVC: Ron Santa Teresa (RST) cotiza en Bs. ${stock.priceVes.toFixed(2)} ($${usdVal} USD Oficial) con variación de +${stock.change}%, ${this.userName}.`,
-          action: 'OPEN_CRYPTO_HUB',
-          themeChange: null,
-          soundFx: 'success'
-        };
-      }
-
-      return {
-        textResponse: `🏛️ Bolsa de Valores de Caracas (IBC): ${bvc.ibcIndex.points} pts (+${bvc.ibcIndex.change}%). Abriendo Terminal Bursátil & Cambiario Stark, ${this.userName}.`,
-        action: 'OPEN_CRYPTO_HUB',
-        themeChange: null,
-        soundFx: 'scan'
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: TRIVIA GAME & ROCK PAPER SCISSORS
-    // -------------------------------------------------------------
-    if (clean.includes('juguemos trivia') || clean.includes('trivia') || clean.includes('jugar trivia') || clean.includes('juego de preguntas')) {
-      return this.startTrivia();
-    }
-
-    if (clean.includes('piedra papel') || clean.includes('juguemos piedra') || clean.includes('piedra papel o tijera')) {
-      return {
-        textResponse: `¡Listo el juego! Dime: "¿Piedra, papel o tijera?", ${this.userName}.`,
-        action: 'NONE',
-        themeChange: null
-      };
-    }
-
-    if (clean === 'piedra' || clean === 'papel' || clean === 'tijera' || clean === 'tijeras') {
-      const choice = clean.startsWith('tijera') ? 'tijera' : clean;
-      return this.playRPS(choice);
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: GREETINGS & VENEZUELAN JOKES / CHITCHAT
-    // -------------------------------------------------------------
-    if (clean === 'hola' || clean === 'epale' || clean === 'hablame' || clean === 'buenas' || clean.includes('como estas') || clean.includes('que tal') || clean.includes('que hubo')) {
-      return {
-        textResponse: this.getVenezuelanGreeting(),
-        action: 'NONE',
-        themeChange: null,
-        soundFx: 'scan'
-      };
-    }
-
-    if (clean.includes('cuentame un chiste') || clean.includes('un chiste') || clean.includes('echa un chiste') || clean.includes('dime un chiste')) {
-      const chistes = [
-        `¿Por qué los tequeños nunca van a la guerra? ¡Porque se les sale el queso en el primer tiro!`,
-        `Papá, ¿qué se siente tener un hijo tan inteligente y guapo? —No sé mijo, pregúntale a tu abuelo.`,
-        `¿Qué le dice una arepa a otra arepa? —¡Nos vemos en el budare, corazón!`,
-        `¿Cuál es el colmo de un electricista en Maracaibo? —Que su mujer se llame Luz y los hijos le salgan con corriente.`
-      ];
-      const chiste = chistes[Math.floor(Math.random() * chistes.length)];
-      return {
-        textResponse: `${chiste} 😂`,
-        action: 'NONE',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: SCHEDULED EXACT TIME ALARMS
-    // -------------------------------------------------------------
-    const alarmMatch = text.match(/(?:alarma|despiertame|avísame|avisame|recuérdame|recordar)\s+(?:a\s+las|para\s+las)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la mañana|de la tarde|de la noche)?\s*(?:para|de|que)?\s*(.*)/i);
-    if (alarmMatch && (alarmMatch[1] || text.includes('alarma a las') || text.includes('avísame a las'))) {
-      let hours = parseInt(alarmMatch[1], 10);
-      let minutes = alarmMatch[2] ? parseInt(alarmMatch[2], 10) : 0;
-      const period = alarmMatch[3] ? alarmMatch[3].toLowerCase() : '';
-      const noteMsg = alarmMatch[4] ? alarmMatch[4].trim() : 'Alarma programada';
-
-      if (period.includes('pm') || period.includes('tarde') || period.includes('noche')) {
-        if (hours < 12) hours += 12;
-      } else if (period.includes('am') || period.includes('mañana')) {
-        if (hours === 12) hours = 0;
-      }
-
-      const now = new Date();
-      const targetTime = new Date();
-      targetTime.setHours(hours, minutes, 0, 0);
-
-      // If time already passed today, schedule for tomorrow
-      if (targetTime.getTime() <= now.getTime()) {
-        targetTime.setDate(targetTime.getDate() + 1);
-      }
-
-      const formattedHour = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0');
-
-      return {
-        textResponse: `Alarma programada para las ${formattedHour} (${noteMsg || 'Aviso de YARBIS'}), ${this.userName}. Te avisaré con señal acústica.`,
-        action: 'SET_ALARM',
-        alarmData: {
-          timeStr: formattedHour,
-          timestamp: targetTime.getTime(),
-          note: noteMsg || 'Alarma YARBIS'
-        },
-        themeChange: null,
-        soundFx: 'success'
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: DÓLAR BCV / PARALELO & CONVERSIÓN DE DIVISAS
-    // -------------------------------------------------------------
-    if (clean.includes('dolar') || clean.includes('dólar') || clean.includes('tasa') || clean.includes('bolivares') || clean.includes('bolívares') || clean.includes('cambio')) {
-      const rate = this.approxUsdRate;
-      
-      const convMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:dolares|dólares|usd|\$)\s*(?:a|en)?\s*(?:bolivares|bolívares|bs)?/i);
-      if (convMatch) {
-        const amount = parseFloat(convMatch[1]);
-        const totalBs = (amount * rate).toFixed(2);
-        return {
-          textResponse: `${amount} dólares equivalen a aproximadamente ${totalBs} Bolívares a tasa de referencia (${rate} Bs/USD), ${this.userName}.`,
-          action: 'MATH',
-          themeChange: null
-        };
-      }
-
-      const convBsMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:bolivares|bolívares|bs)\s*(?:a|en)?\s*(?:dolares|dólares|usd|\$)?/i);
-      if (convBsMatch) {
-        const amountBs = parseFloat(convBsMatch[1]);
-        const totalUsd = (amountBs / rate).toFixed(2);
-        return {
-          textResponse: `${amountBs} Bolívares equivalen a aproximadamente $${totalUsd} USD a tasa de referencia (${rate} Bs/USD), ${this.userName}.`,
-          action: 'MATH',
-          themeChange: null
-        };
-      }
-
-      return {
-        textResponse: `La tasa de referencia del dólar se ubica en aproximadamente ${rate} Bolívares por USD, ${this.userName}. Puedes pedirme: "Calcula [monto] dólares a bolívares".`,
-        action: 'NONE',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: GPS NAVIGATION & ROUTES (GOOGLE MAPS & WAZE)
-    // -------------------------------------------------------------
-    if (clean.includes('como llegar') || clean.includes('ruta a') || clean.includes('ruta hacia') || clean.includes('llevame a') || clean.includes('llévame a') || clean.includes('navegar a') || clean.includes('direccion a')) {
-      const destMatch = text.match(/(?:como llegar a|ruta a|ruta hacia|llevame a|llévame a|navegar a|direccion a)\s+(.*)/i);
-      if (destMatch && destMatch[1]) {
-        const destination = destMatch[1].trim();
-        const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
-        const wazeDeepLink = `waze://?q=${encodeURIComponent(destination)}&navigate=yes`;
-
-        return {
-          textResponse: `Calculando la mejor ruta hacia ${destination.toUpperCase()} en tu GPS, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: gmapsUrl,
-          deepLink: wazeDeepLink,
-          themeChange: null
-        };
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: FLASHLIGHT / TORCH CONTROL
-    // -------------------------------------------------------------
-    if (clean.includes('linterna') || clean.includes('luz del telefono') || clean.includes('luz de la camara')) {
-      if (clean.includes('apagar') || clean.includes('desactivar') || clean.includes('apaga') || clean.includes('quita')) {
-        return {
-          textResponse: `Apagando la linterna del teléfono de inmediato, ${this.userName}.`,
-          action: 'TORCH_OFF',
-          themeChange: null
-        };
-      } else {
-        return {
-          textResponse: `Encendiendo la linterna de tu dispositivo, ${this.userName}.`,
-          action: 'TORCH_ON',
-          themeChange: null
-        };
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: BATTERY STATUS
-    // -------------------------------------------------------------
-    if (clean.includes('bateria') || clean.includes('batería') || clean.includes('cuanta carga') || clean.includes('nivel de carga')) {
-      return {
-        textResponse: `Consultando los sensores de energía de tu dispositivo...`,
-        action: 'CHECK_BATTERY',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: VENEZUELAN BANKS & DELIVERY SERVICES
-    // -------------------------------------------------------------
-    if (clean.includes('banco de venezuela') || clean.includes('bdv') || clean.includes('bdvenlinea')) {
-      return {
-        textResponse: `Abriendo BDV en línea del Banco de Venezuela, ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: 'https://bdvenlinea.banvenez.com/',
-        themeChange: null
-      };
-    }
-    if (clean.includes('banesco') || clean.includes('banesconline')) {
-      return {
-        textResponse: `Abriendo Banesco Online, ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: 'https://www.banesconline.com/',
-        themeChange: null
-      };
-    }
-    if (clean.includes('mercantil') || clean.includes('banco mercantil')) {
-      return {
-        textResponse: `Abriendo Mercantil en Línea, ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: 'https://www.mercantilbanco.com/',
-        themeChange: null
-      };
-    }
-    if (clean.includes('bnc') || clean.includes('banco nacional de credito')) {
-      return {
-        textResponse: `Abriendo Banco Nacional de Crédito (BNC), ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: 'https://www.bncenlinea.com/',
-        themeChange: null
-      };
-    }
-    if (clean.includes('pago movil') || clean.includes('pagomovil')) {
-      return {
-        textResponse: `Abriendo servicios de Pago Móvil, ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: 'https://bdvenlinea.banvenez.com/',
-        themeChange: null
-      };
-    }
-    if (clean.includes('pedidosya') || clean.includes('pedidos ya')) {
-      return {
-        textResponse: `Abriendo PedidosYa para ordenar delivery, ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: 'https://www.pedidosya.com.ve/',
-        deepLink: 'pedidosya://',
-        themeChange: null
-      };
-    }
-    if (clean.includes('yummy')) {
-      return {
-        textResponse: `Abriendo Yummy delivery, ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: 'https://www.yummy.com.ve/',
-        deepLink: 'yummy://',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: LIVE WEATHER (OPEN-METEO)
-    // -------------------------------------------------------------
-    if (clean.includes('clima') || clean.includes('temperatura') || clean.includes('va a llover') || clean.includes('pronostico') || clean.includes('el tiempo en')) {
-      const cityMatch = text.match(/(?:clima|temperatura|tiempo|llover|pronostico)\s+(?:en|de|para)?\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i);
-      let targetCity = 'Caracas';
-      if (cityMatch && cityMatch[1]) {
-        const extracted = cityMatch[1].replace(/^(?:en|de|para|hoy|el|la)\s+/i, '').trim();
-        if (extracted.length > 2 && !['hoy', 'mañana', 'ahora'].includes(extracted.toLowerCase())) {
-          targetCity = extracted;
-        }
-      }
-
-      const weatherMsg = await this.fetchWeather(targetCity);
-      return {
-        textResponse: weatherMsg,
-        action: 'NONE',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: CRYPTO & BITCOIN
-    // -------------------------------------------------------------
-    if (clean.includes('bitcoin') || clean.includes('cripto') || clean.includes('ethereum') || clean.includes('solana') || clean.includes('btc') || clean.includes('eth')) {
-      const cryptoMsg = await this.fetchCryptoPrice(clean);
-      return {
-        textResponse: cryptoMsg,
-        action: 'NONE',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: WIKIPEDIA / INSTANT KNOWLEDGE SEARCH
-    // -------------------------------------------------------------
-    const wikiMatch = text.match(/^(?:quién es|quien es|quién fue|quien fue|qué es|que es|qué significa|que significa|cuéntame de|cuentame de|explícame qué es|explicame que es|explícame|explicame)\s+(.*)/i);
-    if (wikiMatch && wikiMatch[1]) {
-      const topic = wikiMatch[1].replace(/^(?:el|la|los|las|un|una|sobre)\s+/i, '').trim();
-      if (topic.length > 2) {
-        const wikiExtract = await this.fetchWikipediaSummary(topic);
-        if (wikiExtract) {
-          return {
-            textResponse: `${wikiExtract}`,
-            action: 'NONE',
-            themeChange: null
-          };
-        }
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: MUSIC PLAYER & GENRES (SPOTIFY / YOUTUBE MUSIC)
-    // -------------------------------------------------------------
-    if (clean.startsWith('pon ') || clean.startsWith('poner ') || clean.startsWith('reproduce ') || clean.startsWith('reproducir ') || clean.includes('musica de ') || clean.includes('musica para ')) {
-      let query = text.replace(/^(?:pon|poner|reproduce|reproducir|busca|buscar|musica de|musica para)\s+/i, '').trim();
-      if (query.length > 1) {
-        const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(query)}`;
-        const spotifyDeepLink = `spotify:search:${encodeURIComponent(query)}`;
-
-        return {
-          textResponse: `Reproduciendo "${query}" en Spotify, ${this.userName}. ¡A gozar! 🎶`,
-          action: 'OPEN_URL',
-          url: spotifySearchUrl,
-          deepLink: spotifyDeepLink,
-          themeChange: null
-        };
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: TIMERS & COUNTDOWNS
-    // -------------------------------------------------------------
-    if (clean.includes('temporizador') || clean.includes('cuenta regresiva') || clean.includes('avísame en') || clean.includes('avisame en')) {
-      if (clean.includes('cancelar') || clean.includes('detener') || clean.includes('quitar') || clean.includes('borrar')) {
-        return {
-          textResponse: `Temporizador cancelado correctamente, ${this.userName}.`,
-          action: 'CANCEL_TIMER',
-          themeChange: null
-        };
-      }
-
-      const timeMatch = clean.match(/(\d+)\s*(minuto|minutos|segundo|segundos|min|seg)/i);
-      if (timeMatch) {
-        const val = parseInt(timeMatch[1], 10);
-        const unit = timeMatch[2].toLowerCase();
-        let totalSeconds = val;
-        let unitLabel = 'segundos';
-
-        if (unit.startsWith('min')) {
-          totalSeconds = val * 60;
-          unitLabel = val === 1 ? 'minuto' : 'minutos';
-        } else {
-          unitLabel = val === 1 ? 'segundo' : 'segundos';
-        }
-
-        return {
-          textResponse: `Temporizador activo por ${val} ${unitLabel}, ${this.userName}. Te aviso en cuanto suene.`,
-          action: 'SET_TIMER',
-          durationSeconds: totalSeconds,
-          themeChange: null,
-          soundFx: 'success'
-        };
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: ADVANCED AUTOMATIC PHONE CALLS
-    // -------------------------------------------------------------
-    const saveContactMatch = text.match(/(?:guardar|agregar|nuevo)\s+(?:contacto\s+)?(.*?)\s+(?:numero|número|telefono|teléfono)?\s*(\+?[0-9\s]{3,15})/i);
-    if (saveContactMatch) {
-      const cName = saveContactMatch[1].replace(/^(?:contacto|a|mi)\s+/i, '').trim();
-      const cPhone = saveContactMatch[2].replace(/[^0-9\+]/g, '');
-      if (cName && cPhone) {
-        this.saveContact(cName, cPhone);
-        return {
-          textResponse: `Listo mi pana, guardé a "${cName}" en tu agenda con el número ${cPhone}, ${this.userName}.`,
-          action: 'NONE',
-          themeChange: null
-        };
-      }
-    }
-
-    if (clean.includes('llamar') || clean.includes('marcar') || clean.includes('llamada')) {
-      if (clean.includes('emergencia') || clean.includes('policia') || clean.includes('ambulancia') || clean.includes('bomberos')) {
-        return {
-          textResponse: `Marcando al 911 de emergencia inmediatamente, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: 'tel:911',
-          deepLink: 'tel:911',
-          themeChange: null
-        };
-      }
-
-      const convertedText = this.parseSpokenNumbers(text);
-      const callDigitsMatch = convertedText.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al)?\s*(\+?[0-9]{3,15})/i);
-      if (callDigitsMatch && callDigitsMatch[1]) {
-        const phoneNumber = callDigitsMatch[1];
-        return {
-          textResponse: `Iniciando llamada al ${phoneNumber}, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: `tel:${phoneNumber}`,
-          deepLink: `tel:${phoneNumber}`,
-          themeChange: null
-        };
-      }
-
-      const nameMatch = text.match(/(?:llamar|marcar|hacer\s+llamada)\s+(?:a|al|a\s+mi)?\s*(.+)/i);
-      if (nameMatch && nameMatch[1]) {
-        const targetName = nameMatch[1].trim();
-        const matches = this.getContactMatches(targetName);
-
-        if (matches.length === 1) {
-          const found = matches[0];
-          return {
-            textResponse: `Llamando a ${found.name.toUpperCase()} (${found.phone}), ${this.userName}.`,
-            action: 'OPEN_URL',
-            url: `tel:${found.phone}`,
-            deepLink: `tel:${found.phone}`,
-            themeChange: null
-          };
-        } else if (matches.length > 1) {
-          const listStr = matches.map(m => `"${m.name.toUpperCase()}" (${m.phone})`).join(', ');
-          return {
-            textResponse: `Encontré varios números para "${targetName}": ${listStr}. ¿A cuál llamo, ${this.userName}?`,
-            action: 'NONE',
-            themeChange: null
-          };
-        } else {
-          return {
-            textResponse: `No encontré a "${targetName}" en tu agenda. Puedes decir "Guardar contacto ${targetName} número [teléfono]".`,
-            action: 'NONE',
-            themeChange: null
-          };
-        }
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: ADVANCED AUTOMATIC WHATSAPP MESSAGING
-    // -------------------------------------------------------------
-    if (clean.includes('whatsapp') || clean.includes('wasap') || clean.includes('guasap')) {
-      const convertedText = this.parseSpokenNumbers(text);
-      const isBusiness = clean.includes('business') || clean.includes('whatsapp 2') || clean.includes('wasap 2') || clean.includes('guasap 2');
-      const waAppName = isBusiness ? 'WhatsApp Business' : 'WhatsApp';
-      const waDeepScheme = isBusiness ? 'whatsapp-business://' : 'whatsapp://';
-
-      let targetContactName = '';
-      let targetPhone = '';
-      let msgText = '';
-
-      const fullWaMatch = convertedText.match(/(?:mandar|enviar|escribir|hacer)?\s*(?:un\s+)?(?:mensaje\s+de\s+|mensaje\s+por\s+)?(?:whatsapp\s*2|whatsapp\s*business|whatsapp|wasap\s*2|wasap|guasap)\s+(?:a|para|al)?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?:que\s+diga|diciendo|con\s+el\s+texto|mensaje)?\s*(.*)/i);
-
-      if (fullWaMatch) {
-        const potentialTarget = fullWaMatch[1] ? fullWaMatch[1].trim() : '';
-        const potentialMsg = fullWaMatch[2] ? fullWaMatch[2].trim() : '';
-
-        const digitsOnly = potentialTarget.replace(/[^0-9\+]/g, '');
-        if (digitsOnly.length >= 7) {
-          targetPhone = digitsOnly;
-          msgText = potentialMsg;
-        } else if (potentialTarget && !['que', 'un', 'el', 'la', 'mi', 'mensaje'].includes(potentialTarget.toLowerCase())) {
-          targetContactName = potentialTarget;
-          const found = this.getContactPhone(targetContactName);
-          if (found) targetPhone = found;
-          msgText = potentialMsg;
-        } else {
-          msgText = (potentialTarget + ' ' + potentialMsg).trim();
-        }
-      }
-
-      if (!targetPhone) {
-        const phoneMatch = convertedText.match(/(\+?[0-9]{7,15})/);
-        if (phoneMatch) targetPhone = phoneMatch[1];
-      }
-
-      let formattedPhone = targetPhone.replace(/[^0-9]/g, '');
-      if (formattedPhone.startsWith('04')) {
-        formattedPhone = '58' + formattedPhone.substring(1);
-      }
-
-      let waUrl = 'https://web.whatsapp.com';
-      let waDeepLink = `${waDeepScheme}`;
-      let responseMsg = `Abriendo ${waAppName} en tu celular, ${this.userName}.`;
-
-      const displayTarget = targetContactName ? targetContactName : (targetPhone ? targetPhone : '');
-
-      if (formattedPhone && msgText) {
-        waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(msgText)}`;
-        waDeepLink = `${waDeepScheme}send?phone=${formattedPhone}&text=${encodeURIComponent(msgText)}`;
-        responseMsg = `Abriendo ${waAppName} con mensaje listo para ${displayTarget || formattedPhone}: "${msgText}", ${this.userName}.`;
-      } else if (formattedPhone) {
-        waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}`;
-        waDeepLink = `${waDeepScheme}send?phone=${formattedPhone}`;
-        responseMsg = `Abriendo chat de ${waAppName} de ${displayTarget || formattedPhone}, ${this.userName}.`;
-      } else if (msgText) {
-        waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msgText)}`;
-        waDeepLink = `${waDeepScheme}send?text=${encodeURIComponent(msgText)}`;
-        responseMsg = `Abriendo ${waAppName} con tu mensaje: "${msgText}", ${this.userName}.`;
-      }
-
-      return {
-        textResponse: responseMsg,
-        action: 'OPEN_URL',
-        url: waUrl,
-        deepLink: waDeepLink,
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: ARMOR PROTOCOL THEMES
-    // -------------------------------------------------------------
-    if (clean.includes('protocolo mark 85') || clean.includes('mark 85') || clean.includes('nanotecnologia') || clean.includes('nano')) {
-      return {
-        textResponse: `Protocolo Mark 85 Nano-Tech activado. Armadura de titanio y oro carmesí en línea, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'theme-mark85',
-        soundFx: 'nano'
-      };
-    }
-    if (clean.includes('protocolo war machine') || clean.includes('war machine') || clean.includes('tema gris') || clean.includes('tema plateado')) {
-      return {
-        textResponse: `Protocolo War Machine activado. Blindaje táctico de acero y titanio en línea, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'theme-warmachine',
-        soundFx: 'hulkbuster'
-      };
-    }
-    if (clean.includes('protocolo spider') || clean.includes('spider iron') || clean.includes('tema spider')) {
-      return {
-        textResponse: `Protocolo Spider-Iron activado. Fibras nanotecnológicas cian y escarlata en línea, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'theme-spideriron',
-        soundFx: 'repulsor'
-      };
-    }
-    if (clean.includes('protocolo wakanda') || clean.includes('pantera negra') || clean.includes('black panther')) {
-      return {
-        textResponse: `Protocolo Wakanda activado. Blindaje de vibranium violeta cargado, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'theme-wakanda',
-        soundFx: 'scan'
-      };
-    }
-    if (clean.includes('protocolo hulkbuster') || clean.includes('modo hulkbuster') || clean.includes('tema morado')) {
-      return {
-        textResponse: `Protocolo Hulkbuster activado. Potencia de blindaje pesado en línea, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'theme-hulkbuster',
-        soundFx: 'hulkbuster'
-      };
-    }
-    if (clean.includes('protocolo sigilo') || clean.includes('modo sigilo') || clean.includes('tema verde') || clean.includes('modo matrix')) {
-      return {
-        textResponse: `Protocolo Sigilo activado. Modo de baja visibilidad verde neón en línea, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'theme-stealth',
-        soundFx: 'scan'
-      };
-    }
-    if (clean.includes('protocolo mark 42') || clean.includes('mark 42') || clean.includes('tema dorado')) {
-      return {
-        textResponse: `Protocolo Mark 42 activado. Blindaje dorado y carmesí en línea, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'theme-mark42',
-        soundFx: 'repulsor'
-      };
-    }
-    if (clean.includes('protocolo por defecto') || clean.includes('tema normal') || clean.includes('restablecer tema')) {
-      return {
-        textResponse: `Restableciendo protocolo cian estándar de YARBIS, ${this.userName}.`,
-        action: 'THEME',
-        themeChange: 'default',
-        soundFx: 'success'
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: PERSONAL NOTES & REMINDERS
-    // -------------------------------------------------------------
-    const addNoteMatch = text.match(/(?:agrega|agregar|nueva|crear|guarda|guardar|recuérdame|recordarme|recordar)\s+(?:nota|recordatorio)?\s*(.+)/i);
-    if (addNoteMatch && addNoteMatch[1] && !clean.startsWith('mis notas') && !clean.startsWith('ver notas')) {
-      let noteText = addNoteMatch[1].trim();
-      noteText = noteText.replace(/^(que|de|para|nota|recordatorio)\s+/i, '');
-
-      if (noteText.length > 1) {
-        return {
-          textResponse: `Guardé la nota: "${noteText}" en tu lista, ${this.userName}.`,
-          action: 'ADD_NOTE',
-          noteText: noteText,
-          themeChange: null
-        };
-      }
-    }
-
-    if (clean.includes('mis notas') || clean.includes('ver notas') || clean.includes('mostrar notas') || clean.includes('recordatorios')) {
-      return {
-        textResponse: `Abriendo tus notas y recordatorios en el panel, ${this.userName}.`,
-        action: 'SHOW_NOTES',
-        themeChange: null
-      };
-    }
-
-    if (clean.includes('borrar todas las notas') || clean.includes('limpiar notas') || clean.includes('eliminar notas')) {
-      return {
-        textResponse: `Listo, borré todas tus notas de la lista, ${this.userName}.`,
-        action: 'CLEAR_NOTES',
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: MATHEMATICAL CALCULATIONS & PERCENTAGES
-    // -------------------------------------------------------------
-    if (clean.includes('cuanto es') || clean.includes('calcula') || clean.includes('porcentaje') || clean.includes('%')) {
-      const pctMatch = clean.match(/(?:calcula|cuanto es)?\s*(?:el)?\s*(\d+(?:\.\d+)?)\s*(?:%|por ciento)\s*de\s*(\d+(?:\.\d+)?)/i);
-      if (pctMatch) {
-        const pct = parseFloat(pctMatch[1]);
-        const total = parseFloat(pctMatch[2]);
-        const res = (pct / 100) * total;
-        return {
-          textResponse: `El ${pct}% de ${total} es igual a ${res}, ${this.userName}.`,
-          action: 'MATH',
-          themeChange: null
-        };
-      }
-
-      const mathMatch = clean.match(/(\d+(?:\.\d+)?)\s*(mas|\+|\-|menos|por|\*|multiplicado por|entre|\/|dividido por)\s*(\d+(?:\.\d+)?)/i);
-      if (mathMatch) {
-        const num1 = parseFloat(mathMatch[1]);
-        const op = mathMatch[2];
-        const num2 = parseFloat(mathMatch[3]);
-        let res = 0;
-        if (op === 'mas' || op === '+') res = num1 + num2;
-        else if (op === 'menos' || op === '-') res = num1 - num2;
-        else if (op === 'por' || op === '*' || op.includes('multiplicado')) res = num1 * num2;
-        else if (op === 'entre' || op === '/' || op.includes('dividido')) res = num1 / num2;
-
-        return {
-          textResponse: `El resultado exacto es ${res}, ${this.userName}.`,
-          action: 'MATH',
-          themeChange: null
-        };
-      }
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: OPEN YOUTUBE / SEARCH YOUTUBE
-    // -------------------------------------------------------------
-    if (clean.includes('youtube') || clean.includes('abrir youtube') || clean.includes('abre youtube')) {
-      const searchMatch = text.match(/(?:busca|buscar|poner|pon|reproducir|reproduce)\s+(.*?)(?:\s+en youtube|$)/i);
-      let targetUrl = 'https://www.youtube.com';
-      let deepLink = 'youtube://';
-      let responseMsg = `Abriendo YouTube en tu teléfono, ${this.userName}.`;
-
-      if (searchMatch && searchMatch[1] && searchMatch[1] !== 'youtube' && searchMatch[1] !== 'abrir youtube' && searchMatch[1] !== 'abre youtube') {
-        const query = searchMatch[1].trim();
-        targetUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-        deepLink = `youtube://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-        responseMsg = `Buscando "${query}" en YouTube, ${this.userName}.`;
-      }
-
-      return {
-        textResponse: responseMsg,
-        action: 'OPEN_URL',
-        url: targetUrl,
-        deepLink: deepLink,
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: UNIVERSAL MOBILE APP & WEB LAUNCHER
-    // -------------------------------------------------------------
-    const webApps = [
-      { keys: ['whatsapp', 'wasap', 'guasap'], name: 'WhatsApp', url: 'https://web.whatsapp.com', deepLink: 'whatsapp://' },
-      { keys: ['spotify', 'musica spotify'], name: 'Spotify', url: 'https://open.spotify.com', deepLink: 'spotify://' },
-      { keys: ['gmail', 'correo', 'mail'], name: 'Gmail', url: 'https://mail.google.com', deepLink: 'googlegmail://' },
-      { keys: ['netflix', 'peliculas'], name: 'Netflix', url: 'https://www.netflix.com', deepLink: 'nflx://' },
-      { keys: ['instagram', 'insta'], name: 'Instagram', url: 'https://www.instagram.com', deepLink: 'instagram://' },
-      { keys: ['twitter', 'x.com', 'x '], name: 'X (Twitter)', url: 'https://x.com', deepLink: 'twitter://' },
-      { keys: ['facebook', 'face'], name: 'Facebook', url: 'https://www.facebook.com', deepLink: 'fb://' },
-      { keys: ['tiktok'], name: 'TikTok', url: 'https://www.tiktok.com', deepLink: 'snssdk1233://' },
-      { keys: ['telegram'], name: 'Telegram', url: 'https://web.telegram.org', deepLink: 'tg://' },
-      { keys: ['pinterest'], name: 'Pinterest', url: 'https://www.pinterest.com', deepLink: 'pinterest://' },
-      { keys: ['waze'], name: 'Waze', url: 'https://www.waze.com', deepLink: 'waze://' },
-      { keys: ['uber'], name: 'Uber', url: 'https://www.uber.com', deepLink: 'uber://' },
-      { keys: ['mercado libre', 'mercadolibre'], name: 'Mercado Libre', url: 'https://www.mercadolibre.com', deepLink: 'mercadolibre://' },
-      { keys: ['amazon'], name: 'Amazon', url: 'https://www.amazon.com', deepLink: 'amazon://' },
-      { keys: ['disney', 'disney plus', 'disney+'], name: 'Disney+', url: 'https://www.disneyplus.com', deepLink: 'disneyplus://' },
-      { keys: ['max', 'hbo', 'hbo max'], name: 'Max (HBO)', url: 'https://www.max.com', deepLink: 'max://' },
-      { keys: ['twitch'], name: 'Twitch', url: 'https://www.twitch.tv', deepLink: 'twitch://' },
-      { keys: ['github'], name: 'GitHub', url: 'https://github.com', deepLink: 'https://github.com' },
-      { keys: ['chatgpt', 'chat gpt', 'openai'], name: 'ChatGPT', url: 'https://chatgpt.com', deepLink: 'chatgpt://' },
-      { keys: ['maps', 'google maps', 'mapa', 'mapas'], name: 'Google Maps', url: 'https://maps.google.com', deepLink: 'comgooglemaps://' },
-      { keys: ['drive', 'google drive'], name: 'Google Drive', url: 'https://drive.google.com', deepLink: 'googledrive://' },
-      { keys: ['telefono', 'llamada', 'llamar', 'marcar'], name: 'Teléfono', url: 'tel:', deepLink: 'tel:' },
-      { keys: ['mensajes', 'sms', 'mensaje de texto'], name: 'Mensajes SMS', url: 'sms:', deepLink: 'sms:' },
-      { keys: ['discord'], name: 'Discord', url: 'https://discord.com', deepLink: 'discord://' },
-      { keys: ['zoom'], name: 'Zoom', url: 'https://zoom.us', deepLink: 'zoomus://' },
-      { keys: ['roblox'], name: 'Roblox', url: 'https://www.roblox.com', deepLink: 'roblox://' },
-      { keys: ['canva'], name: 'Canva', url: 'https://www.canva.com', deepLink: 'canva://' }
-    ];
-
-    for (const app of webApps) {
-      if (app.keys.some(k => clean.includes(k))) {
-        return {
-          textResponse: `Abriendo ${app.name} en tu celular, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: app.url,
-          deepLink: app.deepLink,
-          themeChange: null
-        };
-      }
-    }
-
-    const openMatch = clean.match(/^(?:abrir|abre|abreme|lanzar|lanza|iniciar|inicia)\s+(.*)/i);
-    if (openMatch && openMatch[1]) {
-      let rawAppName = openMatch[1].trim();
-      let cleanAppName = rawAppName.replace(/^(?:la\s+aplicacion\s+de|la\s+app\s+de|el\s+juego\s+de|la\s+pagina\s+de|la\s+app|la\s+aplicacion|el\s+juego|la\s+pagina)\s+/i, '').trim();
-
-      const slug = cleanAppName.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const dynamicDeepLink = `${slug}://`;
-      const dynamicWebUrl = cleanAppName.includes('.') 
-        ? (cleanAppName.startsWith('http') ? cleanAppName : `https://${cleanAppName}`)
-        : `https://www.${slug}.com`;
-
-      return {
-        textResponse: `Abriendo ${cleanAppName}, ${this.userName}.`,
-        action: 'OPEN_URL',
-        url: dynamicWebUrl,
-        deepLink: dynamicDeepLink,
-        themeChange: null
-      };
-    }
-
-    // -------------------------------------------------------------
-    // INTENT: GENERAL GOOGLE SEARCH
-    // -------------------------------------------------------------
-    if (clean.startsWith('busca') || clean.startsWith('buscar') || clean.startsWith('googlea') || clean.startsWith('navega')) {
-      const searchMatch = text.match(/(?:busca|buscar|googlea|navega)\s+(.*)/i);
-      if (searchMatch && searchMatch[1]) {
-        const query = searchMatch[1].trim();
-        return {
-          textResponse: `Buscando "${query}" en Google, ${this.userName}.`,
-          action: 'OPEN_URL',
-          url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-          themeChange: null
-        };
-      }
-    }
-
-    return null;
-  }
-
-  cleanGeminiKey(rawKey) {
-    if (!rawKey) return '';
-    return rawKey.trim()
-      .replace(/^['"`]+|['"`]+$/g, '')
-      .replace(/^Bearer\s+/i, '')
-      .replace(/^key=/i, '')
-      .trim();
-  }
-
-  setApiKey(key) {
-    this.geminiApiKey = this.cleanGeminiKey(key);
-    localStorage.setItem('yarbis_gemini_api_key', this.geminiApiKey);
-  }
-
-  async discoverWorkingGeminiModel(key) {
-    if (!key) return null;
-    try {
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
-      const res = await fetch(listUrl);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.models && Array.isArray(data.models)) {
-          const validModels = data.models
-            .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-            .map(m => m.name.replace(/^models\//, ''));
-
-          const preferred = ['gemini-3.6-flash', 'gemini-3.0-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
-          for (const pref of preferred) {
-            if (validModels.includes(pref)) {
-              this.activeGeminiModel = pref;
-              return pref;
-            }
-          }
-          if (validModels.length > 0) {
-            this.activeGeminiModel = validModels[0];
-            return validModels[0];
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Model list discovery error:', e);
-    }
-    return this.activeGeminiModel || 'gemini-3.6-flash';
-  }
-
-  async queryGeminiAI(userText) {
-    const key = this.cleanGeminiKey(this.geminiApiKey);
-    if (!key) throw new Error('API Key no configurada');
-
-    if (!this.activeGeminiModel) {
-      await this.discoverWorkingGeminiModel(key);
-    }
-
-    const model = this.activeGeminiModel || 'gemini-3.6-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const systemPrompt = `Eres YARBIS Veneco, un Asistente Personal de Análisis Financiero y Bursátil Cuantitativo de alto nivel, con acento venezolano sutil, carismático y futurista (estilo J.A.R.V.I.S.). Te diriges al usuario como "${this.userName}".
-Tus 4 áreas de monitoreo y análisis son:
-1. Criptoactivos: Precios en tiempo real (Binance/CoinGecko), gas fees, tokenomics, FDV y arbitraje.
-2. Bolsas Internacionales: S&P 500, Nasdaq, Dow Jones, acciones globales (AAPL, NVDA, TSLA, MSFT), PER, dividendos y métricas fundamentales.
-3. Bolsa de Valores de Caracas (BVC): Cotizaciones del IBC, acciones locales (Mercantil, Ron Santa Teresa, BNC, CANTV) con valoración multidivisa en Bolívares (VES) y ajuste a USD/USDT según la tasa del día.
-4. Mercado Cambiario & FX: Monitoreo de tasas VES, USD Oficial BCV, Paralelo/P2P USDT, EUR y brecha cambiaria.
-Calcula ROI neto (deduciendo comisiones), DCA, rendimiento real vs devaluación y entrega tablas Markdown limpias y estructuradas cuando sea oportuno. Nunca inventes precios; sé analítico, preciso y orientado a datos.`;
-
-    const requestBody = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: `${systemPrompt}\n\nUsuario: ${userText}` }]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 800
-      }
-    };
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error?.message || `Gemini API error ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text.trim();
-  }
-
-  async testGeminiApiKey(apiKey) {
-    const key = this.cleanGeminiKey(apiKey);
-    if (!key) return { success: false, message: 'La clave no puede estar vacía.' };
-
-    try {
-      // Step 1: Query Google ModelService to validate key and discover available models
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
-      const listRes = await fetch(listUrl);
-
-      if (!listRes.ok) {
-        const errData = await listRes.json().catch(() => ({}));
-        const msg = errData.error?.message || `Error HTTP ${listRes.status}`;
-        return { 
-          success: false, 
-          message: `Error (${listRes.status}): ${msg}. Asegúrate de haber copiado la clave desde Google AI Studio (comienza con "AIzaSy...").` 
-        };
-      }
-
-      const listData = await listRes.json();
-      const validModels = (listData.models || [])
-        .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-        .map(m => m.name.replace(/^models\//, ''));
-
-      // Preferred order: latest models first (gemini-3.6-flash, gemini-2.0-flash, gemini-1.5-flash)
-      const preferred = ['gemini-3.6-flash', 'gemini-3.0-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
-      const candidateModels = [];
-      for (const pref of preferred) {
-        if (validModels.includes(pref)) candidateModels.push(pref);
-      }
-      for (const m of validModels) {
-        if (!candidateModels.includes(m)) candidateModels.push(m);
-      }
-      if (candidateModels.length === 0) candidateModels.push('gemini-3.6-flash', 'gemini-2.0-flash', 'gemini-1.5-flash');
-
-      // Step 2: Try models in sequence until one succeeds
-      let lastErrMsg = '';
-      let lastErrStatus = 404;
-
-      for (const modelToTest of candidateModels) {
-        const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTest}:generateContent?key=${key}`;
+    async askAI(userText) {
+      const prior = this.history.slice(-12);
+      const messages = [...prior, { role: 'user', text: userText }];
+      let answer = null;
+      let lastError = '';
+
+      if (this.geminiApiKey) {
         try {
-          const testRes = await fetch(testUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: 'Hola, prueba de conexión' }] }]
-            })
-          });
-
-          if (testRes.ok) {
-            this.activeGeminiModel = modelToTest;
-            return { success: true, message: `⚡ Conexión exitosa con Google Gemini (${modelToTest}).` };
-          } else {
-            lastErrStatus = testRes.status;
-            const errData = await testRes.json().catch(() => ({}));
-            lastErrMsg = errData.error?.message || '';
-          }
+          answer = await this.queryGemini(messages);
+          this.lastAiEngine = 'gemini';
         } catch (e) {
-          lastErrMsg = e.message;
+          lastError = e.message;
+          console.warn('Gemini falló:', e);
+        }
+      }
+      if (!answer) {
+        try {
+          answer = await this.queryFreeAI(messages);
+          this.lastAiEngine = 'free';
+        } catch (e) {
+          console.warn('IA gratuita falló:', e);
         }
       }
 
-      return { success: false, message: `Error (${lastErrStatus}): ${lastErrMsg}` };
-    } catch (e) {
-      return { success: false, message: 'Error de red al conectar con Google Gemini.' };
+      if (!answer) {
+        // Último recurso: Wikipedia para preguntas de "qué es / quién es"
+        const n = U.normalize(userText);
+        const topicM = n.match(/^(?:quien es|quien fue|que es|que son|que significa|hablame de|cuentame de)\s+(?:el |la |los |las |un |una )?(.{3,60})$/);
+        if (topicM) {
+          const wiki = await this.wikipedia(topicM[1]);
+          if (wiki) return wiki;
+        }
+        const offline = root.navigator && root.navigator.onLine === false;
+        return {
+          text: offline
+            ? '📴 Estás sin conexión. Puedo hacer cálculos, notas, alarmas y temporizadores, pero para conversar con la IA necesito internet.'
+            : `⚠️ No pude conectar con la IA en este momento${lastError ? ` (Gemini: ${lastError})` : ''}. Inténtalo de nuevo en unos segundos${this.geminiApiKey ? '' : ', o agrega tu clave gratuita de Google Gemini en Ajustes para respuestas más estables'}.`,
+          actions: this.geminiApiKey ? [] : [{ label: 'Abrir Ajustes', view: 'settings' }],
+          error: true
+        };
+      }
+
+      this.remember('user', userText);
+      this.remember('assistant', answer);
+      return { text: answer };
+    }
+
+    /* ---------- Google Gemini ---------- */
+    async listGeminiModels(key) {
+      const res = await U.fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`, {}, 10000);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
+      return (data.models || [])
+        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+        .map(m => m.name.replace(/^models\//, ''));
+    }
+
+    chooseModel(models) {
+      const usable = models.filter(m => /^gemini-/.test(m) && !/(embedding|aqa|tts|image|audio|live|thinking|exp|preview|learnlm)/.test(m));
+      const version = (m) => {
+        const v = m.match(/^gemini-(\d+(?:\.\d+)?)/);
+        return v ? parseFloat(v[1]) : 0;
+      };
+      const rank = (m) => version(m) * 10 + (/-flash$/.test(m) ? 3 : /-flash-latest$/.test(m) ? 2.5 : /flash(?!-lite)/.test(m) ? 2 : /flash-lite/.test(m) ? 1 : /pro/.test(m) ? 0.5 : 0);
+      const sorted = (usable.length ? usable : models).slice().sort((x, y) => rank(y) - rank(x));
+      return sorted[0] || 'gemini-flash-latest';
+    }
+
+    async resolveGeminiModel(key, force = false) {
+      if (this.geminiModel && !force) return this.geminiModel;
+      const models = await this.listGeminiModels(key);
+      this.geminiModel = this.chooseModel(models);
+      S.setRaw('yarbis_gemini_model', this.geminiModel);
+      return this.geminiModel;
+    }
+
+    async geminiRequest(body, retry = true) {
+      const key = this.geminiApiKey;
+      const model = await this.resolveGeminiModel(key);
+      const res = await U.fetchWithTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+        30000
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (retry && (res.status === 404 || res.status === 400 && /model/i.test(JSON.stringify(data)))) {
+          this.geminiModel = '';
+          await this.resolveGeminiModel(key, true);
+          return this.geminiRequest(body, false);
+        }
+        throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
+      }
+      const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+      const text = parts ? parts.map(p => p.text || '').join('').trim() : '';
+      if (!text) {
+        const reason = data.promptFeedback && data.promptFeedback.blockReason;
+        throw new Error(reason ? `respuesta bloqueada (${reason})` : 'respuesta vacía');
+      }
+      return text;
+    }
+
+    queryGemini(messages) {
+      const contents = [];
+      messages.forEach(m => {
+        const role = m.role === 'assistant' ? 'model' : 'user';
+        const last = contents[contents.length - 1];
+        if (last && last.role === role) last.parts[0].text += `\n${m.text}`;
+        else contents.push({ role, parts: [{ text: m.text }] });
+      });
+      if (contents.length && contents[0].role === 'model') contents.shift();
+      return this.geminiRequest({
+        system_instruction: { parts: [{ text: this.systemPrompt() }] },
+        contents,
+        generationConfig: { temperature: 0.6, maxOutputTokens: 1200 }
+      });
+    }
+
+    async testGeminiApiKey(rawKey) {
+      const key = this.cleanKey(rawKey);
+      if (!key) return { success: false, message: 'Pega tu clave primero.' };
+      if (!/^AIza[\w-]{20,}$/.test(key)) {
+        return { success: false, message: 'Esa no parece una clave de Google AI Studio (empieza por "AIza…").' };
+      }
+      const prevKey = this.geminiApiKey;
+      const prevModel = this.geminiModel;
+      try {
+        this.geminiApiKey = key;
+        const model = await this.resolveGeminiModel(key, true);
+        await this.geminiRequest({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 10 } });
+        return { success: true, message: `✅ Clave válida. Modelo: ${model}.`, model };
+      } catch (e) {
+        this.geminiApiKey = prevKey;
+        this.geminiModel = prevModel;
+        if (prevModel) S.setRaw('yarbis_gemini_model', prevModel);
+        else S.remove('yarbis_gemini_model');
+        return { success: false, message: `❌ ${e.name === 'AbortError' ? 'Tiempo de espera agotado.' : e.message}` };
+      }
+    }
+
+    /* ---------- IA gratuita (sin clave) ---------- */
+    async queryFreeAI(messages) {
+      const chat = [
+        { role: 'system', content: this.systemPrompt() },
+        ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }))
+      ];
+      const valid = (t) => t && typeof t === 'string' && t.trim().length > 0 && !/<!doctype|<html/i.test(t) && !/^\s*\{\s*"error"/.test(t);
+
+      // 1) Pollinations (compatible con OpenAI)
+      try {
+        const res = await U.fetchWithTimeout('https://text.pollinations.ai/openai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'openai', messages: chat, referrer: 'yarbis-veneco' })
+        }, 25000);
+        if (res.ok) {
+          const data = await res.json();
+          const t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          if (valid(t)) return t.trim();
+        }
+      } catch (e) {
+        console.warn('Pollinations POST:', e.message);
+      }
+
+      // 2) Pollinations GET (sólo la última pregunta + contexto corto)
+      try {
+        const lastTurns = messages.slice(-4).map(m => `${m.role === 'assistant' ? 'Asistente' : 'Usuario'}: ${m.text}`).join('\n').slice(-1500);
+        const url = `https://text.pollinations.ai/${encodeURIComponent(lastTurns)}?model=openai&system=${encodeURIComponent(this.systemPrompt().slice(0, 900))}&referrer=yarbis-veneco`;
+        const res = await U.fetchWithTimeout(url, {}, 20000);
+        if (res.ok) {
+          const t = await res.text();
+          if (valid(t)) return t.trim();
+        }
+      } catch (e) {
+        console.warn('Pollinations GET:', e.message);
+      }
+
+      // 3) Respaldo comunitario
+      try {
+        const res = await U.fetchWithTimeout('https://api.airforce/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-4o-mini', messages: chat })
+        }, 20000);
+        if (res.ok) {
+          const data = await res.json();
+          const t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          if (valid(t) && !/discord\.gg|rate limit|upgrade your plan/i.test(t)) return t.trim();
+        }
+      } catch (e) {
+        console.warn('Airforce:', e.message);
+      }
+      return null;
+    }
+
+    /* ---------- Visión ---------- */
+    visionPrompt(mode) {
+      if (mode === 'document') return 'Transcribe con exactitud todo el texto visible en la imagen, respetando títulos y listas. Si es una factura, recibo o documento, al final resume los datos clave (montos, fechas, nombres) en una lista.';
+      if (mode === 'translate') return 'Detecta el texto de la imagen y tradúcelo fielmente al español. Muestra primero la traducción y, si es útil, el texto original debajo.';
+      return 'Describe en español lo que ves en la imagen de forma útil y breve: identifica objetos, lugares, personas (sin identificar a nadie por su nombre), textos visibles y cualquier dato relevante.';
+    }
+
+    async analyzeImage(dataUrl, mode = 'general') {
+      const prompt = this.visionPrompt(mode);
+      const base64 = String(dataUrl).replace(/^data:image\/[\w+.-]+;base64,/, '');
+      const errors = [];
+
+      if (this.geminiApiKey) {
+        try {
+          const text = await this.geminiRequest({
+            contents: [{ role: 'user', parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: base64 } }] }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 1500 }
+          });
+          return { text, ok: true };
+        } catch (e) {
+          errors.push(`Gemini: ${e.message}`);
+        }
+      }
+
+      try {
+        const res = await U.fetchWithTimeout('https://text.pollinations.ai/openai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'openai',
+            referrer: 'yarbis-veneco',
+            messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: dataUrl } }] }]
+          })
+        }, 40000);
+        if (res.ok) {
+          const data = await res.json();
+          const t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          if (t && t.trim()) return { text: t.trim(), ok: true };
+        }
+        errors.push(`IA gratuita: HTTP ${res.status}`);
+      } catch (e) {
+        errors.push(`IA gratuita: ${e.message}`);
+      }
+
+      return {
+        ok: false,
+        text: `⚠️ No pude analizar la imagen. ${this.geminiApiKey ? 'Revisa tu clave de Gemini o tu conexión.' : 'Agrega tu clave gratuita de Google Gemini en Ajustes para usar la visión de forma estable.'}`,
+        detail: errors.join(' · ')
+      };
     }
   }
 
-  async queryFreeAI(userText) {
-    const systemPrompt = `Eres YARBIS Veneco, un Asistente Personal de Análisis Financiero y Bursátil Cuantitativo de alto nivel (Cripto, Bolsas Globales, Bolsa de Caracas BVC, Tasas FX e Inflación/Devaluación) para ${this.userName}. Responde con cálculos exactos, tablas limpias, análisis paso a paso y tono técnico, analítico y conciso.`;
-    
-    // Engine 1: Pollinations OpenAI Turbo
-    try {
-      const prompt = encodeURIComponent(`${systemPrompt}\n\nPregunta: ${userText}`);
-      const res = await fetch(`https://text.pollinations.ai/${prompt}?model=openai&seed=${Math.floor(Math.random()*1000)}`, {
-        signal: AbortSignal.timeout(8000)
-      });
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().length > 0 && !text.includes('<!DOCTYPE')) {
-          return text.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Pollinations primary failed:', e);
-    }
+  // Utilidades expuestas para pruebas
+  YARBISBrain.parseDuration = parseDuration;
+  YARBISBrain.parseClock = parseClock;
+  YARBISBrain.parseAmount = parseAmount;
+  YARBISBrain.venezuelanPhone = venezuelanPhone;
+  YARBISBrain.align = align;
 
-    // Engine 2: Pollinations Mistral
-    try {
-      const prompt = encodeURIComponent(`${systemPrompt}\n\nPregunta: ${userText}`);
-      const res = await fetch(`https://text.pollinations.ai/${prompt}?model=mistral`, {
-        signal: AbortSignal.timeout(8000)
-      });
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().length > 0 && !text.includes('<!DOCTYPE')) {
-          return text.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Pollinations fallback failed:', e);
-    }
-
-    // Engine 3: Airforce Free AI Gateway
-    try {
-      const res = await fetch('https://api.airforce/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userText }
-          ]
-        }),
-        signal: AbortSignal.timeout(7000)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.choices && data.choices[0]?.message?.content) {
-          return data.choices[0].message.content.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Airforce AI fallback failed:', e);
-    }
-
-    return `Copiado mi pana ${this.userName}. He procesado tu solicitud: "${userText}". Todo registrado y en orden.`;
-  }
-}
-
-window.YARBISBrain = YARBISBrain;
+  root.YARBISBrain = YARBISBrain;
+})(typeof window !== 'undefined' ? window : globalThis);

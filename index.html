@@ -1,831 +1,629 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="system" data-accent="neon">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>YARBIS VENECO - Asistente Personal AI</title>
-  <meta name="description" content="Asistente de inteligencia artificial por voz personal con bloc de notas, accesos rápidos a aplicaciones y respuestas inteligentes en tiempo real." />
-  
-  <!-- Mobile & PWA Support -->
-  <meta name="theme-color" content="#04070d" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="YARBIS Veneco" />
-  <link rel="manifest" href="manifest.json" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>YARBIS · Asistente personal</title>
+  <meta name="description" content="Asistente personal por voz: tasa del dólar BCV y paralelo, conversiones, calculadora, notas, alarmas, temporizadores, escáner QR y chat con IA." />
 
-  <!-- Direct Fresh Cache Initializer & Global Bridge -->
+  <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b0f17" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="YARBIS" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <!-- Aplica el tema antes de pintar para evitar parpadeos -->
   <script>
     try {
-      if (window.location.protocol.startsWith('http') && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(regs) {
-          for (var r of regs) r.unregister().catch(function(){});
-        }).catch(function(){});
-      }
-      if (window.location.protocol.startsWith('http') && 'caches' in window) {
-        caches.keys().then(function(names) {
-          for (var n of names) caches.delete(n).catch(function(){});
-        }).catch(function(){});
-      }
-    } catch(e) {}
-
-    // Instant Global Bridge for Modals & Launchers
-    window.openSettings = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalSettings');
-      if (m) m.classList.add('active');
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-      if (window.brain && window.renderContactsUI) window.renderContactsUI();
-    };
-    window.closeSettings = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalSettings');
-      if (m) m.classList.remove('active');
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-    };
-    window.openCryptoFinance = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalCryptoFinance');
-      if (m) m.classList.add('active');
-      if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
-      if (window.refreshCryptoPrices) window.refreshCryptoPrices();
-    };
-    window.toggleRateEditor = function() {
-      var p = document.getElementById('panelManualRates');
-      if (p) p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-    };
-    window.switchCryptoTab = function(tabName) {
-      var tabs = {
-        converter: document.getElementById('tabCryptoConverter'),
-        bvc: document.getElementById('tabCryptoBVC'),
-        global: document.getElementById('tabCryptoGlobal'),
-        dca: document.getElementById('tabCryptoDCA'),
-        math: document.getElementById('tabCryptoMath')
-      };
-      var buttons = document.querySelectorAll('.btn-crypto-tab');
-      for (var b of buttons) {
-        if (b.getAttribute('data-tab') === tabName) b.classList.add('active');
-        else b.classList.remove('active');
-      }
-      for (var k in tabs) {
-        if (tabs[k]) {
-          tabs[k].style.display = (k === tabName) ? 'block' : 'none';
-          if (k === tabName) tabs[k].classList.add('active');
-          else tabs[k].classList.remove('active');
-        }
-      }
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-      if (tabName === 'dca' && window.calcDcaUi) window.calcDcaUi();
-      if (tabName === 'converter' && window.calculateCryptoConversion) window.calculateCryptoConversion();
-      if (tabName === 'math' && window.evalInstantMath) window.evalInstantMath();
-    };
-    window.closeCryptoFinance = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalCryptoFinance');
-      if (m) m.classList.remove('active');
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-    };
-    window.openWatermarkCleaner = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalWatermarksCleaner');
-      if (m) m.classList.add('active');
-      if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
-    };
-    window.closeWatermarkCleaner = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalWatermarksCleaner');
-      if (m) m.classList.remove('active');
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-    };
-    window.openCamera = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalCamera');
-      if (m) m.classList.add('active');
-      if (window.audioSynth && window.audioSynth.playScanSound) window.audioSynth.playScanSound();
-      if (window.startCameraStream) window.startCameraStream();
-    };
-    window.closeCamera = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalCamera');
-      if (m) m.classList.remove('active');
-      if (window.stopCameraStream) window.stopCameraStream();
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-    };
-    window.openInstallPwa = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalInstallPwa');
-      if (m) m.classList.add('active');
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-    };
-    window.closeInstallPwa = function(e) {
-      if (e && e.type === 'touchend') e.preventDefault();
-      var m = document.getElementById('modalInstallPwa');
-      if (m) m.classList.remove('active');
-      if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-    };
-    window.launchAppByName = function(appKey) {
-      var map = {
-        whatsapp: { url: 'https://web.whatsapp.com', deep: 'whatsapp://' },
-        youtube: { url: 'https://www.youtube.com', deep: 'vnd.youtube://' },
-        spotify: { url: 'https://open.spotify.com', deep: 'spotify://' },
-        bdv: { url: 'https://bdvenlinea.banvenez.com', deep: null },
-        banesco: { url: 'https://www.banesconline.com', deep: null },
-        pedidosya: { url: 'https://www.pedidosya.com.ve', deep: 'pedidosya://' },
-        yummy: { url: 'https://www.yummy.com.ve', deep: 'yummy://' },
-        mercadolibre: { url: 'https://www.mercadolibre.com.ve', deep: 'mercadolibre://' },
-        maps: { url: 'https://maps.google.com', deep: 'maps://' },
-        chatgpt: { url: 'https://chatgpt.com', deep: null }
-      };
-      var target = map[appKey];
-      if (target) {
-        if (window.audioSynth && window.audioSynth.playClickSound) window.audioSynth.playClickSound();
-        window.open(target.url, '_blank');
-      }
-    };
+      var t = localStorage.getItem('yarbis_theme_mode') || 'system';
+      var a = localStorage.getItem('yarbis_accent') || 'neon';
+      document.documentElement.setAttribute('data-theme', t);
+      document.documentElement.setAttribute('data-accent', a);
+    } catch (e) {}
   </script>
 
-  <!-- Modern Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-
-  <!-- Cache Control for Immediate Updates -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-
-  <!-- Core CSS -->
-  <link rel="stylesheet" href="styles.css?v=10.5.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=11.0.0" />
 </head>
 <body>
+  <!-- Íconos (estilo Lucide) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <defs>
+      <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+      <symbol id="i-notes" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+      <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" rx="2"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 3l14 9-14 9V3z"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/></symbol>
+      <symbol id="i-newchat" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"/></symbol>
+      <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></symbol>
+      <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21M22 21H7M5 11l9 9"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+      <symbol id="i-timer" viewBox="0 0 24 24"><path d="M10 2h4M12 14l3-3"/><circle cx="12" cy="14" r="8"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="i-calc" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M8 6h8M16 14v4M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/></symbol>
+    </defs>
+  </svg>
 
-  <!-- Particle Mesh Background Canvas -->
-  <canvas id="bgParticlesCanvas"></canvas>
+  <div class="app" id="app">
 
-  <div id="app-container">
-    
-    <!-- HEADER BAR -->
-    <header class="hud-header">
-      <div class="brand-title">
-        <div class="brand-logo"></div>
+    <!-- BARRA LATERAL (escritorio) -->
+    <aside class="sidebar" aria-label="Navegación principal">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
         <div class="brand-text">
-          <span class="brand-name" id="displayAssistantName">YARBIS VENECO</span>
-          <span class="brand-sub" id="displayUserGreeting">Tu Asistente Personal de Voz</span>
+          <span class="brand-name" data-bind="assistantName">YARBIS</span>
+          <span class="brand-sub">Asistente personal</span>
         </div>
       </div>
-
-      <div class="hud-status-bar">
-        <div class="status-badge" id="aiStatusBadge" title="Estado de conexión con la Inteligencia Artificial">
-          <div class="status-dot" id="aiStatusDot"></div>
-          <span id="aiStatusText">IA EN VIVO</span>
-        </div>
-        <div class="status-badge" id="statusBadge">
-          <div class="status-dot"></div>
-          <span id="statusText">SISTEMA ACTIVO</span>
-        </div>
-        <div class="hud-clock" id="hudClock">12:00:00</div>
+      <nav class="side-nav">
+        <button type="button" class="nav-item active" data-view="assistant"><svg class="icon"><use href="#i-chat"/></svg><span>Asistente</span></button>
+        <button type="button" class="nav-item" data-view="notes"><svg class="icon"><use href="#i-notes"/></svg><span>Notas</span><span class="nav-badge" id="navNotesBadge" hidden></span></button>
+        <button type="button" class="nav-item" data-view="finance"><svg class="icon"><use href="#i-chart"/></svg><span>Finanzas</span></button>
+        <button type="button" class="nav-item" data-view="more"><svg class="icon"><use href="#i-grid"/></svg><span>Más</span></button>
+      </nav>
+      <div class="side-footer">
+        <div class="side-rate" id="sideRate" title="Tasa BCV">—</div>
+        <button type="button" class="nav-item" data-action="open-settings"><svg class="icon"><use href="#i-settings"/></svg><span>Ajustes</span></button>
       </div>
-    </header>
+    </aside>
 
-    <!-- MAIN APP CONTENT -->
-    <main class="hud-main">
-      
-      <!-- LEFT PANEL: VOICE ORB & QUICK APP LAUNCHER -->
-      <section class="voice-stage active-mobile-panel">
-        
-        <!-- Animated AI Voice Orb Canvas -->
-        <div class="arc-reactor-wrapper" title="Haz clic en el orbe para interactuar">
-          <canvas id="arcReactorCanvas"></canvas>
-        </div>
+    <main class="views">
 
-        <!-- Voice State Display -->
-        <div class="voice-state-display">
-          <div class="state-label">ESTADO DE VOZ</div>
-          <div class="state-value" id="stateValue">EN ESPERA</div>
-        </div>
-
-        <!-- Audio Waveform Visualizer Canvas -->
-        <div class="waveform-box">
-          <canvas id="waveformCanvas"></canvas>
-        </div>
-
-        <!-- Mic & Main Controls -->
-        <div class="mic-controls">
-          <button type="button" class="btn-icon-secondary" id="btnContinuous" onclick="if(window.toggleContinuous) window.toggleContinuous();" title="Modo Manos Libres (Escucha Continua)">🔄</button>
-          <button type="button" class="btn-icon-secondary" id="btnCamera" onclick="if(window.openCamera) window.openCamera();" title="Visión y Escáner IA (Cámara)">📷</button>
-          <button type="button" class="btn-mic-main" id="btnMic" onclick="if(window.toggleMic) window.toggleMic();" title="Pulsar para hablar (Alt + M)">
-            🎙️
-          </button>
-          <button type="button" class="btn-icon-secondary" id="btnInstallPwa" onclick="if(window.openInstallPwa) window.openInstallPwa();" title="Instalar en Pantalla de Inicio">📲</button>
-          <button type="button" class="btn-icon-secondary" id="btnSettings" onclick="if(window.openSettings) window.openSettings();" title="Configuración Personal">⚙️</button>
-        </div>
-
-        <!-- Quick Web App Launcher -->
-        <div class="app-launcher-grid">
-          <button type="button" class="app-pill" data-launch="whatsapp" onclick="window.launchAppByName('whatsapp');" title="Abrir WhatsApp">💬 WhatsApp</button>
-          <button type="button" class="app-pill" data-launch="youtube" onclick="window.launchAppByName('youtube');" title="Abrir YouTube">▶️ YouTube</button>
-          <button type="button" class="app-pill" data-launch="spotify" onclick="window.launchAppByName('spotify');" title="Abrir Spotify">🎵 Spotify</button>
-          <button type="button" class="app-pill" data-launch="bdv" onclick="window.launchAppByName('bdv');" title="Banco de Venezuela (BDV)">🏦 BDV en Línea</button>
-          <button type="button" class="app-pill" data-launch="banesco" onclick="window.launchAppByName('banesco');" title="Banesco Online">💳 Banesco</button>
-          <button type="button" class="app-pill" id="btnLaunchWatermark" onclick="window.openWatermarkCleaner();" title="Limpiador Anti-Marcas de Agua IA" style="background: rgba(0, 255, 102, 0.15); border-color: var(--color-success); color: var(--color-success);">🧹 Anti-Marcas IA</button>
-          <button type="button" class="app-pill" id="btnLaunchCrypto" onclick="window.openCryptoFinance();" title="Radar Cuantitativo, Matemáticas y Criptomonedas" style="background: rgba(0, 243, 255, 0.15); border-color: var(--color-primary); color: var(--color-primary); font-weight: 700;">📊 Cripto & Finanzas IA</button>
-          <button type="button" class="app-pill" data-launch="pedidosya" onclick="window.launchAppByName('pedidosya');" title="PedidosYa Delivery">🍔 PedidosYa</button>
-          <button type="button" class="app-pill" data-launch="yummy" onclick="window.launchAppByName('yummy');" title="Yummy Rides & Food">🛵 Yummy</button>
-          <button type="button" class="app-pill" data-launch="mercadolibre" onclick="window.launchAppByName('mercadolibre');" title="Mercado Libre">🛍️ MercadoLibre</button>
-          <button type="button" class="app-pill" data-launch="maps" onclick="window.launchAppByName('maps');" title="Abrir Google Maps">📍 Maps</button>
-          <button type="button" class="app-pill" data-launch="chatgpt" onclick="window.launchAppByName('chatgpt');" title="Abrir ChatGPT">🤖 ChatGPT</button>
-        </div>
-
-      </section>
-
-      <!-- MIDDLE PANEL: PERSONAL NOTES & REMINDERS WIDGET -->
-      <section class="telemetry-panel">
-        <!-- Active Timer Widget -->
-        <div class="timer-box" id="timerWidget" style="display: none;">
-          <div class="timer-header">
-            <span class="timer-title">⏱️ TEMPORIZADOR ACTIVO</span>
-            <button type="button" class="btn-cancel-timer" id="btnCancelTimer" onclick="if(window.cancelTimer) window.cancelTimer();" title="Cancelar temporizador">✕</button>
+      <!-- ============ ASISTENTE ============ -->
+      <section class="view view-assistant active" id="view-assistant" data-view-name="assistant" aria-label="Asistente">
+        <header class="topbar">
+          <div class="brand brand-compact">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span class="brand-name" data-bind="assistantName">YARBIS</span>
           </div>
-          <div class="timer-display" id="timerDisplay">00:00</div>
-          <div class="progress-bar-bg">
-            <div class="progress-bar-fill" id="timerProgress" style="width: 100%;"></div>
+          <div class="topbar-center">
+            <span class="chip" id="aiChip" title="Motor de inteligencia artificial"><span class="dot"></span><span id="aiChipText">IA gratuita</span></span>
+            <span class="chip chip-timer" id="timerChip" hidden><svg class="icon"><use href="#i-timer"/></svg><span id="timerChipText">00:00</span></span>
+          </div>
+          <div class="topbar-actions">
+            <button type="button" class="icon-btn" id="btnHandsFree" aria-pressed="false" title="Manos libres: escucha continua"><svg class="icon"><use href="#i-headphones"/></svg></button>
+            <button type="button" class="icon-btn" data-action="new-chat" title="Nueva conversación"><svg class="icon"><use href="#i-newchat"/></svg></button>
+            <button type="button" class="icon-btn mobile-only" data-action="open-settings" title="Ajustes"><svg class="icon"><use href="#i-settings"/></svg></button>
+          </div>
+        </header>
+
+        <div class="chat-scroll" id="chatScroll">
+          <div class="welcome" id="welcome">
+            <canvas class="orb-canvas" id="orbCanvas" aria-hidden="true"></canvas>
+            <h1 class="welcome-title" id="welcomeTitle">¡Hola! ¿En qué te ayudo?</h1>
+            <p class="welcome-sub">Toca el micrófono y habla, o escribe abajo.</p>
+            <div class="suggestions" id="suggestions">
+              <button type="button" class="suggestion" data-ask="¿A cómo está el dólar hoy?">💵 ¿A cómo está el dólar?</button>
+              <button type="button" class="suggestion" data-ask="100 dólares a bolívares">💱 100 $ a bolívares</button>
+              <button type="button" class="suggestion" data-ask="Pon un temporizador de 10 minutos">⏱️ Temporizador de 10 min</button>
+              <button type="button" class="suggestion" data-ask="¿Cómo está el clima en Caracas?">🌦️ Clima en Caracas</button>
+              <button type="button" class="suggestion" data-ask="Anota comprar harina PAN">📝 Anota comprar harina</button>
+              <button type="button" class="suggestion" data-ask="¿Qué puedes hacer?">✨ ¿Qué puedes hacer?</button>
+            </div>
+          </div>
+          <div class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+        </div>
+
+        <div class="voice-bar" id="voiceBar" hidden>
+          <canvas class="orb-mini" id="orbMini" aria-hidden="true"></canvas>
+          <div class="voice-bar-text">
+            <span class="voice-state" id="voiceState">Escuchando…</span>
+            <span class="voice-interim" id="voiceInterim"></span>
+          </div>
+          <button type="button" class="btn btn-ghost" id="btnVoiceStop"><svg class="icon"><use href="#i-stop"/></svg>Detener</button>
+        </div>
+
+        <form class="composer" id="composer" autocomplete="off">
+          <button type="button" class="icon-btn" data-action="open-camera" title="Cámara y escáner"><svg class="icon"><use href="#i-camera"/></svg></button>
+          <textarea id="chatInput" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje para el asistente" enterkeyhint="send"></textarea>
+          <button type="submit" class="icon-btn btn-send" id="btnSend" title="Enviar" hidden><svg class="icon"><use href="#i-send"/></svg></button>
+          <button type="button" class="mic-btn" id="btnMic" title="Hablar (Alt + M)" aria-label="Hablar"><svg class="icon"><use href="#i-mic"/></svg></button>
+        </form>
+      </section>
+
+      <!-- ============ NOTAS ============ -->
+      <section class="view" id="view-notes" data-view-name="notes" aria-label="Notas y recordatorios">
+        <header class="page-header">
+          <h2>Notas y recordatorios</h2>
+          <span class="muted" id="notesCount">0 pendientes</span>
+        </header>
+
+        <div class="page-grid">
+          <div class="card card-wide">
+            <div class="card-head">
+              <h3><svg class="icon"><use href="#i-notes"/></svg>Notas</h3>
+              <div class="card-actions">
+                <button type="button" class="btn btn-ghost btn-sm" data-action="notes-clear-done">Quitar hechas</button>
+                <button type="button" class="btn btn-ghost btn-sm danger" data-action="notes-clear-all">Borrar todo</button>
+              </div>
+            </div>
+            <form class="inline-form" id="formNote">
+              <input type="text" id="inputNewNote" placeholder="Nueva nota o recordatorio…" aria-label="Nueva nota" enterkeyhint="done" />
+              <button type="submit" class="btn btn-primary"><svg class="icon"><use href="#i-plus"/></svg>Agregar</button>
+            </form>
+            <div class="toolbar">
+              <div class="segmented" role="group" aria-label="Filtrar notas">
+                <button type="button" class="active" data-filter="all" aria-pressed="true">Todas</button>
+                <button type="button" data-filter="pending" aria-pressed="false">Pendientes</button>
+                <button type="button" data-filter="done" aria-pressed="false">Hechas</button>
+              </div>
+              <label class="search">
+                <svg class="icon"><use href="#i-search"/></svg>
+                <input type="search" id="notesSearch" placeholder="Buscar" aria-label="Buscar notas" />
+              </label>
+            </div>
+            <ul class="list notes-list" id="notesList"></ul>
+            <p class="hint">Toca dos veces una nota (o el lápiz) para editarla.</p>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><svg class="icon"><use href="#i-timer"/></svg>Temporizadores</h3>
+            </div>
+            <div class="chip-row">
+              <button type="button" class="chip-btn" data-timer="60">1 min</button>
+              <button type="button" class="chip-btn" data-timer="300">5 min</button>
+              <button type="button" class="chip-btn" data-timer="600">10 min</button>
+              <button type="button" class="chip-btn" data-timer="900">15 min</button>
+              <button type="button" class="chip-btn" data-timer="1800">30 min</button>
+              <button type="button" class="chip-btn" data-timer="3600">1 hora</button>
+            </div>
+            <form class="inline-form" id="formTimer">
+              <input type="number" id="timerMinutes" min="0.1" step="any" inputmode="decimal" placeholder="Minutos" aria-label="Minutos" />
+              <input type="text" id="timerLabel" placeholder="Nombre (opcional)" aria-label="Nombre del temporizador" />
+              <button type="submit" class="btn btn-primary">Iniciar</button>
+            </form>
+            <ul class="list" id="timersList"></ul>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3><svg class="icon"><use href="#i-bell"/></svg>Alarmas</h3>
+            </div>
+            <form class="inline-form" id="formAlarm">
+              <input type="time" id="alarmTime" aria-label="Hora de la alarma" required />
+              <input type="text" id="alarmLabel" placeholder="Motivo (opcional)" aria-label="Motivo de la alarma" />
+              <button type="submit" class="btn btn-primary">Agregar</button>
+            </form>
+            <ul class="list" id="alarmsList"></ul>
+            <p class="hint">Mantén la app abierta (o instalada) para que la alarma suene a tiempo.</p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============ FINANZAS ============ -->
+      <section class="view" id="view-finance" data-view-name="finance" aria-label="Finanzas">
+        <header class="page-header">
+          <div>
+            <h2>Finanzas</h2>
+            <span class="muted" id="fxStatus">Cargando tasas…</span>
+          </div>
+          <div class="header-actions">
+            <button type="button" class="btn btn-ghost" id="btnFxManual"><svg class="icon"><use href="#i-edit"/></svg><span>Ajustar</span></button>
+            <button type="button" class="btn btn-secondary" id="btnFxRefresh"><svg class="icon"><use href="#i-refresh"/></svg><span>Actualizar</span></button>
+          </div>
+        </header>
+
+        <div class="manual-banner" id="manualBanner" hidden>
+          <span>Estás usando tasas fijadas manualmente.</span>
+          <button type="button" class="btn btn-sm btn-secondary" id="btnFxLive">Volver a tasas en vivo</button>
+        </div>
+
+        <div class="rate-grid" id="rateCards"></div>
+        <div class="crypto-row" id="cryptoCards"></div>
+
+        <div class="page-grid">
+          <div class="card">
+            <div class="card-head"><h3><svg class="icon"><use href="#i-swap"/></svg>Convertidor</h3></div>
+            <div class="converter">
+              <label class="field">
+                <span>Monto</span>
+                <input type="text" id="convAmount" inputmode="decimal" value="100" aria-label="Monto a convertir" />
+              </label>
+              <div class="converter-pair">
+                <label class="field"><span>De</span><select id="convFrom"></select></label>
+                <button type="button" class="icon-btn" id="convSwap" title="Invertir"><svg class="icon"><use href="#i-swap"/></svg></button>
+                <label class="field"><span>A</span><select id="convTo"></select></label>
+              </div>
+              <div class="chip-row" id="convQuick">
+                <button type="button" class="chip-btn" data-amount="1">1</button>
+                <button type="button" class="chip-btn" data-amount="10">10</button>
+                <button type="button" class="chip-btn" data-amount="20">20</button>
+                <button type="button" class="chip-btn" data-amount="50">50</button>
+                <button type="button" class="chip-btn" data-amount="100">100</button>
+                <button type="button" class="chip-btn" data-amount="1000">1.000</button>
+              </div>
+              <div class="result-box">
+                <span class="result-value" id="convResult">—</span>
+                <span class="muted" id="convRate"></span>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" id="convCopy"><svg class="icon"><use href="#i-copy"/></svg>Copiar resultado</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3><svg class="icon"><use href="#i-calc"/></svg>Calculadoras</h3></div>
+            <div class="segmented scrollable" role="tablist" id="calcTabs">
+              <button type="button" class="active" data-calc="basic">Calculadora</button>
+              <button type="button" data-calc="dca">DCA</button>
+              <button type="button" data-calc="compound">Interés</button>
+              <button type="button" data-calc="loan">Préstamo</button>
+              <button type="button" data-calc="deval">Devaluación</button>
+              <button type="button" data-calc="spread">Spread</button>
+            </div>
+
+            <div class="calc-panel active" data-panel="basic">
+              <label class="field">
+                <span>Expresión</span>
+                <input type="text" id="calcExpr" placeholder="Ej: (1500 * 1.16) / 36,5  ·  15% de 200  ·  sqrt(144)" autocomplete="off" />
+              </label>
+              <div class="result-box"><span class="result-value" id="calcResult">0</span></div>
+              <p class="hint">Admite + − × ÷ ^ %, paréntesis, sqrt, log, ln, sin, cos y frases como "15% de 200".</p>
+            </div>
+
+            <div class="calc-panel" data-panel="dca">
+              <p class="hint">Precio promedio de varias compras del mismo activo.</p>
+              <div id="dcaRows" class="dca-rows"></div>
+              <button type="button" class="btn btn-ghost btn-sm" id="dcaAdd"><svg class="icon"><use href="#i-plus"/></svg>Agregar compra</button>
+              <div class="result-box" id="dcaResult"></div>
+            </div>
+
+            <div class="calc-panel" data-panel="compound">
+              <div class="form-grid">
+                <label class="field"><span>Capital inicial ($)</span><input type="number" id="ciPrincipal" value="1000" inputmode="decimal" /></label>
+                <label class="field"><span>Tasa anual (%)</span><input type="number" id="ciRate" value="10" inputmode="decimal" /></label>
+                <label class="field"><span>Años</span><input type="number" id="ciYears" value="5" inputmode="decimal" /></label>
+                <label class="field"><span>Aporte mensual ($)</span><input type="number" id="ciMonthly" value="0" inputmode="decimal" /></label>
+                <label class="field"><span>Capitalización</span>
+                  <select id="ciFreq"><option value="12">Mensual</option><option value="4">Trimestral</option><option value="1">Anual</option><option value="365">Diaria</option></select>
+                </label>
+              </div>
+              <div class="result-box" id="ciResult"></div>
+            </div>
+
+            <div class="calc-panel" data-panel="loan">
+              <div class="form-grid">
+                <label class="field"><span>Monto del préstamo</span><input type="number" id="loanAmount" value="1000" inputmode="decimal" /></label>
+                <label class="field"><span>Tasa anual (%)</span><input type="number" id="loanRate" value="24" inputmode="decimal" /></label>
+                <label class="field"><span>Plazo (meses)</span><input type="number" id="loanMonths" value="12" inputmode="numeric" /></label>
+              </div>
+              <div class="result-box" id="loanResult"></div>
+            </div>
+
+            <div class="calc-panel" data-panel="deval">
+              <p class="hint">¿Cuánto vale en dólares un monto en bolívares si la tasa sube?</p>
+              <div class="form-grid">
+                <label class="field"><span>Monto (Bs.)</span><input type="number" id="devAmount" value="10000" inputmode="decimal" /></label>
+                <label class="field"><span>Tasa inicial</span><input type="number" id="devStart" inputmode="decimal" /></label>
+                <label class="field"><span>Tasa final</span><input type="number" id="devEnd" inputmode="decimal" /></label>
+                <label class="field"><span>Interés ganado (%)</span><input type="number" id="devInterest" value="0" inputmode="decimal" /></label>
+              </div>
+              <div class="result-box" id="devResult"></div>
+            </div>
+
+            <div class="calc-panel" data-panel="spread">
+              <p class="hint">Ganancia de comprar a un precio y vender a otro (por ejemplo USDT en P2P).</p>
+              <div class="form-grid">
+                <label class="field"><span>Precio de compra</span><input type="number" id="spBuy" inputmode="decimal" /></label>
+                <label class="field"><span>Precio de venta</span><input type="number" id="spSell" inputmode="decimal" /></label>
+                <label class="field"><span>Comisión por operación (%)</span><input type="number" id="spFee" value="0.1" inputmode="decimal" /></label>
+                <label class="field"><span>Monto a operar</span><input type="number" id="spAmount" value="100" inputmode="decimal" /></label>
+              </div>
+              <div class="result-box" id="spResult"></div>
+            </div>
+          </div>
+
+          <div class="card card-wide">
+            <div class="card-head"><h3>Pregúntale a la IA</h3></div>
+            <form class="inline-form" id="formFinanceAsk">
+              <input type="text" id="financeAsk" placeholder="Ej: ¿Me conviene ahorrar en USDT o en bolívares a plazo fijo?" aria-label="Pregunta financiera" />
+              <button type="submit" class="btn btn-primary">Preguntar</button>
+            </form>
+            <p class="hint">Las cifras de las tasas vienen de fuentes públicas (DolarApi, Binance, CoinGecko, ExchangeRate‑API). Son referenciales.</p>
           </div>
         </div>
-
-        <!-- Scheduled Alarms Widget -->
-        <div id="alarmsContainer" style="margin-bottom: 12px; display: none;">
-          <div style="font-size: 0.75rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 4px;">⏰ ALARMAS PROGRAMADAS:</div>
-          <div id="alarmsList" style="display: flex; flex-direction: column; gap: 4px;"></div>
-        </div>
-
-        <div class="panel-header">
-          <span class="panel-title">MIS NOTAS Y RECORDATORIOS</span>
-          <span class="hud-indicator" id="notesCount">0 NOTAS</span>
-        </div>
-
-        <!-- Create Note Input Bar -->
-        <div class="note-input-box">
-          <input type="text" id="inputNewNote" placeholder="Escribe una nueva nota o recordatorio..." />
-          <button type="button" id="btnAddNote" onclick="if(window.addNoteFromInput) window.addNoteFromInput();">＋ Guardar</button>
-        </div>
-
-        <!-- Notes Filter Chips -->
-        <div class="notes-filter-bar">
-          <button class="filter-chip active" data-filter="all">Todas</button>
-          <button class="filter-chip" data-filter="pending">Pendientes</button>
-          <button class="filter-chip" data-filter="completed">Completadas</button>
-          <button type="button" class="filter-chip btn-clear-all" id="btnClearNotes" onclick="if(window.clearAllNotes) window.clearAllNotes();">🗑️ Limpiar</button>
-        </div>
-
-        <!-- Notes Scrollable List -->
-        <div class="notes-scroll notes-list" id="notesScroll"></div>
       </section>
 
-      <!-- RIGHT PANEL: CONVERSATION HUD TERMINAL -->
-      <section class="terminal-panel">
-        <div class="panel-header">
-          <span class="panel-title">TERMINAL DE RESPUESTAS & REGISTROS</span>
-          <button type="button" class="btn-clear-logs" id="btnClearLogs" onclick="if(window.clearLogs) window.clearLogs();" title="Limpiar conversación">Limpiar</button>
+      <!-- ============ MÁS ============ -->
+      <section class="view" id="view-more" data-view-name="more" aria-label="Más herramientas">
+        <header class="page-header"><h2>Herramientas</h2></header>
+
+        <div class="tool-grid">
+          <button type="button" class="tool" data-action="open-camera" data-mode="qr"><span class="tool-icon"><svg class="icon"><use href="#i-scan"/></svg></span><span class="tool-title">Lector QR</span><span class="tool-sub">Funciona sin internet</span></button>
+          <button type="button" class="tool" data-action="open-camera" data-mode="general"><span class="tool-icon"><svg class="icon"><use href="#i-camera"/></svg></span><span class="tool-title">Cámara con IA</span><span class="tool-sub">Objetos, documentos y traducción</span></button>
+          <button type="button" class="tool" data-action="open-cleaner"><span class="tool-icon"><svg class="icon"><use href="#i-eraser"/></svg></span><span class="tool-title">Purificador de texto</span><span class="tool-sub">Quita caracteres invisibles de IA</span></button>
+          <button type="button" class="tool" data-action="open-settings"><span class="tool-icon"><svg class="icon"><use href="#i-settings"/></svg></span><span class="tool-title">Ajustes</span><span class="tool-sub">Voz, tema, IA y agenda</span></button>
+          <button type="button" class="tool" data-action="install"><span class="tool-icon"><svg class="icon"><use href="#i-phone"/></svg></span><span class="tool-title">Instalar app</span><span class="tool-sub">Pantalla de inicio</span></button>
         </div>
 
-        <div class="transcript-scroll" id="transcriptScroll"></div>
-
-        <div class="input-bar">
-          <input type="text" id="textInput" placeholder="Escribe un comando o pregunta a YARBIS..." />
-          <button type="button" id="btnSend" onclick="if(window.submitTextInput) window.submitTextInput();">Enviar</button>
+        <h3 class="section-title">Accesos rápidos</h3>
+        <div class="app-grid">
+          <a class="app-tile" href="https://wa.me/" target="_blank" rel="noopener"><span>💬</span>WhatsApp</a>
+          <a class="app-tile" href="https://www.youtube.com" target="_blank" rel="noopener"><span>▶️</span>YouTube</a>
+          <a class="app-tile" href="https://open.spotify.com" target="_blank" rel="noopener"><span>🎵</span>Spotify</a>
+          <a class="app-tile" href="https://maps.google.com" target="_blank" rel="noopener"><span>📍</span>Maps</a>
+          <a class="app-tile" href="https://bdvenlinea.banvenez.com/" target="_blank" rel="noopener"><span>🏦</span>BDV</a>
+          <a class="app-tile" href="https://www.banesconline.com/" target="_blank" rel="noopener"><span>💳</span>Banesco</a>
+          <a class="app-tile" href="https://www.mercantilbanco.com/" target="_blank" rel="noopener"><span>🏛️</span>Mercantil</a>
+          <a class="app-tile" href="https://www.patria.org.ve/" target="_blank" rel="noopener"><span>🇻🇪</span>Patria</a>
+          <a class="app-tile" href="https://www.pedidosya.com.ve" target="_blank" rel="noopener"><span>🍔</span>PedidosYa</a>
+          <a class="app-tile" href="https://www.yummy.com.ve" target="_blank" rel="noopener"><span>🛵</span>Yummy</a>
+          <a class="app-tile" href="https://www.mercadolibre.com.ve" target="_blank" rel="noopener"><span>🛍️</span>MercadoLibre</a>
+          <a class="app-tile" href="https://mail.google.com" target="_blank" rel="noopener"><span>✉️</span>Gmail</a>
         </div>
+
+        <p class="about">YARBIS v11 · Hecho en 🇻🇪 · Tus datos se guardan sólo en este dispositivo.</p>
       </section>
-
     </main>
 
-    <!-- MOBILE NAVIGATION BOTTOM TABS -->
-    <nav class="mobile-nav-tabs">
-      <button type="button" class="mobile-tab-btn active" data-tab="voice" onclick="if(window.switchTab) window.switchTab('voice');">
-        <span class="tab-icon">🎙️</span>
-        <span class="tab-label">Voz</span>
-      </button>
-      <button type="button" class="mobile-tab-btn" data-tab="notes" onclick="if(window.switchTab) window.switchTab('notes');">
-        <span class="tab-icon">📝</span>
-        <span class="tab-label">Notas</span>
-      </button>
-      <button type="button" class="mobile-tab-btn" data-tab="chat" onclick="if(window.switchTab) window.switchTab('chat');">
-        <span class="tab-icon">💬</span>
-        <span class="tab-label">Chat</span>
-      </button>
+    <!-- BARRA INFERIOR (móvil) -->
+    <nav class="tabbar" aria-label="Navegación">
+      <button type="button" class="tab active" data-view="assistant"><svg class="icon"><use href="#i-chat"/></svg><span>Asistente</span></button>
+      <button type="button" class="tab" data-view="notes"><svg class="icon"><use href="#i-notes"/></svg><span>Notas</span><span class="tab-badge" id="tabNotesBadge" hidden></span></button>
+      <button type="button" class="tab" data-view="finance"><svg class="icon"><use href="#i-chart"/></svg><span>Finanzas</span></button>
+      <button type="button" class="tab" data-view="more"><svg class="icon"><use href="#i-grid"/></svg><span>Más</span></button>
     </nav>
-
-    <!-- FOOTER BAR -->
-    <footer class="hud-footer">
-      <div class="protocol-buttons">
-        <button class="btn-protocol" data-theme="default">🔵 Neón</button>
-        <button class="btn-protocol" data-theme="theme-mark85">🔴 Mark 85</button>
-        <button class="btn-protocol" data-theme="theme-warmachine">⚪ War Machine</button>
-        <button class="btn-protocol" data-theme="theme-spideriron">🕷️ Spider-Iron</button>
-        <button class="btn-protocol" data-theme="theme-wakanda">🟣 Wakanda</button>
-        <button class="btn-protocol" data-theme="theme-stealth">🟢 Sigilo</button>
-        <button class="btn-protocol" data-theme="theme-hulkbuster">🟡 Hulkbuster</button>
-      </div>
-
-      <div class="hud-copyright">
-        YARBIS VENECO AI 8.0 ULTIMATE • ASISTENTE PERSONAL INTELIGENTE
-      </div>
-    </footer>
-
   </div>
 
-  <!-- WATERMARKS & AI PROVENANCE REMOVER MODAL -->
-  <div class="modal-backdrop" id="modalWatermarksCleaner">
-    <div class="modal-box watermark-modal-box">
-      <div class="watermark-modal-header">
-        <h3 class="modal-title">🛡️ PURIFICADOR ANTI-MARCAS IA</h3>
-        <span class="hud-indicator" id="watermarkStatusBadge">LISTO</span>
-      </div>
-
-      <p style="font-size: 0.76rem; color: var(--color-text-dim); margin: 4px 0 8px 0;">
-        Elimina tokens invisibles de ancho cero (ZWSP, ZWJ, BOM), espacios no estándar y metadatos de rastreo de ChatGPT, Claude o Gemini.
-      </p>
-
-      <!-- Input Text Area -->
-      <div class="watermark-input-container">
-        <textarea id="txtWatermarkInput" placeholder="Pega aquí el texto generado por IA para desinfectar..."></textarea>
-      </div>
-
-      <!-- Live Scan Telemetry HUD -->
-      <div class="watermark-hud-stats">
-        <div class="watermark-stat-card">
-          <span class="stat-label">TOKENS INVISIBLES</span>
-          <span class="stat-value" id="valZeroWidthTokens">0</span>
-        </div>
-        <div class="watermark-stat-card">
-          <span class="stat-label">PATRONES IA</span>
-          <span class="stat-value" id="valAiPatterns">0</span>
-        </div>
-        <div class="watermark-stat-card">
-          <span class="stat-label">ESTADO</span>
-          <span class="stat-value" id="valPurityScore" style="color: var(--color-success);">100% LIMPIO</span>
-        </div>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="watermark-actions-row">
-        <button type="button" class="btn-wm-action primary" id="btnSanitizeText" onclick="if(window.sanitizeWatermarkText) window.sanitizeWatermarkText();">
-          🧹 Limpiar y Desinfectar
-        </button>
-        <button type="button" class="btn-wm-action secondary" id="btnHumanizeText" onclick="if(window.humanizeWatermarkText) window.humanizeWatermarkText();">
-          ✨ Humanizar Redacción
-        </button>
-      </div>
-
-      <!-- Output Cleaned Text Area -->
-      <div class="watermark-output-container">
-        <div class="output-header-bar">
-          <span style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">RESULTADO SANITIZADO:</span>
-          <div style="display: flex; gap: 6px;">
-            <button type="button" class="btn-wm-small" id="btnCopyCleanedText" onclick="if(window.copyCleanedWatermarkText) window.copyCleanedWatermarkText();">📋 Copiar</button>
-            <button type="button" class="btn-wm-small" id="btnSaveCleanedAsNote" onclick="if(window.saveCleanedAsNote) window.saveCleanedAsNote();">📝 Guardar Nota</button>
-          </div>
-        </div>
-        <textarea id="txtWatermarkOutput" readonly placeholder="El texto desinfectado y natural aparecerá aquí..."></textarea>
-      </div>
-
-      <div class="modal-actions" style="margin-top: 10px;">
-        <button type="button" class="btn-modal-close" id="btnCloseWatermarkModal" onclick="if(window.closeWatermarkCleaner) window.closeWatermarkCleaner();" style="width: 100%;">Cerrar Purificador</button>
-      </div>
+  <!-- ============ DIÁLOGO: AJUSTES ============ -->
+  <dialog class="sheet" id="dlgSettings" aria-labelledby="settingsTitle">
+    <div class="sheet-head">
+      <h2 id="settingsTitle">Ajustes</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
-  </div>
-
-  <!-- FINANCIAL & STOCK MARKET RADAR TERMINAL MODAL -->
-  <div class="modal-backdrop" id="modalCryptoFinance">
-    <div class="modal-box" style="max-width: 660px; width: 95%;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-        <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">🏛️ TERMINAL FINANCIERO & BURSÁTIL STARK</h3>
-        <div style="display: flex; gap: 6px;">
-          <button type="button" class="btn-wm-small" id="btnToggleRateEditor" onclick="window.toggleRateEditor();" title="Editar tasas manualmente">✏️ Ajustar Tasas</button>
-          <button type="button" class="btn-wm-small" id="btnRefreshCrypto" onclick="if(window.refreshCryptoPrices) window.refreshCryptoPrices();" title="Actualizar datos en vivo">🔄 Actualizar</button>
+    <div class="sheet-body">
+      <section class="settings-section">
+        <h3>Perfil</h3>
+        <div class="form-grid">
+          <label class="field"><span>Tu nombre</span><input type="text" id="setUserName" placeholder="¿Cómo te digo?" maxlength="30" /></label>
+          <label class="field"><span>Nombre del asistente</span><input type="text" id="setAssistantName" placeholder="YARBIS" maxlength="20" /></label>
         </div>
-      </div>
+      </section>
 
-      <!-- Quick Manual Rate Override Panel -->
-      <div id="panelManualRates" style="display: none; background: rgba(0, 0, 0, 0.7); border: 1px solid var(--color-primary); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
-        <div style="font-size: 0.75rem; color: var(--color-primary); font-family: var(--font-hud); font-weight: 700; margin-bottom: 6px;">
-          ✏️ CONFIGURACIÓN PERSONALIZADA DE TASAS Y PRECIOS:
+      <section class="settings-section">
+        <h3>Apariencia</h3>
+        <div class="segmented" role="group" aria-label="Tema" id="setThemeMode">
+          <button type="button" data-mode="system">Sistema</button>
+          <button type="button" data-mode="light">Claro</button>
+          <button type="button" data-mode="dark">Oscuro</button>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
-          <div>
-            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Dólar BCV (Bs.):</label>
-            <input type="number" id="inputCustomBcv" step="0.01" value="773.31" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
-          </div>
-          <div>
-            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Dólar Paralelo (Bs.):</label>
-            <input type="number" id="inputCustomParalelo" step="0.01" value="889.65" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
-          </div>
-          <div>
-            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Euro BCV (Bs.):</label>
-            <input type="number" id="inputCustomEur" step="0.01" value="896.03" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
-          </div>
-          <div>
-            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Bitcoin ($ USD):</label>
-            <input type="number" id="inputCustomBtc" step="1" value="64792" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
-          </div>
-          <div>
-            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Ethereum ($ USD):</label>
-            <input type="number" id="inputCustomEth" step="1" value="1910" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
-          </div>
-          <div>
-            <label style="font-size: 0.65rem; color: var(--color-text-dim);">Solana ($ USD):</label>
-            <input type="number" id="inputCustomSol" step="0.1" value="76.8" style="width: 100%; font-size: 0.75rem; padding: 4px;" />
-          </div>
+        <div class="swatches" id="setAccent" role="group" aria-label="Color">
+          <button type="button" class="swatch" data-accent="neon" title="Neón"></button>
+          <button type="button" class="swatch" data-accent="spideriron" title="Spider-Iron"></button>
+          <button type="button" class="swatch" data-accent="wakanda" title="Wakanda"></button>
+          <button type="button" class="swatch" data-accent="mark85" title="Mark 85"></button>
+          <button type="button" class="swatch" data-accent="hulkbuster" title="Hulkbuster"></button>
+          <button type="button" class="swatch" data-accent="stealth" title="Sigilo"></button>
+          <button type="button" class="swatch" data-accent="warmachine" title="War Machine"></button>
         </div>
-        <div style="display: flex; gap: 6px; justify-content: flex-end;">
-          <button type="button" class="btn-wm-small" onclick="window.resetRatesToBase();" style="background: rgba(255,255,255,0.1);">⚡ Valores Base</button>
-          <button type="button" class="btn-wm-small" onclick="window.saveCustomRates();" style="background: var(--color-primary); color: #000; font-weight: 700;">💾 Guardar y Aplicar</button>
-        </div>
-      </div>
+      </section>
 
-      <!-- Live FX & Market Strip -->
-      <div class="crypto-ticker-strip" id="cryptoTickerStrip">
-        <div class="crypto-card-ticker" id="tickerBTC"><span class="ticker-symbol">BTC</span><span class="ticker-price">$64,792.00</span><span class="ticker-change positive">+1.50%</span></div>
-        <div class="crypto-card-ticker" id="tickerETH"><span class="ticker-symbol">ETH</span><span class="ticker-price">$1,910.50</span><span class="ticker-change negative">-0.20%</span></div>
-        <div class="crypto-card-ticker" id="tickerSOL"><span class="ticker-symbol">SOL</span><span class="ticker-price">$76.77</span><span class="ticker-change positive">+0.80%</span></div>
-        <div class="crypto-card-ticker" id="tickerBCV"><span class="ticker-symbol">USD BCV</span><span class="ticker-price">Bs. 773.31</span><span class="ticker-change" style="color: var(--color-primary);">Oficial</span></div>
-        <div class="crypto-card-ticker" id="tickerUSDT"><span class="ticker-symbol">USDT/VES</span><span class="ticker-price">Bs. 889.65</span><span class="ticker-change negative">+15.0% spread</span></div>
-      </div>
-
-      <!-- Sub-Tabs Selector -->
-      <div class="crypto-tabs-bar" style="overflow-x: auto; scrollbar-width: none;">
-        <button type="button" class="btn-crypto-tab active" data-tab="converter" onclick="if(window.switchCryptoTab) window.switchCryptoTab('converter');">💱 Convertidor Universal</button>
-        <button type="button" class="btn-crypto-tab" data-tab="bvc" onclick="if(window.switchCryptoTab) window.switchCryptoTab('bvc');">🇻🇪 Tasas Venezuela & BVC</button>
-        <button type="button" class="btn-crypto-tab" data-tab="global" onclick="if(window.switchCryptoTab) window.switchCryptoTab('global');">📈 Wall Street</button>
-        <button type="button" class="btn-crypto-tab" data-tab="dca" onclick="if(window.switchCryptoTab) window.switchCryptoTab('dca');">🧮 DCA & Arbitraje</button>
-        <button type="button" class="btn-crypto-tab" data-tab="math" onclick="if(window.switchCryptoTab) window.switchCryptoTab('math');">🧠 Motor Matemático</button>
-      </div>
-
-      <!-- TAB 1: CONVERTER UNIVERSAL MULTIDIVISA -->
-      <div class="crypto-tab-content active" id="tabCryptoConverter">
-        <div style="display: grid; grid-template-columns: 1fr 40px 1fr; gap: 6px; align-items: flex-end; margin-bottom: 8px;">
-          <div>
-            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">DE (ORIGEN):</label>
-            <input type="number" id="inputCryptoAmount" value="100" placeholder="100" style="width: 100%; margin-bottom: 4px;" oninput="if(window.calculateCryptoConversion) window.calculateCryptoConversion();" />
-            <select id="selectFromCurrency" style="width: 100%; font-size: 0.75rem;" onchange="if(window.calculateCryptoConversion) window.calculateCryptoConversion();">
-              <option value="USD" selected>🇺🇸 USD - Dólar USA</option>
-              <option value="VES_BCV">🇻🇪 VES - Bolívar (BCV Oficial)</option>
-              <option value="VES_PARALELO">🇻🇪 VES - Bolívar (Paralelo)</option>
-              <option value="USDT">💵 USDT - Tether P2P</option>
-              <option value="EUR">💶 EUR - Euro</option>
-              <option value="COP">🇨🇴 COP - Peso Colombiano</option>
-              <option value="BRL">🇧🇷 BRL - Real Brasileño</option>
-              <option value="MXN">🇲🇽 MXN - Peso Mexicano</option>
-              <option value="PEN">🇵🇪 PEN - Sol Peruano</option>
-              <option value="CLP">🇨🇱 CLP - Peso Chileno</option>
-              <option value="ARS">🇦🇷 ARS - Peso Argentino</option>
-              <option value="GBP">🇬🇧 GBP - Libra Esterlina</option>
-              <option value="JPY">🇯🇵 JPY - Yen Japonés</option>
-              <option value="CAD">🇨🇦 CAD - Dólar Canadiense</option>
-              <option value="CNY">🇨🇳 CNY - Yuan Chino</option>
-              <option value="RUB">🇷🇺 RUB - Rublo Ruso</option>
-              <option value="BTC">🪙 BTC - Bitcoin</option>
-              <option value="ETH">🪙 ETH - Ethereum</option>
-              <option value="SOL">🪙 SOL - Solana</option>
-              <option value="BNB">🪙 BNB - Binance Coin</option>
-              <option value="XRP">🪙 XRP - Ripple</option>
+      <section class="settings-section">
+        <h3>Voz</h3>
+        <div class="form-grid">
+          <label class="field"><span>Idioma de reconocimiento</span>
+            <select id="setLang">
+              <option value="es-ES">Español (España)</option>
+              <option value="es-US">Español (Latinoamérica / EE. UU.)</option>
+              <option value="es-VE">Español (Venezuela)</option>
+              <option value="es-MX">Español (México)</option>
+              <option value="es-CO">Español (Colombia)</option>
+              <option value="en-US">English (US)</option>
             </select>
-          </div>
-
-          <div style="text-align: center; margin-bottom: 6px;">
-            <button type="button" class="btn-wm-small" onclick="if(window.swapCurrencies) window.swapCurrencies();" title="Invertir divisas" style="padding: 6px 8px; width: 100%;">⇄</button>
-          </div>
-
-          <div>
-            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">A (DESTINO):</label>
-            <div style="height: 28px; display: flex; align-items: center; justify-content: flex-end; font-size: 0.7rem; color: var(--color-text-dim); margin-bottom: 4px;">Conversión en vivo</div>
-            <select id="selectToCurrency" style="width: 100%; font-size: 0.75rem;" onchange="if(window.calculateCryptoConversion) window.calculateCryptoConversion();">
-              <option value="VES_BCV" selected>🇻🇪 VES - Bolívar (BCV Oficial)</option>
-              <option value="VES_PARALELO">🇻🇪 VES - Bolívar (Paralelo)</option>
-              <option value="USD">🇺🇸 USD - Dólar USA</option>
-              <option value="USDT">💵 USDT - Tether P2P</option>
-              <option value="EUR">💶 EUR - Euro</option>
-              <option value="COP">🇨🇴 COP - Peso Colombiano</option>
-              <option value="BRL">🇧🇷 BRL - Real Brasileño</option>
-              <option value="MXN">🇲🇽 MXN - Peso Mexicano</option>
-              <option value="PEN">🇵🇪 PEN - Sol Peruano</option>
-              <option value="CLP">🇨🇱 CLP - Peso Chileno</option>
-              <option value="ARS">🇦🇷 ARS - Peso Argentino</option>
-              <option value="GBP">🇬🇧 GBP - Libra Esterlina</option>
-              <option value="JPY">🇯🇵 JPY - Yen Japonés</option>
-              <option value="CAD">🇨🇦 CAD - Dólar Canadiense</option>
-              <option value="CNY">🇨🇳 CNY - Yuan Chino</option>
-              <option value="RUB">🇷🇺 RUB - Rublo Ruso</option>
-              <option value="BTC">🪙 BTC - Bitcoin</option>
-              <option value="ETH">🪙 ETH - Ethereum</option>
-              <option value="SOL">🪙 SOL - Solana</option>
-              <option value="BNB">🪙 BNB - Binance Coin</option>
-              <option value="XRP">🪙 XRP - Ripple</option>
+          </label>
+          <label class="field"><span>Voz del asistente</span><select id="setVoice"></select></label>
+          <label class="field"><span>Leer respuestas en voz alta</span>
+            <select id="setSpeakMode">
+              <option value="voice">Sólo cuando hablo</option>
+              <option value="always">Siempre</option>
+              <option value="never">Nunca</option>
             </select>
-          </div>
+          </label>
+          <label class="field"><span>Tono <output id="outPitch">1.0</output></span><input type="range" id="setPitch" min="0.6" max="1.5" step="0.05" /></label>
+          <label class="field"><span>Velocidad <output id="outRate">1.0</output></span><input type="range" id="setRate" min="0.7" max="1.6" step="0.05" /></label>
         </div>
+        <div class="row">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnTestVoice"><svg class="icon"><use href="#i-volume"/></svg>Probar voz</button>
+          <label class="switch"><input type="checkbox" id="setSfx" /><span>Efectos de sonido</span></label>
+        </div>
+      </section>
 
-        <div class="crypto-result-box" id="boxConversionResult">
-          <div style="font-size: 0.72rem; color: var(--color-text-dim);">RESULTADO ESTIMADO:</div>
-          <div style="font-size: 1.2rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-hud);" id="lblConversionResult">Calculando...</div>
-          <div style="font-size: 0.72rem; color: var(--color-text-dim); margin-top: 2px;" id="lblConversionRate">Cotización en tiempo real</div>
+      <section class="settings-section">
+        <h3>Inteligencia artificial</h3>
+        <p class="hint">Sin clave, YARBIS usa una IA gratuita (puede fallar a veces). Con tu clave gratuita de <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a> las respuestas y la visión son más rápidas y estables.</p>
+        <div class="inline-form">
+          <input type="password" id="setGeminiKey" placeholder="Clave de Gemini (AIza…)" autocomplete="off" spellcheck="false" aria-label="Clave de Gemini" />
+          <button type="button" class="btn btn-ghost btn-sm" id="btnToggleKey">Mostrar</button>
         </div>
+        <div class="row">
+          <button type="button" class="btn btn-primary btn-sm" id="btnSaveKey">Guardar y probar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnRemoveKey">Quitar clave</button>
+          <span class="muted small" id="keyStatus"></span>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3>Agenda de contactos</h3>
+        <p class="hint">Para "llama a mamá" o "manda un WhatsApp a Carlos".</p>
+        <form class="inline-form" id="formContact">
+          <input type="text" id="contactName" placeholder="Nombre" aria-label="Nombre del contacto" />
+          <input type="tel" id="contactPhone" placeholder="0414 1234567" aria-label="Teléfono" />
+          <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+        </form>
+        <div class="row">
+          <button type="button" class="btn btn-ghost btn-sm" id="btnPickContacts"><svg class="icon"><use href="#i-users"/></svg>Importar del teléfono</button>
+          <label class="btn btn-ghost btn-sm"><svg class="icon"><use href="#i-upload"/></svg>Importar .vcf<input type="file" id="vcfFile" accept=".vcf,text/vcard,text/x-vcard" hidden /></label>
+        </div>
+        <ul class="list contacts-list" id="contactsList"></ul>
+      </section>
+
+      <section class="settings-section">
+        <h3>Tus datos</h3>
+        <p class="hint">Todo se guarda sólo en este dispositivo. Haz una copia para pasarla a otro teléfono.</p>
+        <div class="row">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnExport"><svg class="icon"><use href="#i-download"/></svg>Exportar copia</button>
+          <label class="btn btn-secondary btn-sm"><svg class="icon"><use href="#i-upload"/></svg>Restaurar copia<input type="file" id="importFile" accept="application/json,.json" hidden /></label>
+          <button type="button" class="btn btn-ghost btn-sm danger" id="btnWipe"><svg class="icon"><use href="#i-trash"/></svg>Borrar todo</button>
+        </div>
+      </section>
+    </div>
+  </dialog>
+
+  <!-- ============ DIÁLOGO: CÁMARA ============ -->
+  <dialog class="sheet sheet-camera" id="dlgCamera" aria-labelledby="cameraTitle">
+    <div class="sheet-head">
+      <h2 id="cameraTitle">Cámara</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="segmented scrollable" role="group" aria-label="Modo de escaneo">
+      <button type="button" data-scan-mode="general">Objeto</button>
+      <button type="button" data-scan-mode="document">Documento</button>
+      <button type="button" data-scan-mode="translate">Traducir</button>
+      <button type="button" data-scan-mode="qr">QR</button>
+    </div>
+    <div class="camera-view">
+      <video id="cameraVideo" autoplay playsinline muted></video>
+      <div class="reticle" aria-hidden="true"></div>
+    </div>
+    <p class="camera-hint" id="cameraHint"></p>
+    <div class="camera-controls">
+      <label class="icon-btn" title="Subir desde la galería"><svg class="icon"><use href="#i-image"/></svg><input type="file" id="cameraGallery" accept="image/*" hidden /></label>
+      <button type="button" class="btn btn-primary btn-capture" id="btnCameraCapture">Analizar con IA</button>
+      <button type="button" class="icon-btn" id="btnCameraTorch" title="Linterna" hidden><svg class="icon"><use href="#i-zap"/></svg></button>
+      <button type="button" class="icon-btn" id="btnCameraSwitch" title="Cambiar cámara"><svg class="icon"><use href="#i-repeat"/></svg></button>
+    </div>
+  </dialog>
+
+  <!-- ============ DIÁLOGO: PURIFICADOR ============ -->
+  <dialog class="sheet" id="dlgCleaner" aria-labelledby="cleanerTitle">
+    <div class="sheet-head">
+      <h2 id="cleanerTitle">Purificador de texto</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <p class="hint">Elimina caracteres invisibles (ancho cero, BOM, controles de dirección), espacios raros y, si quieres, suaviza muletillas típicas de textos generados por IA.</p>
+      <textarea id="txtCleanInput" rows="6" placeholder="Pega aquí el texto…" aria-label="Texto a limpiar"></textarea>
+      <div class="stat-row">
+        <div class="stat"><span class="stat-value" id="cleanInvisible">0</span><span class="stat-label">invisibles</span></div>
+        <div class="stat"><span class="stat-value" id="cleanSpaces">0</span><span class="stat-label">espacios raros</span></div>
+        <div class="stat"><span class="stat-value" id="cleanPhrases">0</span><span class="stat-label">muletillas IA</span></div>
       </div>
-
-      <!-- TAB 2: TASAS VENEZUELA (BCV/PARALELO) & BOLSA DE CARACAS -->
-      <div class="crypto-tab-content" id="tabCryptoBVC" style="display: none;">
-        <!-- Monitor Cambiario Venezuela Grid -->
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
-          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💵 DÓLAR BCV</span><span class="ticker-price" id="cardBcvRate">Bs. 773.31</span><span class="ticker-change" style="color:var(--color-primary);">Oficial</span></div>
-          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">📈 PARALELO</span><span class="ticker-price" id="cardParallelRate">Bs. 889.65</span><span class="ticker-change negative" id="cardSpreadRate">+15.0% Brecha</span></div>
-          <div class="crypto-card-ticker" style="padding: 6px;"><span class="ticker-symbol">💶 EURO BCV</span><span class="ticker-price" id="cardEurRate">Bs. 896.03</span><span class="ticker-change positive">Oficial</span></div>
-        </div>
-
-        <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud); margin-bottom: 6px; display: flex; justify-content: space-between;">
-          <span>🏛️ ÍNDICE BURSÁTIL DE CARACAS (IBC): 89,450.20 (+0.94%)</span>
-          <span style="color: var(--color-text-dim);">Acciones BVC</span>
-        </div>
-        <div style="max-height: 140px; overflow-y: auto; border: 1px solid var(--hud-glass-border); border-radius: 8px; margin-bottom: 8px;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
-            <thead>
-              <tr style="background: rgba(0,0,0,0.6); color: var(--color-primary); border-bottom: 1px solid var(--hud-glass-border);">
-                <th style="padding: 6px 8px;">Ticker</th>
-                <th style="padding: 6px 8px;">Empresa</th>
-                <th style="padding: 6px 8px;">Precio VES</th>
-                <th style="padding: 6px 8px;">Equiv. USD</th>
-                <th style="padding: 6px 8px;">Var 24h</th>
-              </tr>
-            </thead>
-            <tbody id="tblBvcBody">
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">MVZ.A</td><td style="padding: 5px 8px;">Mercantil A</td><td style="padding: 5px 8px;">Bs. 185.50</td><td style="padding: 5px 8px; color:var(--color-primary);">$2.97</td><td style="padding: 5px 8px; color:var(--color-success);">+1.64%</td></tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">MVZ.B</td><td style="padding: 5px 8px;">Mercantil B</td><td style="padding: 5px 8px;">Bs. 172.00</td><td style="padding: 5px 8px; color:var(--color-primary);">$2.75</td><td style="padding: 5px 8px; color:#ff3366;">-0.58%</td></tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">RST</td><td style="padding: 5px 8px;">Ron Sta. Teresa</td><td style="padding: 5px 8px;">Bs. 42.80</td><td style="padding: 5px 8px; color:var(--color-primary);">$0.68</td><td style="padding: 5px 8px; color:var(--color-success);">+2.15%</td></tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">BNC</td><td style="padding: 5px 8px;">Banco Nac. Crédito</td><td style="padding: 5px 8px;">Bs. 2.45</td><td style="padding: 5px 8px; color:var(--color-primary);">$0.04</td><td style="padding: 5px 8px; color:var(--color-text-dim);">0.00%</td></tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">TDV.D</td><td style="padding: 5px 8px;">CANTV Clase D</td><td style="padding: 5px 8px;">Bs. 16.90</td><td style="padding: 5px 8px; color:var(--color-primary);">$0.27</td><td style="padding: 5px 8px; color:#ff3366;">-1.17%</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="crypto-result-box" style="font-size: 0.72rem; color: var(--color-text-dim);">
-          💡 <strong>Valoración Multidivisa:</strong> Los precios en USD se calculan con base en la tasa oficial BCV del día para auditar el rendimiento real ajustado a la devaluación.
-        </div>
+      <div class="row">
+        <button type="button" class="btn btn-primary" id="btnCleanSanitize">Limpiar</button>
+        <button type="button" class="btn btn-secondary" id="btnCleanHumanize">Limpiar y suavizar</button>
       </div>
-
-      <!-- TAB 3: BOLSAS GLOBALES (WALL STREET) -->
-      <div class="crypto-tab-content" id="tabCryptoGlobal" style="display: none;">
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px;">
-          <div class="crypto-card-ticker"><span class="ticker-symbol">S&P 500</span><span class="ticker-price">5,980.50</span><span class="ticker-change positive">+0.45%</span></div>
-          <div class="crypto-card-ticker"><span class="ticker-symbol">NASDAQ 100</span><span class="ticker-price">21,120.30</span><span class="ticker-change positive">+0.82%</span></div>
-          <div class="crypto-card-ticker"><span class="ticker-symbol">DOW JONES</span><span class="ticker-price">43,890.10</span><span class="ticker-change negative">-0.12%</span></div>
-        </div>
-        <div style="max-height: 140px; overflow-y: auto; border: 1px solid var(--hud-glass-border); border-radius: 8px;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
-            <thead>
-              <tr style="background: rgba(0,0,0,0.6); color: var(--color-primary); border-bottom: 1px solid var(--hud-glass-border);">
-                <th style="padding: 6px 8px;">Ticker</th>
-                <th style="padding: 6px 8px;">Empresa</th>
-                <th style="padding: 6px 8px;">Precio</th>
-                <th style="padding: 6px 8px;">P/E</th>
-                <th style="padding: 6px 8px;">Div. Yield</th>
-                <th style="padding: 6px 8px;">Var</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">NVDA</td><td style="padding: 5px 8px;">Nvidia Corp</td><td style="padding: 5px 8px;">$142.50</td><td style="padding: 5px 8px;">48.2</td><td style="padding: 5px 8px;">0.03%</td><td style="padding: 5px 8px; color:var(--color-success);">+2.40%</td></tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">AAPL</td><td style="padding: 5px 8px;">Apple Inc</td><td style="padding: 5px 8px;">$232.80</td><td style="padding: 5px 8px;">34.1</td><td style="padding: 5px 8px;">0.43%</td><td style="padding: 5px 8px; color:var(--color-success);">+0.35%</td></tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);"><td style="padding: 5px 8px; font-weight:700;">TSLA</td><td style="padding: 5px 8px;">Tesla Inc</td><td style="padding: 5px 8px;">$345.20</td><td style="padding: 5px 8px;">88.4</td><td style="padding: 5px 8px;">0.00%</td><td style="padding: 5px 8px; color:#ff3366;">-1.25%</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- TAB 4: DCA & ARBITRAJE -->
-      <div class="crypto-tab-content" id="tabCryptoDCA" style="display: none;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-          <div>
-            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO COMPRA 1 ($ / U):</label>
-            <input type="number" id="inputDcaP1" value="60000" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
-            <label style="font-size: 0.7rem; color: var(--color-text-dim); margin-top: 4px; display:block;">Monto Invertido ($):</label>
-            <input type="number" id="inputDcaA1" value="500" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
-          </div>
-          <div>
-            <label style="font-size: 0.7rem; color: var(--color-primary); font-family: var(--font-hud);">PRECIO COMPRA 2 ($ / U):</label>
-            <input type="number" id="inputDcaP2" value="50000" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
-            <label style="font-size: 0.7rem; color: var(--color-text-dim); margin-top: 4px; display:block;">Monto Invertido ($):</label>
-            <input type="number" id="inputDcaA2" value="500" style="width: 100%;" oninput="if(window.calcDcaUi) window.calcDcaUi();" />
-          </div>
-        </div>
-        <div class="crypto-result-box" id="boxDcaResult">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 0.72rem; color: var(--color-text-dim);">PRECIO PROMEDIO PONDERADO (DCA):</div>
-              <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-hud);" id="lblDcaAvg">$54,545.45 USD</div>
-            </div>
-            <div style="text-align: right;">
-              <div style="font-size: 0.72rem; color: var(--color-text-dim);">TOTAL INVERTIDO:</div>
-              <div style="font-size: 1.15rem; font-weight: 700; color: #fff; font-family: var(--font-hud);" id="lblDcaTotal">$1,000.00 USD</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 5: MOTOR MATEMÁTICO & AUDITORÍA BURSÁTIL IA -->
-      <div class="crypto-tab-content" id="tabCryptoMath" style="display: none;">
-        <!-- Instant Mathematical Calculator -->
-        <div style="background: rgba(0,0,0,0.5); border: 1px solid var(--hud-glass-border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">🧮 CALCULADORA MATEMÁTICA INSTANTÁNEA:</label>
-            <span id="lblMathInstantResult" style="font-size: 0.85rem; font-weight: 700; color: var(--color-success); font-family: var(--font-mono);">0</span>
-          </div>
-          <input type="text" id="inputInstantMath" placeholder="Ej: (1500 * 1.16) / 62.40  o  sqrt(144) + 15%" style="width: 100%; font-family: var(--font-mono); font-size: 0.85rem; padding: 6px 10px;" oninput="if(window.evalInstantMath) window.evalInstantMath();" />
-        </div>
-
-        <!-- Quick Mathematical & Financial Presets -->
-        <div style="display: flex; gap: 4px; overflow-x: auto; margin-bottom: 8px; scrollbar-width: none;">
-          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('compound');" title="Interés Compuesto APY">📈 Interés Compuesto</button>
-          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('devaluation');" title="Devaluación e Inflación VES">🇻🇪 Devaluación VES</button>
-          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('arbitrage');" title="Margen de Arbitraje Cripto/P2P">⚖️ Spread Arbitraje</button>
-          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('rule3');" title="Regla de Tres / Proporciones">📐 Regla de Tres</button>
-          <button type="button" class="btn-wm-small" onclick="window.applyMathPreset('loan');" title="Cuota de Préstamo / Amortización">🏦 Cuota Préstamo</button>
-        </div>
-
-        <!-- AI Deep Financial & Mathematical Auditor -->
-        <label style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">CONSULTA FINANCIERA, MODELO DE ARBITRAJE O VALORACIÓN BVC:</label>
-        <textarea id="txtMathQuery" rows="3" placeholder="Ej: Analiza el rendimiento de comprar 10,000 acciones de Mercantil (MVZ.A) a Bs. 150 y venderlas a Bs. 185, con una tasa BCV que pasa de 58 a 62.40, descontando 1% de corretaje..." style="width: 100%; margin-top: 4px; margin-bottom: 8px;"></textarea>
-        <div style="display: flex; gap: 6px;">
-          <button type="button" class="btn-capture-scan" id="btnSolveMath" onclick="if(window.solveMathProblem) window.solveMathProblem();" style="flex: 1; justify-content: center;">
-            ⚡ Auditar y Resolver con Precisión Stark
-          </button>
-          <button type="button" class="btn-wm-small" onclick="if(window.generateWebhookJson) window.generateWebhookJson();" title="Generar Solicitud JSON estructurada para Webhook">
-            📦 JSON Webhook
-          </button>
-        </div>
-        <div class="crypto-result-box" id="boxMathOutput" style="margin-top: 8px; display: none;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <div style="font-size: 0.72rem; color: var(--color-primary); font-family: var(--font-hud);">DESGLOSE MATEMÁTICO & AUDITORÍA BURSÁTIL:</div>
-            <button type="button" class="btn-wm-small" onclick="window.copyMathOutput();" title="Copiar desglose">📋 Copiar</button>
-          </div>
-          <div id="lblMathOutput" style="font-size: 0.82rem; line-height: 1.4; color: #fff; white-space: pre-wrap; font-family: var(--font-mono);"></div>
-        </div>
-      </div>
-
-      <div class="modal-actions" style="margin-top: 12px;">
-        <button type="button" class="btn-modal-close" onclick="if(window.closeCryptoFinance) window.closeCryptoFinance();" style="width: 100%;">Cerrar Terminal Financiero</button>
+      <textarea id="txtCleanOutput" rows="6" readonly placeholder="El resultado aparecerá aquí" aria-label="Texto limpio"></textarea>
+      <div class="row">
+        <button type="button" class="btn btn-ghost btn-sm" id="btnCleanCopy"><svg class="icon"><use href="#i-copy"/></svg>Copiar</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnCleanSaveNote"><svg class="icon"><use href="#i-notes"/></svg>Guardar como nota</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <!-- CAMERA VISION SCANNER MODAL -->
-  <div class="modal-backdrop" id="modalCamera">
-    <div class="camera-modal-box">
-      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 8px;">
-        <h3 class="modal-title" style="margin: 0; font-size: 1rem;">📷 VISIÓN ARTIFICIAL STARK</h3>
-        <div style="display: flex; gap: 6px;">
-          <button type="button" class="btn-camera-tool" id="btnToggleFlash" onclick="if(window.toggleCameraFlash) window.toggleCameraFlash();" title="Encender Linterna/Flash">🔦</button>
-          <button type="button" class="btn-camera-tool" id="btnSwitchCamera" onclick="if(window.switchCamera) window.switchCamera();" title="Cambiar Cámara (Frontal/Trasera)">🔄</button>
-          <label for="inputUploadGallery" class="btn-camera-tool" style="cursor: pointer; margin: 0;" title="Subir foto desde la galería">📂<input type="file" id="inputUploadGallery" accept="image/*" style="display: none;" onchange="if(window.handleGalleryUpload) window.handleGalleryUpload(event);" /></label>
-        </div>
+  <!-- ============ DIÁLOGO: TASAS MANUALES ============ -->
+  <dialog class="sheet" id="dlgRates" aria-labelledby="ratesTitle">
+    <div class="sheet-head">
+      <h2 id="ratesTitle">Ajustar tasas</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="sheet-body" id="formRates" method="dialog">
+      <p class="hint">Fija tus propias tasas (por ejemplo, la de tu casa de cambio). Deja vacío lo que quieras seguir viendo en vivo.</p>
+      <div class="form-grid">
+        <label class="field"><span>Dólar BCV (Bs.)</span><input type="number" step="any" id="mrBcv" inputmode="decimal" /></label>
+        <label class="field"><span>Dólar paralelo (Bs.)</span><input type="number" step="any" id="mrPar" inputmode="decimal" /></label>
+        <label class="field"><span>Euro BCV (Bs.)</span><input type="number" step="any" id="mrEur" inputmode="decimal" /></label>
+        <label class="field"><span>Bitcoin ($)</span><input type="number" step="any" id="mrBtc" inputmode="decimal" /></label>
+        <label class="field"><span>Ethereum ($)</span><input type="number" step="any" id="mrEth" inputmode="decimal" /></label>
+        <label class="field"><span>Solana ($)</span><input type="number" step="any" id="mrSol" inputmode="decimal" /></label>
       </div>
+      <div class="row end">
+        <button type="button" class="btn btn-ghost" id="btnRatesClear">Usar tasas en vivo</button>
+        <button type="submit" class="btn btn-primary" id="btnRatesSave">Guardar</button>
+      </div>
+    </form>
+  </dialog>
 
-      <!-- Scan Mode Selector -->
-      <div class="camera-mode-selector">
-        <button type="button" class="btn-camera-mode active" data-mode="general" onclick="if(window.setScanMode) window.setScanMode('general');">🔍 Objeto</button>
-        <button type="button" class="btn-camera-mode" data-mode="document" onclick="if(window.setScanMode) window.setScanMode('document');">📄 Documento / OCR</button>
-        <button type="button" class="btn-camera-mode" data-mode="translate" onclick="if(window.setScanMode) window.setScanMode('translate');">🌐 Traducir</button>
-        <button type="button" class="btn-camera-mode" data-mode="qr" onclick="if(window.setScanMode) window.setScanMode('qr');">📱 QR / Código</button>
+  <!-- ============ DIÁLOGO: INSTALAR ============ -->
+  <dialog class="sheet" id="dlgInstall" aria-labelledby="installTitle">
+    <div class="sheet-head">
+      <h2 id="installTitle">Instalar YARBIS</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="steps" id="installIos">
+        <h3>iPhone / iPad (Safari)</h3>
+        <ol>
+          <li>Toca <strong>Compartir</strong> (el cuadrado con la flecha hacia arriba).</li>
+          <li>Elige <strong>Agregar a inicio</strong>.</li>
+          <li>Toca <strong>Agregar</strong>. Listo: se abrirá a pantalla completa.</li>
+        </ol>
       </div>
-      
-      <div class="camera-preview-container">
-        <video id="videoCamera" autoplay playsinline muted></video>
-        <div class="camera-hud-reticle">
-          <span class="camera-reticle-corner top-left"></span>
-          <span class="camera-reticle-corner top-right"></span>
-          <span class="camera-reticle-corner bottom-left"></span>
-          <span class="camera-reticle-corner bottom-right"></span>
-        </div>
-        <div class="camera-laser-scan"></div>
-        <canvas id="canvasCameraSnapshot" style="display: none;"></canvas>
-      </div>
-
-      <div class="camera-controls-bar">
-        <button type="button" class="btn-modal-close" id="btnCloseCamera" onclick="if(window.closeCamera) window.closeCamera();" style="padding: 10px 18px;">Cerrar</button>
-        <button type="button" class="btn-capture-scan" id="btnCaptureScan" onclick="if(window.captureScan) window.captureScan();">
-          <span id="txtCaptureBtn">📸 Escanear con IA</span>
-        </button>
+      <div class="steps" id="installAndroid">
+        <h3>Android (Chrome)</h3>
+        <ol>
+          <li>Toca el menú <strong>⋮</strong> arriba a la derecha.</li>
+          <li>Elige <strong>Instalar aplicación</strong> o <strong>Agregar a pantalla principal</strong>.</li>
+        </ol>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <!-- PWA INSTALL GUIDE MODAL -->
-  <div class="modal-backdrop" id="modalInstallPwa">
-    <div class="modal-box">
-      <h3 class="modal-title">INSTALAR YARBIS EN TU IPHONE</h3>
-      
-      <div class="pwa-step-card">
-        <div class="pwa-step-icon">1️⃣</div>
-        <div class="pwa-step-text">Toca el botón <strong>Compartir (⬆️)</strong> en la barra inferior de Safari.</div>
-      </div>
-
-      <div class="pwa-step-card">
-        <div class="pwa-step-icon">2️⃣</div>
-        <div class="pwa-step-text">Desliza hacia abajo y selecciona <strong>"Agregar a Inicio (➕)"</strong>.</div>
-      </div>
-
-      <div class="pwa-step-card">
-        <div class="pwa-step-icon">3️⃣</div>
-        <div class="pwa-step-text">Presiona <strong>"Agregar"</strong> arriba a la derecha. ¡Listo! YARBIS abrirá en pantalla completa como una app real.</div>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-modal-save" id="btnCloseInstallPwa" onclick="if(window.closeInstallPwa) window.closeInstallPwa();" style="width: 100%;">¡Entendido!</button>
+  <!-- ============ DIÁLOGO: ALARMA SONANDO ============ -->
+  <dialog class="sheet sheet-ring" id="dlgRinging" aria-labelledby="ringTitle">
+    <div class="ring-body">
+      <div class="ring-icon"><svg class="icon"><use href="#i-bell"/></svg></div>
+      <h2 id="ringTitle">¡Alarma!</h2>
+      <p id="ringText"></p>
+      <div class="row center">
+        <button type="button" class="btn btn-secondary" id="btnRingSnooze">Posponer 5 min</button>
+        <button type="button" class="btn btn-primary" id="btnRingStop">Detener</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <!-- SETTINGS MODAL -->
-  <div class="modal-backdrop" id="modalSettings">
-    <div class="modal-box">
-      <h3 class="modal-title">CONFIGURACIÓN DEL ASISTENTE</h3>
-      
-      <div class="form-group">
-        <label for="inputAssistantName">Nombre de tu Asistente:</label>
-        <input type="text" id="inputAssistantName" placeholder="Ej: Aria, Jarvis, Asistente..." />
-      </div>
-
-      <div class="form-group">
-        <label for="inputUserName">Tu Nombre / Apodo:</label>
-        <input type="text" id="inputUserName" placeholder="Ej: Usuario, Alex, Carlos..." />
-      </div>
-
-      <div class="form-group">
-        <label for="selectLanguage">Idioma de Voz:</label>
-        <select id="selectLanguage">
-          <option value="es-ES" selected>Español (España / Latino)</option>
-          <option value="en-US">English (US)</option>
-        </select>
-      </div>
-
-      <!-- Voice Pitch and Rate Modulators -->
-      <div class="form-group">
-        <label>Modulador de Voz de YARBIS:</label>
-        <div style="margin-bottom: 8px;">
-          <span style="font-size: 0.75rem; color: #fff;">Tono (Pitch / Grave - Agudo):</span>
-          <div class="slider-group">
-            <input type="range" id="sliderVoicePitch" min="0.6" max="1.4" step="0.05" value="1.0" />
-            <span class="slider-val-badge" id="valVoicePitch">1.0</span>
-          </div>
-        </div>
-        <div>
-          <span style="font-size: 0.75rem; color: #fff;">Velocidad de Habla:</span>
-          <div class="slider-group">
-            <input type="range" id="sliderVoiceRate" min="0.8" max="1.4" step="0.05" value="1.05" />
-            <span class="slider-val-badge" id="valVoiceRate">1.05x</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>Agenda Telefónica & Contactos del Teléfono:</label>
-        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;">
-          <button type="button" id="btnImportPhoneContacts" style="background: rgba(var(--color-primary-rgb), 0.25); border: 1px solid var(--color-primary); color: var(--color-primary); border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; cursor: pointer; font-family: var(--font-hud); display: flex; align-items: center; gap: 4px;">📲 Importar Contactos del Teléfono</button>
-          <label for="inputVcfFile" style="background: rgba(255, 255, 255, 0.1); border: 1px solid var(--hud-glass-border); color: #fff; border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; cursor: pointer; font-family: var(--font-hud); display: flex; align-items: center; gap: 4px; margin: 0;">📂 Cargar Archivo .VCF <input type="file" id="inputVcfFile" accept=".vcf" style="display: none;" /></label>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <input type="text" id="inputContactName" placeholder="Nombre (Ej: Mamá, Papá, Carlos)..." style="flex: 1;" />
-          <input type="text" id="inputContactPhone" placeholder="Teléfono (Ej: 04141234567)..." style="flex: 1;" />
-          <button type="button" id="btnAddContact" style="background: var(--color-primary); color: #000; border: none; border-radius: 6px; padding: 0 12px; font-weight: 700; cursor: pointer; font-family: var(--font-hud);">Guardar</button>
-        </div>
-        <div id="contactsListDisplay" style="font-size: 0.72rem; color: var(--color-text-dim); margin-top: 4px; max-height: 70px; overflow-y: auto;"></div>
-      </div>
-
-      <div class="form-group" style="background: rgba(var(--color-primary-rgb), 0.08); border: 1px dashed var(--color-primary); border-radius: 8px; padding: 10px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-          <label style="font-weight: 700; color: var(--color-primary);">🧠 Motor de Inteligencia Artificial:</label>
-          <span style="background: var(--color-success); color: #000; font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; font-family: var(--font-hud);">🟢 100% AUTOMÁTICO</span>
-        </div>
-        <p style="font-size: 0.72rem; color: #e2e8f0; margin: 0 0 8px 0; line-height: 1.3;">
-          ¡No necesitas crear ninguna clave! YARBIS ya incluye su propio cerebro de Inteligencia Artificial en tiempo real gratis.
-        </p>
-
-        <label for="inputGeminiKey" style="font-size: 0.7rem; color: var(--color-text-dim);">Clave Personal de Google Gemini (Opcional):</label>
-        <div style="display: flex; gap: 6px; margin-top: 4px;">
-          <input type="password" id="inputGeminiKey" placeholder="Pega tu clave AI Studio si deseas usar tu propia cuenta..." style="flex: 1; font-size: 0.75rem;" />
-          <button type="button" id="btnTestKey" style="background: rgba(var(--color-primary-rgb), 0.2); border: 1px solid var(--color-primary); color: var(--color-primary); border-radius: 6px; padding: 0 10px; font-size: 0.72rem; cursor: pointer; font-family: var(--font-hud);">Probar</button>
-        </div>
-        <span id="keyTestResult" style="font-size: 0.7rem; color: var(--color-text-dim); display: block; margin-top: 4px;"></span>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-modal-close" id="btnCloseSettings" onclick="if(window.closeSettings) window.closeSettings();">Cancelar</button>
-        <button type="button" class="btn-modal-save" id="btnSaveSettings" onclick="if(window.saveSettings) window.saveSettings();">Guardar Cambios</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- App Scripts (Bypass cache) -->
-  <script src="js/audioEffects.js?v=10.5.0"></script>
-  <script src="js/arcReactor.js?v=10.5.0"></script>
-  <script src="js/speechEngine.js?v=10.5.0"></script>
-  <script src="js/yarbisBrain.js?v=10.5.0"></script>
-  <script src="js/app.js?v=10.5.0"></script>
-
+  <script src="js/utils.js?v=11.0.0"></script>
+  <script src="js/audioEffects.js?v=11.0.0"></script>
+  <script src="js/mathEngine.js?v=11.0.0"></script>
+  <script src="js/finance.js?v=11.0.0"></script>
+  <script src="js/reminders.js?v=11.0.0"></script>
+  <script src="js/cleaner.js?v=11.0.0"></script>
+  <script src="js/camera.js?v=11.0.0"></script>
+  <script src="js/voiceOrb.js?v=11.0.0"></script>
+  <script src="js/speechEngine.js?v=11.0.0"></script>
+  <script src="js/yarbisBrain.js?v=11.0.0"></script>
+  <script src="js/financeView.js?v=11.0.0"></script>
+  <script src="js/settings.js?v=11.0.0"></script>
+  <script src="js/app.js?v=11.0.0"></script>
 </body>
 </html>
