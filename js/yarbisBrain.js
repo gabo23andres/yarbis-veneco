@@ -653,7 +653,10 @@
             text: sentence(`⏰ Alarma para las **${U.fmtTime(at)}**${repText ? ` · 🔁 ${repText}` : isTomorrow ? ' (mañana)' : ''}${label !== 'Alarma' ? ` · ${label}` : ''}`),
             speak: sentence(`Alarma programada para las ${U.fmtTime(at)}${repText ? `, ${repText.toLowerCase()}` : isTomorrow ? ' de mañana' : ''}`),
             effect: { type: 'REMINDER', id: alarm && alarm.id },
-            actions: [{ label: 'Ver alarmas', view: 'notes' }],
+            actions: [
+              { label: '📅 Que suene con la app cerrada', command: 'phone-alarm', value: { title: label, at: alarm ? alarm.at : at, repeat } },
+              { label: 'Ver alarmas', view: 'notes' }
+            ],
             sound: 'success'
           };
         }
@@ -1136,7 +1139,7 @@
           return { text: `No tengo el número de ${U.capitalize(who)}. Guárdalo en Ajustes o di "guarda el contacto ${who} 0414 1234567".`, actions: [{ label: 'Abrir agenda', view: 'settings' }] };
         }
         const num = found[0].phone;
-        const sms = `sms:${num}?body=${encodeURIComponent(body)}`;
+        const sms = root.YarbisApps ? root.YarbisApps.smsUrl(num, body) : `sms:${num}?body=${encodeURIComponent(body)}`;
         const wa = `https://wa.me/${venezuelanPhone(num)}?text=${encodeURIComponent(body)}`;
         const isSms = msgM[1] !== 'mensaje';
         return {
@@ -2088,6 +2091,46 @@ Reglas:
         console.warn('IA gratuita (respaldo):', e.message);
       }
       return null;
+    }
+
+    /* ---------- Voz a texto (cuando el navegador no reconoce voz) ---------- */
+    canTranscribe() {
+      const P = root.YarbisAIProviders;
+      return !!this.geminiApiKey || !!(P && P.canTranscribe && P.canTranscribe());
+    }
+
+    async transcribeAudio(blob, lang = 'es-ES') {
+      const errors = [];
+      const langName = /^en/i.test(lang) ? 'inglés' : /^pt/i.test(lang) ? 'portugués' : /^fr/i.test(lang) ? 'francés' : /^it/i.test(lang) ? 'italiano' : /^de/i.test(lang) ? 'alemán' : 'español';
+      if (this.geminiApiKey) {
+        try {
+          const data = await root.YarbisRecorder.blobToBase64(blob);
+          const mime = String(blob.type || 'audio/webm').split(';')[0];
+          const text = await this.geminiRequest({
+            contents: [{
+              role: 'user',
+              parts: [
+                { text: `Transcribe exactamente lo que dice esta grabación (está en ${langName}). Escribe sólo las palabras dichas, sin comillas, sin traducir y sin comentarios. Si no se entiende ninguna palabra, responde exactamente: [vacío]` },
+                { inline_data: { mime_type: mime, data } }
+              ]
+            }],
+            generationConfig: { temperature: 0, maxOutputTokens: 1000 }
+          });
+          const clean = String(text).replace(/^["“'\s]+|["”'\s]+$/g, '').trim();
+          return /^\[?vac[ií]o\]?\.?$/i.test(clean) ? '' : clean;
+        } catch (e) {
+          errors.push(`Gemini: ${e.message}`);
+        }
+      }
+      const P = root.YarbisAIProviders;
+      if (P && P.canTranscribe && P.canTranscribe()) {
+        try {
+          return await P.transcribe(blob, lang);
+        } catch (e) {
+          errors.push(`${P.label()}: ${e.message}`);
+        }
+      }
+      throw new Error(errors.join(' · ') || 'agrega tu clave de Gemini en Ajustes');
     }
 
     /* ---------- Visión ---------- */

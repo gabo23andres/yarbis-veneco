@@ -34,6 +34,9 @@
       root.speechEngine = this.speech;
       this.brain = new root.YARBISBrain();
       root.brain = this.brain;
+      // Si el navegador no reconoce voz, se graba y la IA lo convierte en texto
+      this.speech.transcriber = (blob, lang) => this.brain.transcribeAudio(blob, lang);
+      this.speech.canTranscribe = () => this.brain.canTranscribe();
       this.finance = root.YarbisFinance;
       this.reminders = root.YarbisReminders;
 
@@ -86,10 +89,76 @@
           a.setAttribute('href', appHref);
           a.removeAttribute('target');
         }
-        a.addEventListener('click', () => this.haptic());
+        a.addEventListener('click', (e) => {
+          this.haptic();
+          // iPhone: abrir la app con su esquema si está instalada
+          if (plat === 'ios' && root.YarbisApps.iosScheme(web)) {
+            e.preventDefault();
+            root.YarbisApps.open(web);
+          }
+        });
       });
       const standalone = root.matchMedia && root.matchMedia('(display-mode: standalone)').matches || root.navigator.standalone;
-      if (standalone) U.$$('[data-action="install"]').forEach(b => { b.hidden = true; });
+      if (standalone) {
+        root.document.documentElement.dataset.standalone = '';
+        U.$$('[data-action="install"]').forEach(b => { b.hidden = true; });
+      }
+      if (plat === 'ios') this.adaptToIphone(!!standalone);
+    },
+
+    // Detalles propios del iPhone
+    adaptToIphone(standalone) {
+      const html = root.document.documentElement;
+      if (/iPad/.test(root.navigator.userAgent) || (/Macintosh/.test(root.navigator.userAgent) && root.navigator.maxTouchPoints > 1)) html.dataset.ipad = '';
+
+      // Teclado: iOS no encoge la pantalla, se ajusta a lo visible
+      const vv = root.visualViewport;
+      if (vv) {
+        const fit = () => {
+          html.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+          html.classList.toggle('kb-open', root.innerHeight - vv.height > 140);
+          if (root.scrollY) root.scrollTo(0, 0);
+        };
+        vv.addEventListener('resize', fit);
+        fit();
+      }
+
+      // Vibración en iOS 18+: tocar un interruptor nativo produce un toque háptico
+      const sw = U.el('label', { class: 'haptic-switch', 'aria-hidden': 'true' });
+      const input = U.el('input', { type: 'checkbox', tabindex: '-1' });
+      input.setAttribute('switch', '');
+      sw.appendChild(input);
+      root.document.body.appendChild(sw);
+      this.iosHaptic = sw;
+
+      // Agenda: Safari no deja elegir contactos del teléfono
+      const pick = U.$('#btnPickContacts');
+      if (pick && !('contacts' in root.navigator)) pick.hidden = true;
+
+      if (!standalone) this.maybeShowInstallHint();
+    },
+
+    // Aviso "Agregar a inicio" en Safari del iPhone (2.ª visita o a los 20 s)
+    maybeShowInstallHint() {
+      if (S.getRaw('yarbis_install_hint', '') === 'off') return;
+      const visits = Number(S.getRaw('yarbis_visits', '0')) + 1;
+      S.setRaw('yarbis_visits', String(visits));
+      const show = () => {
+        if (U.$('.install-hint') || S.getRaw('yarbis_install_hint', '') === 'off') return;
+        const shareIcon = '<svg class="share-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+        const text = U.el('p');
+        text.innerHTML = `<strong>Instala YARBIS en tu iPhone:</strong> toca ${shareIcon} <strong>Compartir</strong> y luego <strong>Agregar a inicio</strong>.`;
+        const close = U.el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Ahora no', title: 'Ahora no' }, U.icon('x'));
+        const hint = U.el('div', { class: 'install-hint', role: 'note' },
+          U.el('img', { src: 'icons/apple-touch-icon.png', alt: '' }), text, close);
+        close.addEventListener('click', () => {
+          S.setRaw('yarbis_install_hint', 'off');
+          hint.remove();
+        });
+        root.document.body.appendChild(hint);
+      };
+      if (visits >= 2) setTimeout(show, 2500);
+      else setTimeout(show, 20000);
     },
 
     // Foto compartida desde otra app: el service worker la guardó en la caché
@@ -446,7 +515,15 @@
         }, external ? U.icon('external') : null, a.label);
         // intent:// no pasa el filtro de URLs seguras de el(); se asigna aquí porque lo generamos nosotros
         link.setAttribute('href', isIntent ? appHref : a.url);
-        link.addEventListener('click', () => this.haptic());
+        // iPhone: abrir la app instalada con su esquema (WhatsApp, Spotify, Maps…)
+        const iosScheme = root.YarbisApps && root.YarbisApps.platform() === 'ios' && root.YarbisApps.iosScheme(a.url);
+        link.addEventListener('click', (e) => {
+          this.haptic();
+          if (iosScheme) {
+            e.preventDefault();
+            root.YarbisApps.open(a.url);
+          }
+        });
         return link;
       }
       return U.el('button', {
@@ -458,35 +535,46 @@
       }, a.label);
     },
 
-    // Evento de calendario (.ics): en iPhone abre "Agregar evento"; en Android, el calendario
-    downloadIcs({ title, start, end, allDay }) {
-      const pad = (x) => String(x).padStart(2, '0');
-      const utc = (t) => {
-        const d = new Date(t);
-        return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
-      };
-      const day = (t) => {
-        const d = new Date(t);
-        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
-      };
-      const esc = (x) => String(x).replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
-      const lines = [
-        'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//YARBIS//ES', 'BEGIN:VEVENT',
-        `UID:${U.uid()}@yarbis`, `DTSTAMP:${utc(Date.now())}`,
-        allDay ? `DTSTART;VALUE=DATE:${day(start)}` : `DTSTART:${utc(start)}`,
-        allDay ? `DTEND;VALUE=DATE:${day(end)}` : `DTEND:${utc(end)}`,
-        `SUMMARY:${esc(title)}`,
-        'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${esc(title)}`, 'END:VALARM',
-        'END:VEVENT', 'END:VCALENDAR'
-      ];
-      const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = U.el('a', { href: '#', download: `${title.replace(/[^\w\sáéíóúñ-]/gi, '').slice(0, 40) || 'evento'}.ics` });
-      a.href = url;
+    // Evento de calendario (.ics): en iPhone abre "Agregar al Calendario";
+    // en Android lo abre la app de Calendario.
+    downloadIcs({ title, start, end, allDay, alarmMinutes = 30, repeat = 'none' }) {
+      const ics = this.reminders.buildIcs({ title, start, end, allDay, alarmMinutes, repeat });
+      const name = `${String(title).replace(/[^\w\sáéíóúñ-]/gi, '').trim().slice(0, 40) || 'evento'}.ics`;
+      const isIos = root.YarbisApps && root.YarbisApps.platform() === 'ios';
+      const a = U.el('a', { href: '#' });
+      if (isIos) {
+        // Safari muestra la hoja "Agregar al Calendario" con un data: de tipo calendario
+        a.setAttribute('href', `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`);
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener');
+      } else {
+        const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+        a.setAttribute('href', url);
+        a.setAttribute('download', name);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
       root.document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    },
+
+    // Alarma que suena con YARBIS cerrado: evento con aviso a la hora exacta
+    phoneAlarm({ title, at, repeat = 'none' }) {
+      if (!at) return;
+      this.downloadIcs({ title: `⏰ ${title || 'Alarma'}`, start: at, end: at + 5 * 60000, alarmMinutes: 0, repeat });
+      const plat = root.YarbisApps ? root.YarbisApps.platform() : 'desktop';
+      const pad = (x) => String(x).padStart(2, '0');
+      const fmt = (t) => {
+        const d = new Date(t);
+        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+      };
+      const gcal = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`⏰ ${title || 'Alarma'}`)}&dates=${fmt(at)}/${fmt(at + 5 * 60000)}&ctz=America/Caracas`;
+      U.toast(plat === 'ios'
+        ? 'Toca "Agregar" para guardarla en tu Calendario: sonará aunque cierres YARBIS.'
+        : 'Abre el archivo con tu Calendario para que suene aunque cierres YARBIS.', {
+        duration: 8000,
+        ...(plat === 'ios' ? {} : { actionLabel: 'Google Calendar', onAction: () => this.openUrl(gcal) })
+      });
     },
 
     async shareText(text) {
@@ -527,6 +615,8 @@
         U.copyText(value).then(ok => U.toast(ok ? 'Copiado.' : 'No se pudo copiar.'));
       } else if (command === 'ics' && value) {
         this.downloadIcs(value);
+      } else if (command === 'phone-alarm' && value) {
+        this.phoneAlarm(value);
       } else if (command === 'alarm-at' && value) {
         this.reminders.schedule.addAlarm(value.at, value.label);
         this.reminders.requestNotificationPermission();
@@ -622,6 +712,10 @@
     // Vibración corta al tocar (sólo Android; respeta el silencio de efectos)
     haptic(ms = 8) {
       if (this.audio && this.audio.muted) return;
+      if (this.iosHaptic) {
+        try { this.iosHaptic.click(); } catch (e) { /* ignorar */ }
+        return;
+      }
       if (this.audio && this.audio.canVibrate && this.audio.canVibrate()) {
         try { root.navigator.vibrate(ms); } catch (e) { /* ignorar */ }
       }
@@ -816,6 +910,49 @@
     },
 
     /* ==========================================
+       PANTALLA ENCENDIDA con temporizadores o una
+       alarma cercana: el teléfono no se bloquea y
+       el aviso suena a tiempo
+       ========================================== */
+    bindKeepAwake() {
+      const R = this.reminders;
+      const toggle = U.$('#setKeepAwake');
+      const enabled = () => S.getRaw('yarbis_keep_awake', '1') !== '0';
+      if (toggle) {
+        toggle.checked = enabled();
+        toggle.addEventListener('change', () => {
+          S.setRaw('yarbis_keep_awake', toggle.checked ? '1' : '0');
+          sync();
+        });
+        if (!('wakeLock' in root.navigator)) toggle.closest('label').hidden = true;
+      }
+      let lock = null;
+      const needed = () => {
+        if (!enabled() || root.document.hidden) return false;
+        const now = Date.now();
+        return R.schedule.timers.some(t => t.pausedRemaining === null && t.endAt > now) ||
+          R.schedule.alarms.some(a => a.at > now && a.at - now < 60 * 60000);
+      };
+      const sync = async () => {
+        if (!('wakeLock' in root.navigator)) return;
+        if (needed()) {
+          if (lock) return;
+          try {
+            lock = await root.navigator.wakeLock.request('screen');
+            lock.addEventListener('release', () => { lock = null; });
+          } catch (e) { lock = null; }
+        } else if (lock) {
+          try { await lock.release(); } catch (e) { /* ignorar */ }
+          lock = null;
+        }
+      };
+      R.schedule.onChange((e) => { if (!e || e.type !== 'tick') sync(); });
+      root.document.addEventListener('visibilitychange', sync);
+      setInterval(sync, 60000);
+      sync();
+    },
+
+    /* ==========================================
        GESTOS (móvil): deslizar entre pestañas y
        jalar hacia abajo para actualizar Finanzas
        ========================================== */
@@ -873,6 +1010,7 @@
       const R = this.reminders;
       // Conectar el aviso ANTES de montar: así suenan las alarmas vencidas con la app cerrada
       R.schedule.onRing = ({ kind, item, late }) => this.ring(kind, item, late);
+      this.bindKeepAwake();
       R.mountUI();
 
       const updateBadges = () => {

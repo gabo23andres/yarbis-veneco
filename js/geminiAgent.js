@@ -240,6 +240,7 @@
         const alarm = R.schedule.addAlarm(at.getTime(), a.motivo || 'Alarma', REPEAT[a.repetir] || 'none');
         if (!alarm) return { ok: false, error: 'No se pudo crear la alarma.' };
         out.effects.push({ type: 'REMINDER', id: alarm.id });
+        out.actions.push({ label: '📅 Que suene con la app cerrada', command: 'phone-alarm', value: { title: alarm.label, at: alarm.at, repeat: alarm.repeat } });
         out.sound = 'success';
         return { ok: true, programada_para: new Date(alarm.at).toLocaleString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }), repite: alarm.repeat };
       }

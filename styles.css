@@ -1245,3 +1245,51 @@ html, body { overscroll-behavior-y: none; }
 .msg-tools { display: inline-flex; gap: 4px; align-items: center; font-size: 0.72rem; color: var(--text-3, var(--text-2)); }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 420px) { .field-grid { grid-template-columns: 1fr; } }
+
+/* ===== v15: iPhone y Android ===== */
+/* iOS hace zoom al tocar campos con letra menor de 16px */
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea { font-size: max(16px, 1em); }
+}
+html[data-standalone] body { overscroll-behavior: none; }
+/* Con el teclado abierto la app ocupa sólo lo visible (iOS no encoge 100dvh) */
+html[data-platform="ios"] .app { height: var(--vvh, 100dvh); }
+html.kb-open .tabbar { display: none; }
+html.kb-open .composer { margin-bottom: 8px; }
+
+.keep-awake { margin-top: 10px; }
+
+/* Aviso para instalar en iPhone */
+.install-hint {
+  position: fixed;
+  left: 12px; right: 12px;
+  bottom: calc(12px + var(--safe-bottom));
+  z-index: 60;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
+  animation: hint-in .35s ease both;
+}
+.install-hint img { width: 44px; height: 44px; border-radius: 11px; flex: none; }
+.install-hint p { margin: 0; font-size: 0.88rem; line-height: 1.35; color: var(--text-2); }
+.install-hint strong { color: var(--text); }
+.install-hint .share-glyph { display: inline-block; vertical-align: -3px; width: 16px; height: 16px; }
+.install-hint .icon-btn { flex: none; }
+.install-hint::after {
+  content: '';
+  position: absolute; left: 50%; bottom: -8px;
+  width: 16px; height: 16px; margin-left: -8px;
+  background: var(--surface);
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+html[data-platform="ios"][data-ipad] .install-hint { top: calc(12px + var(--safe-top)); bottom: auto; }
+html[data-platform="ios"][data-ipad] .install-hint::after { display: none; }
+@keyframes hint-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .install-hint { animation: none; } }
+
+/* Interruptor oculto para la vibración de iOS 18 */
+.haptic-switch { position: fixed; left: -9999px; top: 0; opacity: 0; pointer-events: none; }

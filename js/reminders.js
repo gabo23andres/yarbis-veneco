@@ -486,7 +486,13 @@
           $('#alarmLabel').value = '';
           const when = new Date(alarm.at);
           const rep = repeatLabel(alarm.repeat);
-          U.toast(`Alarma para las ${U.fmtTime(alarm.at)}${rep ? ` · ${rep}` : when.toDateString() !== new Date().toDateString() ? ' (mañana)' : ''}.`, { type: 'ok' });
+          U.toast(`Alarma para las ${U.fmtTime(alarm.at)}${rep ? ` · ${rep}` : when.toDateString() !== new Date().toDateString() ? ' (mañana)' : ''}.`, {
+            type: 'ok',
+            duration: 7000,
+            // El calendario del teléfono la hace sonar aunque cierres YARBIS
+            actionLabel: '📅 Al calendario',
+            onAction: () => root.YarbisApp && root.YarbisApp.runCommand('phone-alarm', { title: alarm.label, at: alarm.at, repeat: alarm.repeat })
+          });
         });
       }
 
@@ -692,6 +698,41 @@
     }
   }
 
+  /* ==========================================================================
+     EVENTO DE CALENDARIO (.ics)
+     El calendario del teléfono avisa aunque YARBIS esté cerrado.
+     alarmMinutes: 0 = suena a la hora exacta. repeat: como en las alarmas.
+     ========================================================================== */
+  const ICS_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+  function buildIcs({ title, start, end, allDay = false, alarmMinutes = 30, repeat = 'none', uid, now = Date.now() }) {
+    const pad = (x) => String(x).padStart(2, '0');
+    const utc = (t) => {
+      const d = new Date(t);
+      return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+    };
+    const day = (t) => {
+      const d = new Date(t);
+      return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+    };
+    const esc = (x) => String(x || '').replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
+    const finish = end || (allDay ? start + 86400000 : start + 15 * 60000);
+    const lines = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//YARBIS//ES', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
+      `UID:${uid || U.uid()}@yarbis`, `DTSTAMP:${utc(now)}`,
+      allDay ? `DTSTART;VALUE=DATE:${day(start)}` : `DTSTART:${utc(start)}`,
+      allDay ? `DTEND;VALUE=DATE:${day(finish)}` : `DTEND:${utc(finish)}`,
+      `SUMMARY:${esc(title)}`
+    ];
+    const days = repeatDays(repeat);
+    if (days) {
+      lines.push(days.length === 7 ? 'RRULE:FREQ=DAILY' : `RRULE:FREQ=WEEKLY;BYDAY=${days.slice().sort((a, b) => a - b).map(d => ICS_DAYS[d]).join(',')}`);
+    }
+    const trigger = alarmMinutes > 0 ? `TRIGGER:-PT${Math.round(alarmMinutes)}M` : 'TRIGGER:PT0M';
+    lines.push('BEGIN:VALARM', trigger, 'ACTION:DISPLAY', `DESCRIPTION:${esc(title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR');
+    return lines.join('\r\n');
+  }
+
   const notes = new NotesStore();
   const schedule = new ScheduleStore();
 
@@ -701,6 +742,7 @@
     ScheduleStore,
     SHOPPING,
     repeatLabel,
+    buildIcs,
     ui: null,
     requestNotificationPermission,
     notify,
