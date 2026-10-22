@@ -24,14 +24,23 @@ Ejemplos de lo que puedes decir: *"¿A cómo está el dólar?"*, *"100 dólares 
 
 ## Probar en tu computadora
 
+**Windows (lo más fácil):** descarga o clona el repositorio y dale doble clic a
+`iniciar.bat`. Se abre el navegador en <http://localhost:8000>.
+No cierres la ventana negra mientras uses la app.
+
+**Con comandos (Windows, Mac o Linux):**
+
 ```bash
 git clone https://github.com/gabo23andres/yarbis-veneco.git
 cd yarbis-veneco
-python3 -m http.server 8000   # o: npm start
+py -m http.server 8000        # Windows (o: python -m http.server 8000)
+python3 -m http.server 8000   # Mac / Linux
+npm start                     # si tienes Node.js
 ```
 
-Abre <http://localhost:8000> en Chrome. En `localhost` el micrófono y la cámara funcionan
-igual que en internet.
+Abre <http://localhost:8000>. Para hablarle por voz usa **Chrome** o **Edge**
+(Brave y Firefox no traen reconocimiento de voz). En `localhost` el micrófono y la
+cámara funcionan igual que en internet.
 
 ## Pruebas
 

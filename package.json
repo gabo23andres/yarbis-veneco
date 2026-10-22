@@ -4,7 +4,7 @@
   "private": true,
   "description": "YARBIS: asistente personal por voz (PWA estática para GitHub Pages).",
   "scripts": {
-    "start": "python3 -m http.server 8000",
+    "start": "node server.js",
     "test": "node --test tests/*.test.js",
     "test:e2e": "node tests/smoke.js"
   },
