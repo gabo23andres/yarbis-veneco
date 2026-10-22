@@ -106,3 +106,31 @@ test('cámara y otras órdenes', async () => {
 test('lo desconocido va a la IA', async () => {
   assert.strictEqual((await ask('explícame la teoría de la relatividad')).text, '__AI__');
 });
+
+test('clima: prefiere la ciudad venezolana con el mismo nombre', () => {
+  const results = [
+    { name: 'Mérida', country: 'México', country_code: 'MX' },
+    { name: 'Mérida', country: 'Venezuela', country_code: 'VE' },
+    { name: 'Mérida', country: 'España', country_code: 'ES' }
+  ];
+  assert.strictEqual(brain.pickPlace(results, 'va a llover manana en merida').country_code, 'VE');
+  assert.strictEqual(brain.pickPlace(results, 'clima en merida espana').country_code, 'ES');
+  assert.strictEqual(brain.pickPlace([{ name: 'Madrid', country: 'España', country_code: 'ES' }], 'clima en madrid').name, 'Madrid');
+  assert.strictEqual(brain.pickPlace([], 'clima'), null);
+});
+
+test('clave de Gemini: acepta el formato nuevo "AQ." y rechaza basura', async () => {
+  const bad = await brain.testGeminiApiKey('hola');
+  assert.strictEqual(bad.success, false);
+  // Con formato válido sí intenta conectarse (aquí falla porque no hay red)
+  const saved = globalThis.fetch;
+  let called = '';
+  globalThis.fetch = async (url, opts) => { called = opts && opts.headers && opts.headers['x-goog-api-key']; throw new Error('sin red'); };
+  try {
+    const r = await brain.testGeminiApiKey('AQ.FAKE_test_key_0000000000000000');
+    assert.strictEqual(r.success, false);
+    assert.strictEqual(called, 'AQ.FAKE_test_key_0000000000000000');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});

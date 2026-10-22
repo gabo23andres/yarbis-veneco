@@ -79,4 +79,7 @@ Tus datos (notas, contactos, clave de IA) se guardan sólo en tu dispositivo.
 
 - El reconocimiento de voz funciona en Chrome y Safari, no en Firefox.
 - En iPhone, las alarmas sólo suenan con la app abierta; instálala en la pantalla de inicio.
-- Las APIs gratuitas de IA y tasas pueden fallar; la app lo avisa en vez de inventar datos.
+- Las APIs gratuitas de IA y tasas pueden fallar; la app reintenta, usa servicios de
+  respaldo (IA: Pollinations y LLM7; clima: Open-Meteo y wttr.in) y, si todo falla, lo avisa
+  en vez de inventar datos.
+- La clave de Google AI Studio puede empezar por `AIza…` (formato clásico) o `AQ.…` (formato nuevo).

@@ -5,28 +5,28 @@
    Nunca guarda llamadas a APIs externas.
    ========================================================================== */
 
-const VERSION = 'yarbis-v11.0.0';
+const VERSION = 'yarbis-v11.0.1';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=11.0.0',
+  './styles.css?v=11.0.1',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './js/utils.js?v=11.0.0',
-  './js/audioEffects.js?v=11.0.0',
-  './js/mathEngine.js?v=11.0.0',
-  './js/finance.js?v=11.0.0',
-  './js/reminders.js?v=11.0.0',
-  './js/cleaner.js?v=11.0.0',
-  './js/camera.js?v=11.0.0',
-  './js/voiceOrb.js?v=11.0.0',
-  './js/speechEngine.js?v=11.0.0',
-  './js/yarbisBrain.js?v=11.0.0',
-  './js/financeView.js?v=11.0.0',
-  './js/settings.js?v=11.0.0',
-  './js/app.js?v=11.0.0'
+  './js/utils.js?v=11.0.1',
+  './js/audioEffects.js?v=11.0.1',
+  './js/mathEngine.js?v=11.0.1',
+  './js/finance.js?v=11.0.1',
+  './js/reminders.js?v=11.0.1',
+  './js/cleaner.js?v=11.0.1',
+  './js/camera.js?v=11.0.1',
+  './js/voiceOrb.js?v=11.0.1',
+  './js/speechEngine.js?v=11.0.1',
+  './js/yarbisBrain.js?v=11.0.1',
+  './js/financeView.js?v=11.0.1',
+  './js/settings.js?v=11.0.1',
+  './js/app.js?v=11.0.1'
 ];
 
 self.addEventListener('install', (event) => {

@@ -1,6 +1,6 @@
 {
   "name": "yarbis-veneco",
-  "version": "11.0.0",
+  "version": "11.0.1",
   "private": true,
   "description": "YARBIS: asistente personal por voz (PWA estática para GitHub Pages).",
   "scripts": {

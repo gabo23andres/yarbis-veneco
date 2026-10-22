@@ -873,7 +873,64 @@
         61: 'con lluvia ligera 🌧️', 63: 'con lluvia 🌧️', 65: 'con lluvia fuerte 🌧️', 80: 'con chubascos 🌦️', 81: 'con chubascos 🌧️',
         82: 'con chubascos fuertes ⛈️', 95: 'con tormenta eléctrica ⛈️', 96: 'con tormenta y granizo ⛈️', 99: 'con tormenta fuerte ⛈️'
       };
+      if (typeof code === 'string') return code;
       return map[code] || 'estable';
+    }
+
+    // Descarga JSON reintentando una vez si el servicio no contesta a tiempo
+    async fetchJson(url, ms = 6000, tries = 2) {
+      try {
+        const res = await U.fetchWithTimeout(url, {}, ms);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (e) {
+        if (tries <= 1) throw e;
+        return this.fetchJson(url, ms + 2000, tries - 1);
+      }
+    }
+
+    // Pronóstico con la forma de Open-Meteo. Si Open-Meteo no responde se usa
+    // wttr.in, convertido a la misma forma (con descripciones en vez de códigos).
+    async fetchForecast(place) {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2`;
+      try {
+        return await this.fetchJson(url, 5000, 2);
+      } catch (e) {
+        console.warn('Open-Meteo no disponible:', e.message);
+      }
+      const w = await this.fetchJson(`https://wttr.in/${place.latitude},${place.longitude}?format=j1&lang=es`, 8000, 1);
+      const desc = (x) => {
+        const t = x && x.lang_es && x.lang_es[0] && x.lang_es[0].value;
+        return t ? t.trim().toLowerCase() : 'estable';
+      };
+      const c = w.current_condition[0];
+      const days = (w.weather || []).slice(0, 2);
+      const rain = (d) => Math.max(...(d.hourly || []).map(h => Number(h.chanceofrain) || 0));
+      return {
+        current: {
+          temperature_2m: Number(c.temp_C),
+          apparent_temperature: Number(c.FeelsLikeC),
+          relative_humidity_2m: Number(c.humidity),
+          weather_code: desc(c),
+          wind_speed_10m: Number(c.windspeedKmph)
+        },
+        daily: {
+          weather_code: days.map(d => desc(d.hourly && d.hourly[4])),
+          temperature_2m_max: days.map(d => Number(d.maxtempC)),
+          temperature_2m_min: days.map(d => Number(d.mintempC)),
+          precipitation_probability_max: days.map(rain)
+        }
+      };
+    }
+
+    // Entre varias ciudades con el mismo nombre (Mérida, Valencia, Barcelona...)
+    // prefiere la de Venezuela, salvo que se nombre otro país.
+    pickPlace(results, n) {
+      if (!Array.isArray(results) || !results.length) return null;
+      const otherCountry = results.find(r => r.country_code !== 'VE' && r.country &&
+        n.includes(U.normalize(r.country)));
+      if (otherCountry) return otherCountry;
+      return results.find(r => r.country_code === 'VE') || results[0];
     }
 
     async weatherIntent(n) {
@@ -884,11 +941,10 @@
       if (!city || /^(hoy|manana|ahora|momento)$/.test(city)) city = S.getRaw('yarbis_weather_city', '') || 'Caracas';
 
       try {
-        const geo = await (await U.fetchWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=es&format=json`, {}, 7000)).json();
-        const place = geo && geo.results && geo.results[0];
+        const geo = await this.fetchJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=10&language=es&format=json`);
+        const place = this.pickPlace(geo && geo.results, n);
         if (!place) return { text: `No encontré la ciudad "${city}". Prueba con otro nombre.` };
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2`;
-        const w = await (await U.fetchWithTimeout(url, {}, 7000)).json();
+        const w = await this.fetchForecast(place);
         S.setRaw('yarbis_weather_city', place.name);
         const where = `${place.name}${place.admin1 && place.admin1 !== place.name ? `, ${place.admin1}` : ''}`;
         if (tomorrow && w.daily) {
@@ -1138,7 +1194,7 @@ Reglas:
 
     /* ---------- Google Gemini ---------- */
     async listGeminiModels(key) {
-      const res = await U.fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`, {}, 10000);
+      const res = await U.fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } }, 10000);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
       return (data.models || [])
@@ -1169,8 +1225,8 @@ Reglas:
       const key = this.geminiApiKey;
       const model = await this.resolveGeminiModel(key);
       const res = await U.fetchWithTimeout(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) },
         30000
       );
       const data = await res.json().catch(() => ({}));
@@ -1210,8 +1266,9 @@ Reglas:
     async testGeminiApiKey(rawKey) {
       const key = this.cleanKey(rawKey);
       if (!key) return { success: false, message: 'Pega tu clave primero.' };
-      if (!/^AIza[\w-]{20,}$/.test(key)) {
-        return { success: false, message: 'Esa no parece una clave de Google AI Studio (empieza por "AIza…").' };
+      // Google usa dos formatos: las claves clásicas "AIza…" y las nuevas "AQ.…"
+      if (!/^(AIza[\w-]{20,}|AQ\.[\w.-]{20,})$/.test(key)) {
+        return { success: false, message: 'Esa no parece una clave de Google AI Studio (empieza por "AIza…" o "AQ.…"). Cópiala completa.' };
       }
       const prevKey = this.geminiApiKey;
       const prevModel = this.geminiModel;
@@ -1230,56 +1287,42 @@ Reglas:
     }
 
     /* ---------- IA gratuita (sin clave) ---------- */
+    // Pregunta a dos servicios gratuitos a la vez y usa la primera respuesta válida.
+    // Pollinations sólo acepta peticiones desde páginas publicadas (en localhost pide
+    // un captcha), LLM7 funciona en ambos casos.
     async queryFreeAI(messages) {
       const chat = [
         { role: 'system', content: this.systemPrompt() },
         ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }))
       ];
       const valid = (t) => t && typeof t === 'string' && t.trim().length > 0 && !/<!doctype|<html/i.test(t) && !/^\s*\{\s*"error"/.test(t);
-
-      // 1) Pollinations (compatible con OpenAI)
-      try {
-        const res = await U.fetchWithTimeout('https://text.pollinations.ai/openai', {
+      const openAiChat = async (url, body, ms) => {
+        const res = await U.fetchWithTimeout(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'openai', messages: chat, referrer: 'yarbis-veneco' })
-        }, 25000);
-        if (res.ok) {
-          const data = await res.json();
-          const t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-          if (valid(t)) return t.trim();
-        }
-      } catch (e) {
-        console.warn('Pollinations POST:', e.message);
-      }
+          body: JSON.stringify({ ...body, messages: chat })
+        }, ms);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (!valid(t)) throw new Error('respuesta vacía');
+        return t.trim();
+      };
 
-      // 2) Pollinations GET (sólo la última pregunta + contexto corto)
+      const providers = [
+        openAiChat('https://text.pollinations.ai/openai', { model: 'openai', referrer: 'yarbis-veneco' }, 25000),
+        openAiChat('https://api.llm7.io/v1/chat/completions', { model: 'gpt-oss:20b' }, 25000)
+      ];
       try {
-        const lastTurns = messages.slice(-4).map(m => `${m.role === 'assistant' ? 'Asistente' : 'Usuario'}: ${m.text}`).join('\n').slice(-1500);
-        const url = `https://text.pollinations.ai/${encodeURIComponent(lastTurns)}?model=openai&system=${encodeURIComponent(this.systemPrompt().slice(0, 900))}&referrer=yarbis-veneco`;
-        const res = await U.fetchWithTimeout(url, {}, 20000);
-        if (res.ok) {
-          const t = await res.text();
-          if (valid(t)) return t.trim();
-        }
+        return await Promise.any(providers);
       } catch (e) {
-        console.warn('Pollinations GET:', e.message);
+        (e.errors || [e]).forEach(err => console.warn('IA gratuita:', err.message));
       }
-
-      // 3) Respaldo comunitario
+      // Último intento: el modelo que LLM7 tenga disponible
       try {
-        const res = await U.fetchWithTimeout('https://api.airforce/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-4o-mini', messages: chat })
-        }, 20000);
-        if (res.ok) {
-          const data = await res.json();
-          const t = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-          if (valid(t) && !/discord\.gg|rate limit|upgrade your plan/i.test(t)) return t.trim();
-        }
+        return await openAiChat('https://api.llm7.io/v1/chat/completions', { model: 'default' }, 20000);
       } catch (e) {
-        console.warn('Airforce:', e.message);
+        console.warn('IA gratuita (respaldo):', e.message);
       }
       return null;
     }

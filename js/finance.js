@@ -105,10 +105,17 @@
     /* ------------------------------------------
        DESCARGA
        ------------------------------------------ */
-    async getJson(url, ms = 7000) {
-      const res = await U.fetchWithTimeout(url, { cache: 'no-store' }, ms);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+    // Con conexiones lentas o inestables se reintenta una vez antes de rendirse
+    async getJson(url, ms = 7000, tries = 2) {
+      try {
+        const res = await U.fetchWithTimeout(url, { cache: 'no-store' }, ms);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (e) {
+        if (tries <= 1) throw e;
+        await new Promise(r => setTimeout(r, 800));
+        return this.getJson(url, ms + 3000, tries - 1);
+      }
     }
 
     async fetchVenezuela(fiat) {
