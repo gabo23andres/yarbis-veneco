@@ -412,10 +412,20 @@
 
       const queue = () => {
         if (token !== this.speakToken) return;
+        // Otro idioma (traductor): usar una voz de ese idioma
+        let voice = this.selectedVoice;
+        let lang = (voice && voice.lang) || this.language;
+        if (options.lang && !String(lang).toLowerCase().startsWith(options.lang.slice(0, 2).toLowerCase())) {
+          const all = this.synthesis.getVoices() || [];
+          const prefix = options.lang.slice(0, 2).toLowerCase();
+          voice = all.find(v => (v.lang || '').toLowerCase() === options.lang.toLowerCase()) ||
+            all.find(v => (v.lang || '').toLowerCase().startsWith(prefix)) || null;
+          lang = options.lang;
+        }
         chunks.forEach((chunk, idx) => {
           const u = new SpeechSynthesisUtterance(chunk);
-          if (this.selectedVoice) u.voice = this.selectedVoice;
-          u.lang = (this.selectedVoice && this.selectedVoice.lang) || this.language;
+          if (voice) u.voice = voice;
+          u.lang = lang;
           u.pitch = this.pitch;
           u.rate = this.rate;
           if (idx === 0) {
@@ -466,6 +476,68 @@
       this.stopSpeaking();
       this.isProcessing = false;
       this.setState('STANDBY');
+    }
+
+    /* ------------------------------------------
+       ESCUCHA INDEPENDIENTE (traductor y dictado)
+       No pasa por el chat: devuelve el texto a quien lo pidió.
+       ------------------------------------------ */
+    listenOnce(lang) {
+      return new Promise((resolve, reject) => {
+        if (!this.recognitionSupported) { reject(new Error('Tu navegador no tiene reconocimiento de voz.')); return; }
+        if (this.isListening) this.stopListening(true);
+        if (this.isSpeaking) this.stopSpeaking(true);
+        const rec = new this.Recognition();
+        rec.lang = lang || this.language;
+        rec.continuous = false;
+        rec.interimResults = false;
+        let text = '';
+        rec.onresult = (e) => {
+          for (let i = e.resultIndex; i < e.results.length; i++) text += e.results[i][0].transcript;
+        };
+        rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') reject(new Error(e.error)); };
+        rec.onend = () => resolve(text.trim());
+        try { rec.start(); } catch (e) { reject(e); }
+        this.oneShot = rec;
+      });
+    }
+
+    startDictation(lang, onUpdate) {
+      if (!this.recognitionSupported) throw new Error('Tu navegador no tiene reconocimiento de voz.');
+      if (this.isListening) this.stopListening(true);
+      this.setContinuous(false);
+      let active = true;
+      let committed = '';
+      let rec = null;
+      const begin = () => {
+        rec = new this.Recognition();
+        rec.lang = lang || this.language;
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.onresult = (e) => {
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const t = e.results[i][0].transcript;
+            if (e.results[i].isFinal) committed += (committed && !/\s$/.test(committed) ? ' ' : '') + t.trim();
+            else interim += t;
+          }
+          onUpdate(committed, interim.trim());
+        };
+        rec.onerror = (e) => {
+          if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+            active = false;
+            this.emitError('El micrófono está bloqueado. Permite el acceso en el navegador.', true);
+          }
+        };
+        // Chrome corta la escucha continua cada cierto tiempo: se reanuda sola
+        rec.onend = () => { if (active) setTimeout(() => { if (active) begin(); }, 250); };
+        try { rec.start(); } catch (e) { /* ya iniciado */ }
+      };
+      begin();
+      return () => {
+        active = false;
+        try { rec && rec.stop(); } catch (e) { /* ignorar */ }
+      };
     }
 
     /* ------------------------------------------

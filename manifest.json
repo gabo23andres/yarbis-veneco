@@ -8,17 +8,78 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b0f17",
+  "background_color": "#070a12",
   "theme_color": "#0284c7",
-  "categories": ["productivity", "finance", "utilities"],
+  "categories": [
+    "productivity",
+    "finance",
+    "utilities"
+  ],
   "icons": [
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "Finanzas", "short_name": "Dólar", "url": "./#finanzas" },
-    { "name": "Notas", "short_name": "Notas", "url": "./#notas" }
-  ]
+    {
+      "name": "Dólar hoy",
+      "short_name": "Dólar",
+      "url": "./?accion=dolar"
+    },
+    {
+      "name": "Nueva nota",
+      "short_name": "Nota",
+      "url": "./?accion=nota"
+    },
+    {
+      "name": "Lista de compras",
+      "short_name": "Compras",
+      "url": "./?accion=compras"
+    },
+    {
+      "name": "Escanear QR",
+      "short_name": "QR",
+      "url": "./?accion=qr"
+    },
+    {
+      "name": "Registrar gasto",
+      "short_name": "Gasto",
+      "url": "./?accion=gasto"
+    },
+    {
+      "name": "Dictado",
+      "short_name": "Dictado",
+      "url": "./?accion=dictado"
+    }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }

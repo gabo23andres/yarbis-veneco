@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="system" data-accent="neon">
+<html lang="es" data-theme="dark" data-accent="neon">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -19,7 +19,7 @@
   <!-- Aplica el tema antes de pintar para evitar parpadeos -->
   <script>
     try {
-      var t = localStorage.getItem('yarbis_theme_mode') || 'system';
+      var t = localStorage.getItem('yarbis_theme_mode') || 'dark';
       var a = localStorage.getItem('yarbis_accent') || 'neon';
       document.documentElement.setAttribute('data-theme', t);
       document.documentElement.setAttribute('data-accent', a);
@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=11.0.1" />
+  <link rel="stylesheet" href="styles.css?v=12.0.0" />
 </head>
 <body>
   <!-- Íconos (estilo Lucide) -->
@@ -70,6 +70,9 @@
       <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></symbol>
       <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
       <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
+      <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></symbol>
       <symbol id="i-calc" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M8 6h8M16 14v4M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/></symbol>
     </defs>
   </svg>
@@ -119,15 +122,20 @@
 
         <div class="chat-scroll" id="chatScroll">
           <div class="welcome" id="welcome">
-            <canvas class="orb-canvas" id="orbCanvas" aria-hidden="true"></canvas>
-            <h1 class="welcome-title" id="welcomeTitle">¡Hola! ¿En qué te ayudo?</h1>
-            <p class="welcome-sub">Toca el micrófono y habla, o escribe abajo.</p>
+            <div class="hero">
+              <canvas class="orb-canvas" id="orbCanvas" aria-hidden="true"></canvas>
+              <div class="hero-text">
+                <h1 class="welcome-title" id="welcomeTitle">¡Hola! ¿En qué te ayudo?</h1>
+                <p class="welcome-sub">Toca el micrófono y habla, o escribe abajo.</p>
+              </div>
+            </div>
+            <div class="home-grid" id="homeGrid"></div>
             <div class="suggestions" id="suggestions">
               <button type="button" class="suggestion" data-ask="¿A cómo está el dólar hoy?">💵 ¿A cómo está el dólar?</button>
               <button type="button" class="suggestion" data-ask="100 dólares a bolívares">💱 100 $ a bolívares</button>
-              <button type="button" class="suggestion" data-ask="Pon un temporizador de 10 minutos">⏱️ Temporizador de 10 min</button>
-              <button type="button" class="suggestion" data-ask="¿Cómo está el clima en Caracas?">🌦️ Clima en Caracas</button>
-              <button type="button" class="suggestion" data-ask="Anota comprar harina PAN">📝 Anota comprar harina</button>
+              <button type="button" class="suggestion" data-ask="Agrega harina, leche y huevos a la lista de compras">🛒 Lista de compras</button>
+              <button type="button" class="suggestion" data-ask="¿Cuánto he gastado este mes?">💸 Mis gastos</button>
+              <button type="button" class="suggestion" data-ask="Despiértame de lunes a viernes a las 6:30">⏰ Alarma diaria</button>
               <button type="button" class="suggestion" data-ask="¿Qué puedes hacer?">✨ ¿Qué puedes hacer?</button>
             </div>
           </div>
@@ -136,6 +144,7 @@
 
         <div class="voice-bar" id="voiceBar" hidden>
           <canvas class="orb-mini" id="orbMini" aria-hidden="true"></canvas>
+          <div class="wave" id="voiceWave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
           <div class="voice-bar-text">
             <span class="voice-state" id="voiceState">Escuchando…</span>
             <span class="voice-interim" id="voiceInterim"></span>
@@ -167,6 +176,7 @@
                 <button type="button" class="btn btn-ghost btn-sm danger" data-action="notes-clear-all">Borrar todo</button>
               </div>
             </div>
+            <div class="list-chips" id="listChips" role="group" aria-label="Listas"></div>
             <form class="inline-form" id="formNote">
               <input type="text" id="inputNewNote" placeholder="Nueva nota o recordatorio…" aria-label="Nueva nota" enterkeyhint="done" />
               <button type="submit" class="btn btn-primary"><svg class="icon"><use href="#i-plus"/></svg>Agregar</button>
@@ -213,6 +223,12 @@
             <form class="inline-form" id="formAlarm">
               <input type="time" id="alarmTime" aria-label="Hora de la alarma" required />
               <input type="text" id="alarmLabel" placeholder="Motivo (opcional)" aria-label="Motivo de la alarma" />
+              <select id="alarmRepeat" aria-label="Repetir">
+                <option value="none">Una vez</option>
+                <option value="daily">Todos los días</option>
+                <option value="weekdays">Lunes a viernes</option>
+                <option value="weekends">Fines de semana</option>
+              </select>
               <button type="submit" class="btn btn-primary">Agregar</button>
             </form>
             <ul class="list" id="alarmsList"></ul>
@@ -243,7 +259,46 @@
         <div class="rate-grid" id="rateCards"></div>
         <div class="crypto-row" id="cryptoCards"></div>
 
+        <div class="card card-chart">
+          <div class="card-head">
+            <h3><svg class="icon"><use href="#i-chart"/></svg>Historial del dólar</h3>
+            <div class="segmented" role="group" aria-label="Rango" id="chartRange">
+              <button type="button" data-range="7">7 días</button>
+              <button type="button" class="active" data-range="30">30 días</button>
+              <button type="button" data-range="90">90 días</button>
+            </div>
+          </div>
+          <div id="fxChart"></div>
+          <div class="chart-legend" id="fxChartLegend"></div>
+        </div>
+
         <div class="page-grid">
+          <div class="card card-wide" id="expensesCard">
+            <div class="card-head">
+              <h3>💸 Mis gastos <span class="muted small" id="expMonthLabel"></span></h3>
+              <div class="card-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="expPrev" aria-label="Mes anterior">‹</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="expNext" aria-label="Mes siguiente">›</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="expCsv"><svg class="icon"><use href="#i-download"/></svg>CSV</button>
+              </div>
+            </div>
+            <form class="inline-form" id="formExpense">
+              <input type="text" id="expAmount" inputmode="decimal" placeholder="Monto" aria-label="Monto del gasto" />
+              <select id="expCurrency" aria-label="Moneda"><option value="USD">$</option><option value="VES">Bs.</option></select>
+              <select id="expCategory" aria-label="Categoría"></select>
+              <input type="text" id="expNote" placeholder="Detalle (opcional)" aria-label="Detalle" />
+              <button type="submit" class="btn btn-primary">Registrar</button>
+            </form>
+            <div class="expense-summary" id="expSummary"></div>
+            <div class="expense-grid">
+              <div id="expBars"></div>
+              <ul class="list" id="expList"></ul>
+            </div>
+            <div class="row">
+              <label class="field budget-field"><span>Presupuesto mensual ($)</span><input type="number" id="expBudget" inputmode="decimal" placeholder="Sin presupuesto" /></label>
+            </div>
+            <p class="hint">También por voz: "gasté 20 dólares en comida", "¿cuánto he gastado este mes?".</p>
+          </div>
           <div class="card">
             <div class="card-head"><h3><svg class="icon"><use href="#i-swap"/></svg>Convertidor</h3></div>
             <div class="converter">
@@ -344,6 +399,31 @@
             </div>
           </div>
 
+          <div class="card">
+            <div class="card-head"><h3><svg class="icon"><use href="#i-bell"/></svg>Alertas de tasa</h3></div>
+            <form class="inline-form" id="formFxAlert">
+              <select id="alertRate" aria-label="Tasa"><option value="bcv">Dólar BCV</option><option value="paralelo">Paralelo</option></select>
+              <select id="alertDir" aria-label="Condición"><option value="above">sube de</option><option value="below">baja de</option></select>
+              <input type="number" step="any" id="alertValue" placeholder="Bs." inputmode="decimal" aria-label="Valor" />
+              <button type="submit" class="btn btn-primary">Crear</button>
+            </form>
+            <ul class="list" id="alertsList"></ul>
+            <p class="hint">También por voz: "avísame cuando el dólar pase de 250".</p>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>🏷️ Precios para tu negocio</h3></div>
+            <div class="form-grid">
+              <label class="field"><span>Tasa</span><select id="plRate"><option value="bcv">BCV</option><option value="paralelo">Paralelo</option></select></label>
+              <label class="field"><span>Margen (%)</span><input type="number" id="plMargin" value="0" inputmode="decimal" /></label>
+              <label class="field"><span>IVA</span><select id="plIva"><option value="0">Sin IVA</option><option value="16">IVA 16 %</option></select></label>
+            </div>
+            <div id="plRows" class="pl-rows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="plAdd"><svg class="icon"><use href="#i-plus"/></svg>Agregar producto</button>
+            <div class="result-box" id="plResult"></div>
+            <button type="button" class="btn btn-secondary btn-sm" id="plCopy"><svg class="icon"><use href="#i-copy"/></svg>Copiar lista para WhatsApp</button>
+          </div>
+
           <div class="card card-wide">
             <div class="card-head"><h3>Pregúntale a la IA</h3></div>
             <form class="inline-form" id="formFinanceAsk">
@@ -362,6 +442,10 @@
         <div class="tool-grid">
           <button type="button" class="tool" data-action="open-camera" data-mode="qr"><span class="tool-icon"><svg class="icon"><use href="#i-scan"/></svg></span><span class="tool-title">Lector QR</span><span class="tool-sub">Funciona sin internet</span></button>
           <button type="button" class="tool" data-action="open-camera" data-mode="general"><span class="tool-icon"><svg class="icon"><use href="#i-camera"/></svg></span><span class="tool-title">Cámara con IA</span><span class="tool-sub">Objetos, documentos y traducción</span></button>
+          <button type="button" class="tool" data-action="open-tool" data-tool="translate"><span class="tool-icon"><svg class="icon"><use href="#i-globe"/></svg></span><span class="tool-title">Traductor de voz</span><span class="tool-sub">Habla y lo traduce en voz alta</span></button>
+          <button type="button" class="tool" data-action="open-tool" data-tool="dictation"><span class="tool-icon"><svg class="icon"><use href="#i-mic"/></svg></span><span class="tool-title">Dictado</span><span class="tool-sub">Textos largos con tu voz</span></button>
+          <button type="button" class="tool" data-action="open-tool" data-tool="pagomovil"><span class="tool-icon"><svg class="icon"><use href="#i-wallet"/></svg></span><span class="tool-title">Pago Móvil</span><span class="tool-sub">Comparte tus datos y QR para cobrar</span></button>
+          <button type="button" class="tool" data-action="open-tool" data-tool="expense"><span class="tool-icon"><svg class="icon"><use href="#i-chart"/></svg></span><span class="tool-title">Gastos</span><span class="tool-sub">Registra y controla tu presupuesto</span></button>
           <button type="button" class="tool" data-action="open-cleaner"><span class="tool-icon"><svg class="icon"><use href="#i-eraser"/></svg></span><span class="tool-title">Purificador de texto</span><span class="tool-sub">Quita caracteres invisibles de IA</span></button>
           <button type="button" class="tool" data-action="open-settings"><span class="tool-icon"><svg class="icon"><use href="#i-settings"/></svg></span><span class="tool-title">Ajustes</span><span class="tool-sub">Voz, tema, IA y agenda</span></button>
           <button type="button" class="tool" data-action="install"><span class="tool-icon"><svg class="icon"><use href="#i-phone"/></svg></span><span class="tool-title">Instalar app</span><span class="tool-sub">Pantalla de inicio</span></button>
@@ -383,7 +467,7 @@
           <a class="app-tile" href="https://mail.google.com" target="_blank" rel="noopener"><span>✉️</span>Gmail</a>
         </div>
 
-        <p class="about">YARBIS v11 · Hecho en 🇻🇪 · Tus datos se guardan sólo en este dispositivo.</p>
+        <p class="about">YARBIS v12 · Hecho en 🇻🇪 · Tus datos se guardan sólo en este dispositivo.</p>
       </section>
     </main>
 
@@ -599,6 +683,85 @@
     </div>
   </dialog>
 
+  <!-- ============ DIÁLOGO: TRADUCTOR ============ -->
+  <dialog class="sheet" id="dlgTranslate" aria-labelledby="trTitle">
+    <div class="sheet-head">
+      <h2 id="trTitle">Traductor de voz</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="converter-pair">
+        <label class="field"><span>De</span><select id="trFrom"></select></label>
+        <button type="button" class="icon-btn" id="trSwap" title="Invertir idiomas"><svg class="icon"><use href="#i-swap"/></svg></button>
+        <label class="field"><span>A</span><select id="trTo"></select></label>
+      </div>
+      <textarea id="trInput" rows="3" placeholder="Escribe o toca el micrófono y habla…" aria-label="Texto a traducir"></textarea>
+      <div class="row center">
+        <button type="button" class="mic-btn big" id="trMic" title="Hablar" aria-label="Hablar para traducir"><svg class="icon"><use href="#i-mic"/></svg></button>
+        <button type="button" class="btn btn-primary" id="trGo">Traducir</button>
+      </div>
+      <textarea id="trOutput" rows="3" readonly placeholder="La traducción aparecerá aquí" aria-label="Traducción"></textarea>
+      <div class="row">
+        <button type="button" class="btn btn-secondary btn-sm" id="trSpeak"><svg class="icon"><use href="#i-volume"/></svg>Escuchar</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="trCopy"><svg class="icon"><use href="#i-copy"/></svg>Copiar</button>
+        <label class="switch"><input type="checkbox" id="trAutoSpeak" checked /><span>Leer en voz alta</span></label>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ============ DIÁLOGO: DICTADO ============ -->
+  <dialog class="sheet" id="dlgDictation" aria-labelledby="dcTitle">
+    <div class="sheet-head">
+      <h2 id="dcTitle">Dictado</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <textarea id="dcText" rows="9" placeholder="Toca Dictar y habla. Di &quot;punto&quot;, &quot;coma&quot; o &quot;nueva línea&quot;." aria-label="Texto dictado"></textarea>
+      <p class="hint" id="dcStatus"></p>
+      <div class="row center">
+        <button type="button" class="btn btn-primary dictate-btn" id="dcToggle"><svg class="icon"><use href="#i-mic"/></svg><span id="dcToggleText">Dictar</span></button>
+      </div>
+      <div class="row">
+        <button type="button" class="btn btn-secondary btn-sm" id="dcImprove">✨ Mejorar redacción</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="dcCopy"><svg class="icon"><use href="#i-copy"/></svg>Copiar</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="dcNote"><svg class="icon"><use href="#i-notes"/></svg>Guardar nota</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="dcShare"><svg class="icon"><use href="#i-share"/></svg>Compartir</button>
+        <button type="button" class="btn btn-ghost btn-sm danger" id="dcClear">Borrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ============ DIÁLOGO: PAGO MÓVIL ============ -->
+  <dialog class="sheet" id="dlgPagoMovil" aria-labelledby="pmTitle">
+    <div class="sheet-head">
+      <h2 id="pmTitle">Pago Móvil</h2>
+      <button type="button" class="icon-btn" data-close title="Cerrar"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <form class="form-grid" id="formPagoMovil">
+        <label class="field"><span>Banco</span><select id="pmBank"></select></label>
+        <label class="field"><span>Cédula / RIF</span>
+          <span class="inline-form"><select id="pmIdType" class="id-type"><option>V</option><option>E</option><option>J</option><option>P</option><option>G</option></select><input type="text" id="pmId" inputmode="numeric" placeholder="12345678" /></span>
+        </label>
+        <label class="field"><span>Teléfono</span><input type="tel" id="pmPhone" placeholder="04141234567" /></label>
+        <label class="field"><span>Titular (opcional)</span><input type="text" id="pmName" placeholder="Tu nombre" /></label>
+        <button type="submit" class="btn btn-primary">Guardar mis datos</button>
+      </form>
+      <div class="inline-form">
+        <input type="text" id="pmAmount" inputmode="decimal" placeholder="Monto a cobrar (opcional)" aria-label="Monto" />
+        <select id="pmCurrency" aria-label="Moneda"><option value="USD">$ (a tasa BCV)</option><option value="VES">Bs.</option></select>
+      </div>
+      <pre class="pm-preview" id="pmPreview"></pre>
+      <div class="row">
+        <button type="button" class="btn btn-primary btn-sm" id="btnPmShare"><svg class="icon"><use href="#i-share"/></svg>Compartir</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btnPmCopy"><svg class="icon"><use href="#i-copy"/></svg>Copiar</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btnPmQr"><svg class="icon"><use href="#i-scan"/></svg>QR para cobrar</button>
+      </div>
+      <div class="pm-qr" id="pmQr"></div>
+      <p class="hint">Tus datos se guardan sólo en este teléfono. Por voz: "comparte mis datos de pago móvil" o "cóbrale 10 dólares a Carlos".</p>
+    </div>
+  </dialog>
+
   <!-- ============ DIÁLOGO: ALARMA SONANDO ============ -->
   <dialog class="sheet sheet-ring" id="dlgRinging" aria-labelledby="ringTitle">
     <div class="ring-body">
@@ -612,18 +775,23 @@
     </div>
   </dialog>
 
-  <script src="js/utils.js?v=11.0.1"></script>
-  <script src="js/audioEffects.js?v=11.0.1"></script>
-  <script src="js/mathEngine.js?v=11.0.1"></script>
-  <script src="js/finance.js?v=11.0.1"></script>
-  <script src="js/reminders.js?v=11.0.1"></script>
-  <script src="js/cleaner.js?v=11.0.1"></script>
-  <script src="js/camera.js?v=11.0.1"></script>
-  <script src="js/voiceOrb.js?v=11.0.1"></script>
-  <script src="js/speechEngine.js?v=11.0.1"></script>
-  <script src="js/yarbisBrain.js?v=11.0.1"></script>
-  <script src="js/financeView.js?v=11.0.1"></script>
-  <script src="js/settings.js?v=11.0.1"></script>
-  <script src="js/app.js?v=11.0.1"></script>
+  <script src="js/utils.js?v=12.0.0"></script>
+  <script src="js/audioEffects.js?v=12.0.0"></script>
+  <script src="js/mathEngine.js?v=12.0.0"></script>
+  <script src="js/finance.js?v=12.0.0"></script>
+  <script src="js/reminders.js?v=12.0.0"></script>
+  <script src="js/cleaner.js?v=12.0.0"></script>
+  <script src="js/camera.js?v=12.0.0"></script>
+  <script src="js/voiceOrb.js?v=12.0.0"></script>
+  <script src="js/speechEngine.js?v=12.0.0"></script>
+  <script src="js/charts.js?v=12.0.0"></script>
+  <script src="js/expenses.js?v=12.0.0"></script>
+  <script src="js/pagomovil.js?v=12.0.0"></script>
+  <script src="js/yarbisBrain.js?v=12.0.0"></script>
+  <script src="js/financeView.js?v=12.0.0"></script>
+  <script src="js/settings.js?v=12.0.0"></script>
+  <script src="js/home.js?v=12.0.0"></script>
+  <script src="js/voicetools.js?v=12.0.0"></script>
+  <script src="js/app.js?v=12.0.0"></script>
 </body>
 </html>
