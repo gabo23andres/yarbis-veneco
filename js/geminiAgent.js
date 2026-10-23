@@ -109,6 +109,21 @@
       }, ['monto', 'moneda'])
     },
     {
+      name: 'registrar_ingreso',
+      description: 'Anota dinero que le entró al usuario: le dieron o regalaron plata, sueldo, remesa, venta, pago móvil recibido, bono, trabajo extra, préstamo recibido.',
+      parameters: obj({
+        monto: num('Monto recibido.'),
+        moneda: str('Moneda.', { enum: ['USD', 'VES'] }),
+        categoria: str('Tipo: Sueldo, Regalo, Remesa, Ventas, Trabajo extra, Bonos, Préstamo u Otros.'),
+        nota: str('De quién o por qué (opcional). Ej: "De mi papá", "Venta de tortas".')
+      }, ['monto', 'moneda'])
+    },
+    {
+      name: 'balance_del_mes',
+      description: 'Dice cuánto dinero entró y salió este mes y cuánto le queda al usuario (ingresos menos gastos).',
+      parameters: obj({})
+    },
+    {
       name: 'tasas_del_dia',
       description: 'Devuelve las tasas actualizadas del dólar BCV, paralelo, euro y USDT en bolívares.',
       parameters: obj({})
@@ -273,7 +288,25 @@
         out.actions.push({ label: 'Ver gastos', view: 'finance' });
         out.sound = 'success';
         const b = E.budgetStatus();
-        return { ok: true, categoria: exp.category, en_dolares: Number(exp.usd.toFixed(2)), total_del_mes_usd: Number(E.summary().totalUsd.toFixed(2)), presupuesto_usado_pct: b.budget ? Math.round(b.pct) : null };
+        const bal = root.YarbisExpenses.balance();
+        return { ok: true, categoria: exp.category, en_dolares: Number(exp.usd.toFixed(2)), total_del_mes_usd: Number(E.summary().totalUsd.toFixed(2)), presupuesto_usado_pct: b.budget ? Math.round(b.pct) : null, ...(bal.incomeUsd ? { le_queda_este_mes_usd: Number(bal.balanceUsd.toFixed(2)) } : {}) };
+      }
+      case 'registrar_ingreso': {
+        const X = root.YarbisExpenses;
+        if (!X || !X.incomes) return { ok: false, error: 'Ingresos no disponible.' };
+        const inc = X.incomes.add({ amount: a.monto, currency: a.moneda, category: a.categoria, note: a.nota || '' });
+        if (!inc) return { ok: false, error: 'Monto inválido.' };
+        out.actions.push({ label: 'Ver ingresos', view: 'finance' });
+        out.sound = 'success';
+        const b = X.balance();
+        return { ok: true, categoria: inc.category, en_dolares: Number(inc.usd.toFixed(2)), entro_este_mes_usd: Number(b.incomeUsd.toFixed(2)), salio_este_mes_usd: Number(b.expenseUsd.toFixed(2)), le_queda_usd: Number(b.balanceUsd.toFixed(2)) };
+      }
+      case 'balance_del_mes': {
+        const X = root.YarbisExpenses;
+        if (!X || !X.balance) return { ok: false, error: 'Finanzas no disponible.' };
+        const b = X.balance();
+        out.actions.push({ label: 'Ver finanzas', view: 'finance' });
+        return { ok: true, entro_usd: Number(b.incomeUsd.toFixed(2)), salio_usd: Number(b.expenseUsd.toFixed(2)), le_queda_usd: Number(b.balanceUsd.toFixed(2)), tasa_bcv: b.bcv };
       }
       case 'tasas_del_dia': {
         const r = await brain.finance.ensureFresh();
@@ -418,6 +451,7 @@
   function rules() {
     return `
 Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramientas.
+- Si al usuario le dan, regalan o pagan dinero (sueldo, remesa, venta…), usa registrar_ingreso; si pregunta cuánto le queda, balance_del_mes.
 - Si el usuario pide hacer algo (alarma, temporizador, nota, compra, gasto, llamada, mensaje, abrir app, música, evento, clima, lugares), usa la herramienta adecuada en vez de explicarle cómo hacerlo. Puedes usar varias seguidas.
 - Para noticias, resultados, precios de productos, horarios o cualquier dato actual que no sepas con seguridad, usa buscar_en_internet. Para el dólar usa tasas_del_dia.
 - Si el usuario te cuenta un dato personal duradero o te pide recordar algo, usa guardar_recuerdo.

@@ -5,38 +5,38 @@
    Nunca guarda llamadas a APIs externas.
    ========================================================================== */
 
-const VERSION = 'yarbis-v15.2.0';
+const VERSION = 'yarbis-v15.3.0';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=15.2.0',
+  './styles.css?v=15.3.0',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/apple-touch-icon.png',
   './icons/icon-512.png',
-  './js/utils.js?v=15.2.0',
-  './js/audioEffects.js?v=15.2.0',
-  './js/mathEngine.js?v=15.2.0',
-  './js/finance.js?v=15.2.0',
-  './js/reminders.js?v=15.2.0',
-  './js/cleaner.js?v=15.2.0',
-  './js/camera.js?v=15.2.0',
-  './js/voiceOrb.js?v=15.2.0',
-  './js/voiceRecorder.js?v=15.2.0',
-  './js/speechEngine.js?v=15.2.0',
-  './js/charts.js?v=15.2.0',
-  './js/expenses.js?v=15.2.0',
-  './js/pagomovil.js?v=15.2.0',
-  './js/appLauncher.js?v=15.2.0',
-  './js/aiProviders.js?v=15.2.0',
-  './js/geminiAgent.js?v=15.2.0',
-  './js/yarbisBrain.js?v=15.2.0',
-  './js/financeView.js?v=15.2.0',
-  './js/settings.js?v=15.2.0',
-  './js/home.js?v=15.2.0',
-  './js/voicetools.js?v=15.2.0',
-  './js/app.js?v=15.2.0'
+  './js/utils.js?v=15.3.0',
+  './js/audioEffects.js?v=15.3.0',
+  './js/mathEngine.js?v=15.3.0',
+  './js/finance.js?v=15.3.0',
+  './js/reminders.js?v=15.3.0',
+  './js/cleaner.js?v=15.3.0',
+  './js/camera.js?v=15.3.0',
+  './js/voiceOrb.js?v=15.3.0',
+  './js/voiceRecorder.js?v=15.3.0',
+  './js/speechEngine.js?v=15.3.0',
+  './js/charts.js?v=15.3.0',
+  './js/expenses.js?v=15.3.0',
+  './js/pagomovil.js?v=15.3.0',
+  './js/appLauncher.js?v=15.3.0',
+  './js/aiProviders.js?v=15.3.0',
+  './js/geminiAgent.js?v=15.3.0',
+  './js/yarbisBrain.js?v=15.3.0',
+  './js/financeView.js?v=15.3.0',
+  './js/settings.js?v=15.3.0',
+  './js/home.js?v=15.3.0',
+  './js/voicetools.js?v=15.3.0',
+  './js/app.js?v=15.3.0'
 ];
 
 self.addEventListener('install', (event) => {

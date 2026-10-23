@@ -547,6 +547,8 @@
       }
 
       /* ---------- Gastos ---------- */
+      const income = this.incomeIntent(text, a, n);
+      if (income) return income;
       const exp = this.expenseIntent(text, a, n);
       if (exp) return exp;
 
@@ -1030,6 +1032,7 @@
           '- ⏰ "Alarma a las 6:30 de la mañana" · "Despiértame de lunes a viernes a las 6"',
           '- 🛒 "Agrega leche y huevos a la lista de compras" · "¿Qué hay en la lista de compras?"',
           '- 💸 "Gasté 20 dólares en comida" · "¿Cuánto he gastado este mes?"',
+          '- 💰 "Me regalaron 20 dólares" · "Me pagaron el sueldo, 300 dólares" · "¿Cuánto me queda este mes?"',
           '- 🔔 "Avísame cuando el dólar pase de 250"',
           '- 📲 "Comparte mis datos de pago móvil" · "Cóbrale 10 dólares a Carlos"',
           '- 🌐 "Traduce al inglés: ¿dónde queda el baño?" · 🎙️ "Modo dictado"',
@@ -1285,6 +1288,99 @@
     /* ------------------------------------------
        GASTOS
        ------------------------------------------ */
+    /* ------------------------------------------
+       INGRESOS Y BALANCE (ligados a los gastos)
+       ------------------------------------------ */
+    // "Este mes: entró $X, salió $Y → te quedan $Z"
+    balanceLine() {
+      const X = root.YarbisExpenses;
+      if (!X || !X.balance) return '';
+      const b = X.balance();
+      if (!b.incomeUsd && !b.expenseUsd) return '';
+      const left = b.balanceUsd >= 0 ? `te quedan **${U.fmtUsd(b.balanceUsd)}**` : `gastaste **${U.fmtUsd(-b.balanceUsd)}** más de lo que entró`;
+      return `Este mes: entró ${U.fmtUsd(b.incomeUsd)}, salió ${U.fmtUsd(b.expenseUsd)} → ${left}${b.bcv ? ` (≈ ${U.fmtBs(Math.abs(b.balanceUsd) * b.bcv)})` : ''}.`;
+    }
+
+    incomeIntent(text, a, n) {
+      const X = root.YarbisExpenses;
+      const I = X && X.incomes;
+      if (!I) return null;
+
+      // Balance: "¿cuánto me queda?", "¿cuál es mi balance?", "¿cómo voy con la plata?"
+      if (has(n, /^(?:cual es |como va |como esta |dime |muestrame )?(?:mi |el )?balance(?: del mes| de este mes)?$/) ||
+          has(n, /^cuanto (?:me queda|me sobra|tengo disponible|he ahorrado|llevo ahorrado)(?: este mes| del mes| de plata| de dinero| para gastar)?$/) ||
+          has(n, /^como voy (?:con|de) (?:la plata|el dinero|mis finanzas|las finanzas|mis cuentas|las cuentas)(?: este mes)?$/)) {
+        const b = X.balance();
+        if (!b.incomeUsd && !b.expenseUsd) {
+          return { text: 'Este mes no has registrado ingresos ni gastos. Dime por ejemplo "me pagaron 300 dólares de sueldo" o "gasté 10 dólares en comida".' };
+        }
+        return {
+          text: `📊 ${this.balanceLine()}${!b.incomeUsd ? '\n\nAún no has registrado ingresos este mes: dime "me pagaron…" o "me regalaron…".' : ''}`,
+          speak: b.balanceUsd >= 0
+            ? `Este mes entraron ${U.fmtNumber(b.incomeUsd, 2)} dólares y salieron ${U.fmtNumber(b.expenseUsd, 2)}. Te quedan ${U.fmtNumber(b.balanceUsd, 2)} dólares.`
+            : `Este mes gastaste ${U.fmtNumber(-b.balanceUsd, 2)} dólares más de lo que entró.`,
+          actions: [{ label: 'Ver finanzas', view: 'finance' }]
+        };
+      }
+
+      // Consultas: "¿cuánto me han dado este mes?", "¿cuánto he recibido?", "mis ingresos"
+      if (has(n, /^cuanto (?:me (?:han dado|dieron|han regalado|regalaron|han pagado|pagaron|ha entrado|entro|ha llegado|llego|han mandado|mandaron|han depositado|depositaron)|he (?:recibido|ganado|cobrado|vendido)|gane|recibi|cobre|vendi)(?: este mes| en el mes| del mes)?$/) ||
+          has(n, /\b(mis ingresos|ingresos del mes|resumen de ingresos)\b/)) {
+        const s = I.summary();
+        if (!s.count) return { text: 'Este mes no has registrado ingresos. Dime por ejemplo "me regalaron 20 dólares" o "me pagaron 300 dólares de sueldo".' };
+        const top = s.byCategory.slice(0, 5).map(c => `- ${c.emoji} ${c.name}: ${U.fmtUsd(c.usd)}`).join('\n');
+        return {
+          text: `💰 Este mes te entraron **${U.fmtUsd(s.totalUsd)}** (≈ ${U.fmtBs(s.totalBs)}) en ${s.count} ingreso${s.count === 1 ? '' : 's'}:\n${top}\n\n${this.balanceLine()}`,
+          speak: `Este mes te entraron ${U.fmtNumber(s.totalUsd, 2)} dólares.`,
+          actions: [{ label: 'Ver ingresos', view: 'finance' }]
+        };
+      }
+
+      // Registro: "me regalaron 20 dólares", "mi papá me dio 10$", "me llegó una remesa de 100",
+      // "me pagaron el sueldo, 300 dólares", "vendí unas tortas por 15 dólares", "registra un ingreso de 50$"
+      const m = /^(?:((?:mi|mis|la|el|los|las)\s+[a-zñ]+(?:\s+[a-zñ]+)?)\s+)?(me\s+(?:dieron|dio|regalaron|regalo|pagaron|pago|depositaron|deposito|transfirieron|transfirio|mandaron|mando|enviaron|envio|prestaron|presto|devolvieron|devolvio|llego|llegaron|cayo|cayeron|entro|entraron)|recibi|cobre|gane|vendi|(?:registra|anota|apunta|agrega)r?\s+(?:un\s+)?ingreso(?:\s+de)?)\b\s*(.*)$/d.exec(a);
+      if (!m) return null;
+      const verb = m[2];
+      // "una remesa" no es "1 remesa": los artículos sólo cuentan como número antes de la moneda
+      const rest = wordsToDigits(U.normalize(m[3] || '').replace(/\b(un|una|unos|unas)\s+(?!(dolar|dolares|bolivar|bolivares|mil)\b)/g, ''));
+      const found = [...rest.matchAll(/(\$\s?)?(\d[\d.,]*)\s*(mil\b)?\s*(dolares?|usd|\$|verdes|bolivares?|bs|bolos?|ves)?/g)];
+      const am = found.find(x => x[1] || x[4]) || found[0];
+      if (!am) return null;
+      let amount = parseAmount(am[2]);
+      if (amount === null || !(amount > 0)) return null;
+      if (am[3]) amount *= 1000;
+      const hasCurrency = !!(am[1] || am[4]);
+      // Sin moneda sólo si está claro que es dinero ("me dio 2 consejos" no es un ingreso)
+      const moneyContext = /^(me\s+(pagaron|pago|depositaron|deposito|transfirieron|transfirio)|cobre|gane|registra|anota|apunta|agrega)/.test(verb) ||
+        /\b(remesa|sueldo|quincena|salario|bono|plata|dinero|reales|real|pago movil|zelle|transferencia|propina|aguinaldo|utilidades|mesada|ingreso)\b/.test(rest);
+      if (!hasCurrency && !moneyContext) return null;
+      const currency = am[4] && /^(bolivares?|bs|bolos?|ves)$/.test(am[4]) ? 'VES' : 'USD';
+
+      // Detalle: quién te lo dio y por qué
+      const subject = m.indices[1] ? text.slice(m.indices[1][0], m.indices[1][1]).trim() : '';
+      let detail = m.indices[3] ? text.slice(m.indices[3][0]) : '';
+      detail = detail
+        .replace(/(\$\s?)?\d[\d.,]*\s*(mil\b)?\s*(d[oó]lares?|usd|\$|verdes|bol[ií]vares?|bs\.?|bolos?|ves)?/i, ' ')
+        .replace(/\b(d[oó]lares?|bol[ií]vares?|verdes)\b/gi, ' ')
+        .replace(/[,.;]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^((de|del|por|para|en|el|la|los|las|un|una|unos|unas|y)\s+)+/i, '')
+        .replace(/(\s+(de|del|por|para|en|y))+$/i, '')
+        .trim();
+      const note = [subject ? `De ${subject}` : '', detail].filter(Boolean).join(' · ');
+      const inc = I.add({ amount, currency, note: U.capitalize(note), category: I.guessCategory(`${verb} ${rest} ${U.normalize(note)}`) });
+      if (!inc) return null;
+      const cat = I.category(inc.category);
+      const amountTxt = currency === 'USD' ? U.fmtUsd(amount) : `${U.fmtBs(amount)} (≈ ${U.fmtUsd(inc.usd)})`;
+      return {
+        text: `${cat.emoji} Ingreso registrado: **${amountTxt}** · ${cat.name}${inc.note ? ` · ${inc.note}` : ''}.\n\n${this.balanceLine()}`,
+        speak: `Listo, anoté ${currency === 'USD' ? `${U.fmtNumber(amount, 2)} dólares` : `${U.fmtNumber(amount, 2)} bolívares`} de ${cat.name.toLowerCase()}.`,
+        actions: [{ label: 'Ver ingresos', view: 'finance' }],
+        sound: 'success'
+      };
+    }
+
     expenseIntent(text, a, n) {
       const E = root.YarbisExpenses && root.YarbisExpenses.store;
       if (!E) return null;
@@ -1304,7 +1400,8 @@
         const top = s.byCategory.slice(0, 4).map(c => `- ${c.emoji} ${c.name}: ${U.fmtUsd(c.usd)}`).join('\n');
         return {
           text: `💸 Este mes llevas **${U.fmtUsd(s.totalUsd)}** (≈ ${U.fmtBs(s.totalBs)}) en ${s.count} gasto${s.count === 1 ? '' : 's'}:\n${top}` +
-            (b.budget ? `\n\nPresupuesto: ${U.fmtNumber(b.pct, 0)} % usado de ${U.fmtUsd(b.budget)}.` : ''),
+            (b.budget ? `\n\nPresupuesto: ${U.fmtNumber(b.pct, 0)} % usado de ${U.fmtUsd(b.budget)}.` : '') +
+            (root.YarbisExpenses.balance().incomeUsd ? `\n\n${this.balanceLine()}` : ''),
           speak: `Este mes llevas ${U.fmtNumber(s.totalUsd, 2)} dólares en gastos.`,
           actions: [{ label: 'Ver gastos', view: 'finance' }]
         };
@@ -1334,7 +1431,8 @@
       const amountTxt = currency === 'USD' ? U.fmtUsd(amount) : `${U.fmtBs(amount)} (≈ ${U.fmtUsd(e.usd)})`;
       return {
         text: `${cat.emoji} Gasto registrado: **${amountTxt}** en ${cat.name}${note && U.normalize(note) !== U.normalize(cat.name) ? ` · ${note}` : ''}.` +
-          (b.budget ? ` Llevas ${U.fmtNumber(b.pct, 0)} % del presupuesto.` : '') + warn,
+          (b.budget ? ` Llevas ${U.fmtNumber(b.pct, 0)} % del presupuesto.` : '') + warn +
+          (root.YarbisExpenses.balance().incomeUsd ? `\n\n${this.balanceLine()}` : ''),
         actions: [{ label: 'Ver gastos', view: 'finance' }],
         sound: 'success'
       };
@@ -1678,6 +1776,12 @@
         if (E) {
           const s = E.summary();
           if (s.count) lines.push(`Gastos de este mes: ${U.fmtUsd(s.totalUsd)} (${s.byCategory.slice(0, 3).map(c => `${c.name} ${U.fmtUsd(c.usd)}`).join(', ')})${E.budget ? `, presupuesto ${U.fmtUsd(E.budget)}` : ''}.`);
+          const X = root.YarbisExpenses;
+          const bal = X.balance ? X.balance() : null;
+          if (bal && bal.incomeUsd) {
+            const is = X.incomes.summary();
+            lines.push(`Ingresos de este mes: ${U.fmtUsd(bal.incomeUsd)} (${is.byCategory.slice(0, 3).map(c => `${c.name} ${U.fmtUsd(c.usd)}`).join(', ')}); le quedan ${U.fmtUsd(bal.balanceUsd)}.`);
+          }
         }
       } catch (e) { /* sin gastos */ }
       const city = S.getRaw('yarbis_weather_city', '');

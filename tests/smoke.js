@@ -361,6 +361,29 @@ async function run() {
       assert.match(await page.textContent('#expBars'), /Comida/);
     });
 
+    await check('ingresos ligados a los gastos: balance del mes', async () => {
+      await page.click('.tab[data-view="assistant"]');
+      await say('me regalaron 50 dólares por mi cumpleaños', 'Ingreso registrado');
+      assert.match(await page.textContent('#messages'), /te quedan \$30,00/);
+      await say('¿cuánto me queda?', 'Este mes: entró');
+      await page.click('.tab[data-view="finance"]');
+      await page.waitForFunction(() => document.querySelector('#incSummary').textContent.includes('$50,00'));
+      assert.match(await page.textContent('#incBars'), /Regalo/);
+      assert.match(await page.textContent('#incList'), /Mi cumpleaños/);
+      // El balance aparece en las dos tarjetas
+      assert.match(await page.textContent('#incSummary'), /Te queda\$30,00/);
+      assert.match(await page.textContent('#expSummary'), /Te queda\$30,00/);
+      assert.doesNotMatch(await page.textContent('#incSummary') + await page.textContent('#expSummary'), /null/);
+      // Ingreso desde el formulario
+      await page.fill('#incAmount', '10');
+      await page.selectOption('#incCategory', 'Ventas');
+      await page.fill('#incNote', 'Tortas');
+      await page.click('#formIncome button[type="submit"]');
+      await page.waitForFunction(() => document.querySelector('#incSummary').textContent.includes('$60,00'));
+      await page.locator('#incomesCard').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: path.join(SHOTS, 'mobile-ingresos.png') });
+    });
+
     await check('gráfico del dólar y lista de precios', async () => {
       await page.evaluate(() => {
         const F = window.YarbisFinance;

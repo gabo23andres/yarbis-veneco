@@ -31,7 +31,10 @@
       root.YarbisFinance.onChange(rerender);
       root.YarbisReminders.notes.onChange(rerender);
       root.YarbisReminders.schedule.onChange((e) => { if (!e || e.type !== 'tick') rerender(); });
-      if (root.YarbisExpenses) root.YarbisExpenses.store.onChange(rerender);
+      if (root.YarbisExpenses) {
+        root.YarbisExpenses.store.onChange(rerender);
+        if (root.YarbisExpenses.incomes) root.YarbisExpenses.incomes.onChange(rerender);
+      }
       this.render();
       this.loadWeather();
       setInterval(() => { if (!document.hidden) rerender(); }, 30000);
@@ -110,7 +113,14 @@
 
       // Gastos del mes
       const E = root.YarbisExpenses && root.YarbisExpenses.store;
-      if (E) {
+      const bal = root.YarbisExpenses && root.YarbisExpenses.balance ? root.YarbisExpenses.balance() : null;
+      if (bal && bal.incomeUsd) {
+        // Con ingresos: el balance del mes (lo que entró menos lo que salió)
+        cards.push(this.card('bento-expenses', () => app.openTool('expense'),
+          el('span', { class: 'bento-label', text: '💰 Balance del mes' }),
+          el('span', { class: `bento-big ${bal.balanceUsd >= 0 ? 'up' : 'down'}`, text: `${bal.balanceUsd < 0 ? '−' : ''}${U.fmtUsd(Math.abs(bal.balanceUsd))}` }),
+          el('span', { class: 'bento-sub', text: `Entró ${U.fmtUsd(bal.incomeUsd)} · Salió ${U.fmtUsd(bal.expenseUsd)}` })));
+      } else if (E) {
         const s = E.summary();
         const b = E.budgetStatus();
         cards.push(this.card('bento-expenses', () => app.openTool('expense'),

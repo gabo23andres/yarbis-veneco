@@ -1298,3 +1298,9 @@ html[data-platform="ios"][data-ipad] .install-hint::after { display: none; }
 .diag-item.bad { color: var(--text); }
 .diag-mark { flex: none; }
 .bento-brain { grid-column: 1 / -1; border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--surface)), var(--surface)); }
+
+/* ===== v15.3: ingresos y balance del mes ===== */
+.exp-balance { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--surface) 85%, transparent); min-width: 200px; }
+.exp-balance .result-line.total { border-top: 1px dashed var(--border); padding-top: 4px; margin-top: 2px; }
+.exp-balance.pos .total strong { color: #22c55e; }
+.exp-balance.neg .total strong { color: #ef4444; }
