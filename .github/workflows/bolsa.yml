@@ -1,0 +1,57 @@
+name: Datos de la bolsa
+
+# Baja precios de la Bolsa de Caracas y de Yahoo Finance, calcula señales y
+# publica bolsa.json en la rama "datos" (un solo commit, sin historial).
+# La app lo lee desde raw.githubusercontent.com.
+on:
+  schedule:
+    # Cada 20 minutos en horario de mercado (Caracas 9:00-13:00 VET, Nueva York 9:30-16:00 ET)
+    - cron: '*/20 13-21 * * 1-5'
+    # Una vez al día para cripto y fines de semana
+    - cron: '17 11 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bolsa
+  cancel-in-progress: false
+
+jobs:
+  datos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # El archivo anterior guarda el historial diario de las acciones de Caracas
+      - name: Datos anteriores
+        run: |
+          git fetch --depth 1 origin datos 2>/dev/null && git show origin/datos:bolsa.json > prev.json 2>/dev/null || echo '{}' > prev.json
+          wc -c prev.json
+
+      - name: Generar bolsa.json
+        run: |
+          mkdir -p out
+          node scripts/bolsa.mjs out/bolsa.json prev.json
+
+      - name: Publicar en la rama datos
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          cat > README.md <<'MD'
+          # Datos de la bolsa para YARBIS
+          Generados por `.github/workflows/bolsa.yml` en la rama principal. No editar a mano.
+          MD
+          git init -q -b datos
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bolsa.json README.md
+          git commit -q -m "Datos de la bolsa $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" datos

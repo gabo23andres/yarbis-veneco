@@ -19,6 +19,14 @@ Asistente por voz en el navegador, hecho para Venezuela. Es una página estátic
   temporizador. En iPhone: ícono y pantallas de arranque propias, vibración (iOS 18), sin
   zoom al escribir, aviso para "Agregar a inicio", apps que abren con su esquema
   (WhatsApp, Spotify, YouTube, Apple Maps, Waze, Instagram) y SMS con el formato de iPhone.
+- **Bolsa de valores**: Bolsa de Caracas (IBC, índices y acciones), acciones de EE. UU.,
+  fondos (S&P 500, Nasdaq), oro, plata, petróleo, divisas y cripto, con señales técnicas de
+  comprar / mantener / vender y sus razones (promedios de 20 y 50 días, RSI, rendimiento).
+  Un robot (`.github/workflows/bolsa.yml` + `scripts/bolsa.mjs`) baja los datos cada 20
+  minutos en horario de mercado y los publica en la rama `datos`. Son señales educativas,
+  no asesoría financiera.
+- **Ingresos y balance**: regalos, sueldo, remesas, ventas… ligados a los gastos: cuánto
+  entró, cuánto salió y cuánto te queda.
 - **Hecha para el teléfono**: abre las apps instaladas (WhatsApp, YouTube, Spotify, Maps,
   Waze…), envía SMS y correos, crea eventos en el calendario, dice dónde estás y busca
   lugares cercanos ("gasolineras cerca"). El botón atrás cierra ventanas, deslizas entre

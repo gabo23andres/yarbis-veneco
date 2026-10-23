@@ -107,6 +107,7 @@
       });
 
       if (root.YarbisExpenses) root.YarbisExpenses.mountUI();
+      if (root.YarbisStocks) root.YarbisStocks.mountUI();
 
       // Gráfico
       this.range = Number(S.getRaw('yarbis_chart_range', '30')) || 30;
@@ -221,7 +222,24 @@
         { name: 'BCV', color: 'var(--accent)', points: pts.map(p => ({ t: p.t, v: p.bcv })) },
         { name: 'Paralelo', color: 'var(--chart-2)', points: pts.filter(p => p.paralelo > 0).map(p => ({ t: p.t, v: p.paralelo })) }
       ];
-      box.replaceChildren(root.YarbisCharts.lineChart(series, { label: 'Historial del dólar', format: (v) => U.fmtBs(v) }));
+      const width = Math.max(260, box.clientWidth || (box.parentElement && box.parentElement.clientWidth) || 640);
+      box.replaceChildren(root.YarbisCharts.lineChart(series, {
+        label: 'Historial del dólar', format: (v) => U.fmtBs(v),
+        width, height: width < 420 ? 200 : 230,
+        emptyText: 'Aún hay muy pocos datos: el gráfico se llena solo cada vez que abres YARBIS.'
+      }));
+      // Si cambia el ancho de la pantalla (girar el teléfono), se vuelve a dibujar
+      if (!this.chartResize && 'ResizeObserver' in root) {
+        let lastW = width;
+        this.chartResize = new root.ResizeObserver(() => {
+          const now = box.clientWidth;
+          if (now && Math.abs(now - lastW) > 24) {
+            lastW = now;
+            this.renderChart();
+          }
+        });
+        this.chartResize.observe(box);
+      }
       const legend = U.$('#fxChartLegend');
       const item = (name, color, rate) => {
         const ch = this.finance.change(rate, this.range || 30);

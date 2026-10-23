@@ -98,6 +98,9 @@ async function mockNetwork(context) {
       return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts: [part] } }] })}\n\n` });
     }
     if (url.includes('dolarapi.com/v1/historicos')) return json([]);
+    if (url.includes('raw.githubusercontent.com') && url.includes('bolsa.json')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: fs.readFileSync(path.join(__dirname, 'fixtures', 'bolsa.json'), 'utf8') });
+    }
     if (url.includes('qrcode-generator')) {
       return route.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.qrcode=function(){return{addData:function(){},make:function(){},getModuleCount:function(){return 21},isDark:function(r,c){return (r*c+r)%3===0}}};' });
     }
@@ -382,6 +385,26 @@ async function run() {
       await page.waitForFunction(() => document.querySelector('#incSummary').textContent.includes('$60,00'));
       await page.locator('#incomesCard').scrollIntoViewIfNeeded();
       await page.screenshot({ path: path.join(SHOTS, 'mobile-ingresos.png') });
+    });
+
+    await check('bolsa de valores: mercados, señales y detalle', async () => {
+      await page.click('.tab[data-view="finance"]');
+      await page.waitForSelector('#stocksList .stock-item');
+      // Caracas: los índices primero
+      assert.match(await page.textContent('#stocksList'), /Índice Bursátil Caracas \(IBC\)/);
+      assert.match(await page.textContent('#stocksDisclaimer'), /no son asesoría financiera/);
+      await page.click('#stocksTabs button[data-tab="us"]');
+      await page.waitForFunction(() => document.querySelector('#stocksList').textContent.includes('Apple'));
+      assert.match(await page.textContent('#stocksRecs'), /Señales de compra/);
+      await page.click('#stocksList [data-symbol="AAPL"] .stock-main');
+      await page.waitForSelector('#stocksList [data-symbol="AAPL"] .stock-detail');
+      assert.match(await page.textContent('#stocksList [data-symbol="AAPL"] .stock-detail'), /Promedio 50 días/);
+      await page.locator('#stocksCard').scrollIntoViewIfNeeded();
+      await page.locator('#stocksCard').screenshot({ path: path.join(SHOTS, 'mobile-bolsa.png') });
+      await page.click('.tab[data-view="assistant"]');
+      await say('¿cómo está la bolsa de Caracas?', 'Bolsa · Caracas');
+      await say('¿qué acciones me recomiendas comprar?', 'Para comprar');
+      await page.click('.tab[data-view="finance"]');
     });
 
     await check('gráfico del dólar y lista de precios', async () => {

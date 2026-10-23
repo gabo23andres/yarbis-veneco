@@ -124,6 +124,14 @@
       parameters: obj({})
     },
     {
+      name: 'bolsa',
+      description: 'Precios y señales técnicas (comprar, mantener, vender) de la Bolsa de Caracas (IBC y acciones), acciones de EE. UU., fondos (S&P 500), oro, divisas y cripto.',
+      parameters: obj({
+        consulta: str('Nombre o símbolo a consultar, por ejemplo "Apple", "IBC", "Banco Provincial", "oro" (opcional).'),
+        mercado: str('Mercado (opcional).', { enum: ['bvc', 'us', 'etf', 'commodities', 'crypto'] })
+      })
+    },
+    {
       name: 'tasas_del_dia',
       description: 'Devuelve las tasas actualizadas del dólar BCV, paralelo, euro y USDT en bolívares.',
       parameters: obj({})
@@ -308,6 +316,27 @@
         out.actions.push({ label: 'Ver finanzas', view: 'finance' });
         return { ok: true, entro_usd: Number(b.incomeUsd.toFixed(2)), salio_usd: Number(b.expenseUsd.toFixed(2)), le_queda_usd: Number(b.balanceUsd.toFixed(2)), tasa_bcv: b.bcv };
       }
+      case 'bolsa': {
+        const B = root.YarbisStocks;
+        if (!B) return { ok: false, error: 'Bolsa no disponible.' };
+        await B.load();
+        out.actions.push({ label: 'Ver la bolsa', view: 'finance' });
+        const pick = (x) => ({ nombre: x.name, simbolo: x.symbol, precio: x.price, moneda: x.currency, variacion_dia_pct: x.changePct, senal: x.signal, razones: x.reasons, rsi: x.rsi, rend_1_mes_pct: x.ret1m });
+        if (a.consulta) {
+          const x = B.find(a.consulta);
+          if (x) return { ok: true, ...pick(x), aviso: B.data.disclaimer };
+        }
+        const r = B.recommendations(4, B.data, a.mercado || null);
+        const g = a.mercado ? B.data.groups[a.mercado] : null;
+        return {
+          ok: true,
+          actualizado: B.data.updatedAt,
+          indices: ((g || B.data.groups.bvc).indices || []).map(pick),
+          comprar: r.buy.map(pick),
+          vender: r.sell.map(pick),
+          aviso: B.data.disclaimer
+        };
+      }
       case 'tasas_del_dia': {
         const r = await brain.finance.ensureFresh();
         out.actions.push({ label: 'Abrir convertidor', view: 'finance' });
@@ -451,6 +480,7 @@
   function rules() {
     return `
 Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramientas.
+- Para la bolsa usa la herramienta bolsa. Explica las señales con sus razones y aclara siempre que son señales técnicas, no asesoría financiera; sugiere diversificar.
 - Si al usuario le dan, regalan o pagan dinero (sueldo, remesa, venta…), usa registrar_ingreso; si pregunta cuánto le queda, balance_del_mes.
 - Si el usuario pide hacer algo (alarma, temporizador, nota, compra, gasto, llamada, mensaje, abrir app, música, evento, clima, lugares), usa la herramienta adecuada en vez de explicarle cómo hacerlo. Puedes usar varias seguidas.
 - Para noticias, resultados, precios de productos, horarios o cualquier dato actual que no sepas con seguridad, usa buscar_en_internet. Para el dólar usa tasas_del_dia.
