@@ -45,8 +45,9 @@
    * series: [{ name, color: 'var(--accent)', points: [{ t, v }] }]
    */
   function lineChart(series, opts = {}) {
-    const w = opts.width || 640;
-    const h = opts.height || 220;
+    // Se dibuja al tamaño real de la pantalla: así los números no se encogen
+    const w = Math.round(opts.width || 640);
+    const h = Math.round(opts.height || 220);
     const padL = 54;
     const padR = 12;
     const padT = 14;
@@ -56,7 +57,7 @@
     wrap.appendChild(svg);
 
     const all = series.flatMap(s => s.points);
-    if (all.length < 2) {
+    if (!series.some(s => s.points.length >= 2)) {
       wrap.appendChild(U.el('div', { class: 'chart-empty', text: opts.emptyText || 'Aún no hay suficientes datos. El gráfico se llena con el uso.' }));
       return wrap;
     }
@@ -79,10 +80,17 @@
       label.textContent = U.fmtNumber(v, v >= 100 ? 0 : 2);
       svg.appendChild(label);
     }
-    // Etiquetas del eje X (inicio y fin)
-    [tMin, tMax].forEach((t, i) => {
-      const label = svgEl('text', { x: x(t), y: h - 6, class: 'chart-axis', 'text-anchor': i ? 'end' : 'start' });
-      label.textContent = new Date(t).toLocaleDateString('es-VE', { day: 'numeric', month: 'short' });
+    // Etiquetas del eje X: inicio, fin y (si cabe) el medio; si todo es del
+    // mismo día se muestran horas para no repetir la fecha
+    const sameDay = new Date(tMin).toDateString() === new Date(tMax).toDateString();
+    const fmtX = (t) => (sameDay
+      ? new Date(t).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })
+      : new Date(t).toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }));
+    const ticks = w >= 420 ? [tMin, (tMin + tMax) / 2, tMax] : [tMin, tMax];
+    ticks.forEach((t, i) => {
+      const anchor = i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle';
+      const label = svgEl('text', { x: x(t), y: h - 6, class: 'chart-axis', 'text-anchor': anchor });
+      label.textContent = fmtX(t);
       svg.appendChild(label);
     });
 

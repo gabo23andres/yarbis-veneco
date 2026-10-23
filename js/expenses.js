@@ -263,7 +263,7 @@
           el('span', { class: 'muted small', text: `≈ ${U.fmtBs(s.totalBs)} · ${s.count} ${s.count === 1 ? this.cfg.one : this.cfg.many}` })),
         this.balanceBox(),
         b.budget ? el('div', { class: `exp-budget ${b.level}` },
-          el('div', { class: 'result-line' }, el('span', { text: 'Presupuesto' }), el('strong', { text: `${U.fmtNumber(b.pct, 0)} % de ${U.fmtUsd(b.budget)}` })),
+          el('div', { class: 'result-line' }, el('span', { text: 'Presupuesto' }), el('strong', { text: `${b.pct > 999 ? 'más de 999' : U.fmtNumber(b.pct, 0)} % de ${U.fmtUsd(b.budget)}` })),
           el('div', { class: 'progress' }, el('div', { class: 'progress-fill', style: { width: `${Math.min(100, b.pct)}%` } })),
           el('span', { class: 'muted small', text: b.left >= 0 ? `Te quedan ${U.fmtUsd(b.left)}` : `Te pasaste por ${U.fmtUsd(-b.left)}` })) : null].filter(Boolean));
 

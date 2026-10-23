@@ -1304,3 +1304,37 @@ html[data-platform="ios"][data-ipad] .install-hint::after { display: none; }
 .exp-balance .result-line.total { border-top: 1px dashed var(--border); padding-top: 4px; margin-top: 2px; }
 .exp-balance.pos .total strong { color: #22c55e; }
 .exp-balance.neg .total strong { color: #ef4444; }
+
+/* ===== v15.4: números legibles en cualquier pantalla ===== */
+/* Las cifras grandes se ajustan al ancho de su tarjeta y nunca se cortan */
+.bento, .rate-card, .crypto-card, .exp-total, .result-box, .exp-balance { container-type: inline-size; }
+.bento-big { font-size: min(1.9rem, 13cqi); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bento-rate .bento-big { font-size: min(2.8rem, 15cqi); }
+.rate-card .rate-value, .crypto-card .crypto-price { font-size: min(1.5rem, 12.5cqi); white-space: nowrap; }
+.exp-total .rate-value { font-size: min(1.6rem, 11cqi); white-space: nowrap; }
+.exp-balance .result-line strong, .exp-amount strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.exp-balance .result-line { gap: 10px; }
+.exp-balance .result-line strong { font-size: min(1rem, 7.5cqi); }
+/* El balance del inicio ocupa todo el ancho: los montos grandes caben */
+.bento-expenses { grid-column: 1 / -1; }
+
+/* Lista de gastos e ingresos: el detalle no se aplasta por el monto */
+.expense-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 10px;
+}
+.expense-item .alarm-info { min-width: 0; }
+.expense-item .alarm-info .note-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.expense-item .exp-amount .note-meta { white-space: nowrap; }
+@media (max-width: 420px) {
+  .expense-item { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "emoji info del" "emoji amount del"; }
+  .expense-item .exp-emoji { grid-area: emoji; }
+  .expense-item .alarm-info { grid-area: info; }
+  .expense-item .exp-amount { grid-area: amount; flex-direction: row; align-items: baseline; gap: 8px; justify-content: flex-start; }
+  .expense-item .icon-btn { grid-area: del; }
+}
+
+/* Gráficos: la etiqueta de los ejes siempre legible */
+.chart-axis { font-size: 12px; }
