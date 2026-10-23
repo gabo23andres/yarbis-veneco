@@ -42,7 +42,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=15.2.0" />
+  <link rel="stylesheet" href="styles.css?v=15.3.0" />
 </head>
 <body>
   <!-- Íconos (estilo Lucide) -->
@@ -311,7 +311,30 @@
             <div class="row">
               <label class="field budget-field"><span>Presupuesto mensual ($)</span><input type="number" id="expBudget" inputmode="decimal" placeholder="Sin presupuesto" /></label>
             </div>
-            <p class="hint">También por voz: "gasté 20 dólares en comida", "¿cuánto he gastado este mes?".</p>
+            <p class="hint">También por voz: "gasté 20 dólares en comida", "¿cuánto he gastado este mes?", "¿cuánto me queda?".</p>
+          </div>
+          <div class="card card-wide" id="incomesCard">
+            <div class="card-head">
+              <h3>💰 Mis ingresos <span class="muted small" id="incMonthLabel"></span></h3>
+              <div class="card-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="incPrev" aria-label="Mes anterior">‹</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="incNext" aria-label="Mes siguiente">›</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="incCsv"><svg class="icon"><use href="#i-download"/></svg>CSV</button>
+              </div>
+            </div>
+            <form class="inline-form" id="formIncome">
+              <input type="text" id="incAmount" inputmode="decimal" placeholder="Monto" aria-label="Monto del ingreso" />
+              <select id="incCurrency" aria-label="Moneda"><option value="USD">$</option><option value="VES">Bs.</option></select>
+              <select id="incCategory" aria-label="Tipo de ingreso"></select>
+              <input type="text" id="incNote" placeholder="¿De quién o por qué? (opcional)" aria-label="Detalle del ingreso" />
+              <button type="submit" class="btn btn-primary">Registrar</button>
+            </form>
+            <div class="expense-summary" id="incSummary"></div>
+            <div class="expense-grid">
+              <div id="incBars"></div>
+              <ul class="list" id="incList"></ul>
+            </div>
+            <p class="hint">También por voz: "me regalaron 20 dólares", "me pagaron el sueldo, 300 dólares", "me llegó una remesa de 100", "vendí unas tortas por 15 dólares", "¿cuánto me ha entrado este mes?".</p>
           </div>
           <div class="card">
             <div class="card-head"><h3><svg class="icon"><use href="#i-swap"/></svg>Convertidor</h3></div>
@@ -838,27 +861,27 @@
     </div>
   </dialog>
 
-  <script src="js/utils.js?v=15.2.0"></script>
-  <script src="js/audioEffects.js?v=15.2.0"></script>
-  <script src="js/mathEngine.js?v=15.2.0"></script>
-  <script src="js/finance.js?v=15.2.0"></script>
-  <script src="js/reminders.js?v=15.2.0"></script>
-  <script src="js/cleaner.js?v=15.2.0"></script>
-  <script src="js/camera.js?v=15.2.0"></script>
-  <script src="js/voiceOrb.js?v=15.2.0"></script>
-  <script src="js/voiceRecorder.js?v=15.2.0"></script>
-  <script src="js/speechEngine.js?v=15.2.0"></script>
-  <script src="js/charts.js?v=15.2.0"></script>
-  <script src="js/expenses.js?v=15.2.0"></script>
-  <script src="js/pagomovil.js?v=15.2.0"></script>
-  <script src="js/appLauncher.js?v=15.2.0"></script>
-  <script src="js/aiProviders.js?v=15.2.0"></script>
-  <script src="js/geminiAgent.js?v=15.2.0"></script>
-  <script src="js/yarbisBrain.js?v=15.2.0"></script>
-  <script src="js/financeView.js?v=15.2.0"></script>
-  <script src="js/settings.js?v=15.2.0"></script>
-  <script src="js/home.js?v=15.2.0"></script>
-  <script src="js/voicetools.js?v=15.2.0"></script>
-  <script src="js/app.js?v=15.2.0"></script>
+  <script src="js/utils.js?v=15.3.0"></script>
+  <script src="js/audioEffects.js?v=15.3.0"></script>
+  <script src="js/mathEngine.js?v=15.3.0"></script>
+  <script src="js/finance.js?v=15.3.0"></script>
+  <script src="js/reminders.js?v=15.3.0"></script>
+  <script src="js/cleaner.js?v=15.3.0"></script>
+  <script src="js/camera.js?v=15.3.0"></script>
+  <script src="js/voiceOrb.js?v=15.3.0"></script>
+  <script src="js/voiceRecorder.js?v=15.3.0"></script>
+  <script src="js/speechEngine.js?v=15.3.0"></script>
+  <script src="js/charts.js?v=15.3.0"></script>
+  <script src="js/expenses.js?v=15.3.0"></script>
+  <script src="js/pagomovil.js?v=15.3.0"></script>
+  <script src="js/appLauncher.js?v=15.3.0"></script>
+  <script src="js/aiProviders.js?v=15.3.0"></script>
+  <script src="js/geminiAgent.js?v=15.3.0"></script>
+  <script src="js/yarbisBrain.js?v=15.3.0"></script>
+  <script src="js/financeView.js?v=15.3.0"></script>
+  <script src="js/settings.js?v=15.3.0"></script>
+  <script src="js/home.js?v=15.3.0"></script>
+  <script src="js/voicetools.js?v=15.3.0"></script>
+  <script src="js/app.js?v=15.3.0"></script>
 </body>
 </html>
