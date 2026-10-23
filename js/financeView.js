@@ -107,6 +107,7 @@
       });
 
       if (root.YarbisExpenses) root.YarbisExpenses.mountUI();
+      if (root.YarbisStocks) root.YarbisStocks.mountUI();
 
       // Gráfico
       this.range = Number(S.getRaw('yarbis_chart_range', '30')) || 30;

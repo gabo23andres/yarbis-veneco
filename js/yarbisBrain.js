@@ -869,6 +869,10 @@
       const conversion = await this.conversionIntent(n);
       if (conversion) return conversion;
 
+      /* ---------- Bolsa de valores ---------- */
+      const stocks = await this.stocksIntent(n);
+      if (stocks) return stocks;
+
       /* ---------- Tasas del dólar / euro ---------- */
       if (has(/\b(dolar|dolares|tasa|tasas|bcv|paralelo|monitor|brecha|cambio del dia|euro|euros|bolivar|bolivares)\b/) && !has(/^(abre|abrir)\b/)) {
         return this.ratesIntent(n);
@@ -1033,6 +1037,7 @@
           '- 🛒 "Agrega leche y huevos a la lista de compras" · "¿Qué hay en la lista de compras?"',
           '- 💸 "Gasté 20 dólares en comida" · "¿Cuánto he gastado este mes?"',
           '- 💰 "Me regalaron 20 dólares" · "Me pagaron el sueldo, 300 dólares" · "¿Cuánto me queda este mes?"',
+          '- 📈 "¿Cómo está la bolsa de Caracas?" · "¿Qué acciones me recomiendas comprar?" · "¿Cómo está Apple?"',
           '- 🔔 "Avísame cuando el dólar pase de 250"',
           '- 📲 "Comparte mis datos de pago móvil" · "Cóbrale 10 dólares a Carlos"',
           '- 🌐 "Traduce al inglés: ¿dónde queda el baño?" · 🎙️ "Modo dictado"',
@@ -1435,6 +1440,74 @@
           (root.YarbisExpenses.balance().incomeUsd ? `\n\n${this.balanceLine()}` : ''),
         actions: [{ label: 'Ver gastos', view: 'finance' }],
         sound: 'success'
+      };
+    }
+
+    /* ------------------------------------------
+       BOLSA DE VALORES (señales técnicas, no asesoría)
+       ------------------------------------------ */
+    async stocksIntent(n) {
+      const B = root.YarbisStocks;
+      if (!B) return null;
+      const NOTE = '_Señales técnicas automáticas; no son asesoría financiera._';
+      const marketOf = (t) => (/\b(caracas|venezuela|venezolana|venezolanas|bvc|ibc)\b/.test(t) ? 'bvc'
+        : /\b(estados unidos|eeuu|ee uu|usa|wall street|gringa|gringas|americanas?)\b/.test(t) ? 'us'
+          : /\b(fondos?|etf|etfs|indexados?)\b/.test(t) ? 'etf'
+            : /\b(oro|plata|petroleo|divisas)\b/.test(t) ? 'commodities'
+              : /\b(cripto|criptos|criptomonedas?)\b/.test(t) ? 'crypto' : null);
+      const wantsRecs = has(n, /\b(que|cuales?)\b.*\b(acciones|activos|me recomiendas|recomiendas|debo|deberia|conviene)\b.*\b(comprar|vender|invertir)\b/) ||
+        has(n, /\brecomienda(me|s)?\b.*\b(comprar|vender|invertir|acciones|bolsa)\b/) ||
+        has(n, /\ben que (invierto|invertir|puedo invertir|deberia invertir)\b/) ||
+        has(n, /\b(senales?|recomendaciones?) de (compra|venta|la bolsa|bolsa|inversion)\b/);
+      const wantsMarket = has(n, /\b(la bolsa|bolsa de valores|bolsa de caracas|mercado de valores|wall street|el ibc|indice bursatil|como esta(n)? el mercado|las acciones)\b/);
+      // "¿cómo está Apple?", "precio del oro", "¿compro Tesla?" (sólo nombres de la bolsa, no el dólar ni el euro)
+      const itemM = n.match(/^(?:como (?:esta|va|van|anda|andan)|precio (?:de|del)|cuanto (?:vale|cuesta|esta)|a cuanto esta|cotizacion (?:de|del)|(?:debo |deberia |me conviene )?(?:compro|vendo|comprar|vender))\s+(?:la |las |el |los )?(?:acciones? (?:de |del )?)?(.{2,40}?)\??$/);
+      let item = null;
+      if (itemM && !/\b(dolar|dolares|euro|euros|bolivar|bolivares|tasa|bcv|paralelo|clima|tiempo|bitcoin|btc|ethereum|eth|solana|xrp|bnb)\b/.test(itemM[1])) {
+        try { await B.load(); } catch (e) { return null; }
+        item = B.find(itemM[1]);
+      }
+      if (!wantsRecs && !wantsMarket && !item) return null;
+
+      try {
+        await B.load();
+      } catch (e) {
+        return { text: `📈 ${e.message} Inténtalo en un momento.`, error: true };
+      }
+      const sig = (x) => B.signal(x.signal);
+      const line = (x) => `- ${sig(x).emoji} **${x.name}** ${B.fmtPrice(x)} ${B.fmtChange(x)} · ${sig(x).label}`;
+
+      if (item) {
+        const s = sig(item);
+        return {
+          text: `📈 **${item.name}** (${item.symbol}): ${B.fmtPrice(item)} ${B.fmtChange(item)}\n\n${s.emoji} Señal: **${s.label}**\n${(item.reasons || []).map(r => `- ${r}`).join('\n')}\n\n${NOTE}`,
+          speak: `${item.name} está en ${B.fmtPrice(item)}. La señal técnica es ${s.label.toLowerCase()}.`,
+          actions: [{ label: 'Ver la bolsa', view: 'finance' }]
+        };
+      }
+
+      const market = marketOf(n);
+      if (wantsRecs) {
+        const r = B.recommendations(4, B.data, market);
+        const where = market ? ` (${B.data.groups[market].title})` : '';
+        const buy = r.buy.length ? r.buy.map(line).join('\n') : '- Ninguna con señal clara de compra ahora.';
+        const sell = r.sell.length ? r.sell.map(line).join('\n') : '- Ninguna con señal clara de venta ahora.';
+        return {
+          text: `📈 **Señales de la bolsa${where}**\n\n🟢 **Para comprar:**\n${buy}\n\n🔴 **Para vender:**\n${sell}\n\nToca una acción en Finanzas para ver por qué. ${NOTE}\n\n💡 Consejo: no pongas todo en una sola acción; los fondos como el S&P 500 reparten el riesgo.`,
+          speak: `Con señal de compra: ${r.buy.map(x => x.name).join(', ') || 'ninguna'}. Con señal de venta: ${r.sell.map(x => x.name).join(', ') || 'ninguna'}. Recuerda que son señales técnicas, no asesoría.`,
+          actions: [{ label: 'Ver la bolsa', view: 'finance' }]
+        };
+      }
+
+      // Resumen del mercado
+      const g = B.data.groups[market || (/\b(wall street)\b/.test(n) ? 'us' : 'bvc')];
+      const head = (g.indices || []).map(line).join('\n');
+      const movers = (g.items || []).filter(x => x.changePct !== null && x.changePct !== undefined)
+        .slice().sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct)).slice(0, 4).map(line).join('\n');
+      return {
+        text: `📈 **Bolsa · ${g.title}** (${B.updatedLabel()})\n${head ? `\n${head}\n` : ''}\n**Lo que más se movió:**\n${movers || '- Sin datos todavía.'}\n\n${NOTE}`,
+        speak: g.indices && g.indices[0] ? `El ${g.indices[0].name} está en ${U.fmtNumber(g.indices[0].price, 2)} puntos, ${g.indices[0].changePct >= 0 ? 'sube' : 'baja'} ${U.fmtNumber(Math.abs(g.indices[0].changePct || 0), 2)} por ciento.` : `Así está la bolsa de ${g.title}.`,
+        actions: [{ label: 'Ver la bolsa', view: 'finance' }]
       };
     }
 

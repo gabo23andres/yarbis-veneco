@@ -1338,3 +1338,39 @@ html[data-platform="ios"][data-ipad] .install-hint::after { display: none; }
 
 /* Gráficos: la etiqueta de los ejes siempre legible */
 .chart-axis { font-size: 12px; }
+
+/* ===== v15.4: bolsa de valores ===== */
+.stock-tabs { overflow-x: auto; scrollbar-width: none; max-width: 100%; flex-wrap: nowrap; }
+.stock-tabs::-webkit-scrollbar { display: none; }
+.stock-tabs button { white-space: nowrap; }
+.stock-recs { display: grid; gap: 8px; margin: 12px 0; }
+.stock-recs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.stock-recs-label { font-size: 0.82rem; font-weight: 600; color: var(--text-2); min-width: 150px; }
+.stock-chip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 0.8rem; cursor: pointer; }
+.stock-chip.buy { border-color: color-mix(in srgb, #22c55e 55%, var(--border)); }
+.stock-chip.sell { border-color: color-mix(in srgb, #ef4444 55%, var(--border)); }
+.stock-list { display: grid; gap: 6px; }
+.stock-item { border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.stock-item.index { background: color-mix(in srgb, var(--accent) 10%, var(--surface-2)); }
+.stock-main {
+  width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 10px;
+  padding: 10px 12px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; font: inherit;
+}
+.stock-name { display: flex; flex-direction: column; min-width: 0; }
+.stock-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-price { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.9rem; }
+.stock-price span { font-size: 0.76rem; }
+.stock-spark { width: 72px; height: 26px; }
+.stock-signal { font-size: 0.74rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.stock-signal.buy { background: color-mix(in srgb, #22c55e 18%, transparent); color: #22c55e; }
+.stock-signal.hold { background: color-mix(in srgb, #eab308 18%, transparent); color: #ca8a04; }
+.stock-signal.sell { background: color-mix(in srgb, #ef4444 18%, transparent); color: #ef4444; }
+.stock-detail { padding: 0 12px 12px; display: grid; gap: 10px; }
+.stock-reasons { margin: 0; padding-left: 18px; color: var(--text-2); font-size: 0.86rem; display: grid; gap: 3px; }
+.stock-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.stock-stat { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) {
+  .stock-main { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name price signal"; }
+  .stock-spark { display: none; }
+  .stock-recs-label { min-width: 0; width: 100%; }
+}
