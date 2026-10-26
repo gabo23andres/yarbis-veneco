@@ -147,11 +147,11 @@
   // Textos e ids de cada tarjeta (gastos e ingresos usan la misma interfaz)
   const EXPENSE_UI = {
     prefix: 'exp', card: 'expensesCard', form: 'formExpense', defaultCategory: 'Comida',
-    one: 'gasto', many: 'gastos', registered: 'Gasto registrado', removed: 'Gasto borrado', empty: 'Sin gastos este mes.', csv: 'gastos'
+    one: 'gasto', many: 'gastos', registered: 'Gasto registrado', removed: 'Gasto borrado', empty: 'Sin gastos este mes.', emptyEmoji: '🧾', emptyHint: 'Escribe el monto arriba o dime: "gasté 5 dólares en comida".', csv: 'gastos'
   };
   const INCOME_UI = {
     prefix: 'inc', card: 'incomesCard', form: 'formIncome', defaultCategory: 'Regalo',
-    one: 'ingreso', many: 'ingresos', registered: 'Ingreso registrado', removed: 'Ingreso borrado', empty: 'Sin ingresos este mes.', csv: 'ingresos'
+    one: 'ingreso', many: 'ingresos', registered: 'Ingreso registrado', removed: 'Ingreso borrado', empty: 'Sin ingresos este mes.', emptyEmoji: '💰', emptyHint: 'Escribe el monto arriba o dime: "me regalaron 20 dólares".', csv: 'ingresos'
   };
 
   class ExpensesUI {
@@ -273,7 +273,11 @@
           label: `${c.emoji} ${c.name}`, value: c.usd, color: c.color,
           sub: `${U.fmtNumber((c.usd / (s.totalUsd || 1)) * 100, 0)} %`
         })), { format: (v) => U.fmtUsd(v) })
-        : el('p', { class: 'empty-state small', text: this.cfg.empty }));
+        : el('div', { class: 'money-empty' },
+          el('b', { text: this.cfg.emptyEmoji || '🗒️' }),
+          el('strong', { text: this.cfg.empty }),
+          el('span', { class: 'small', text: this.cfg.emptyHint || 'Escribe el monto arriba y toca "Registrar".' })));
+      bars.parentElement.classList.toggle('is-empty', !s.items.length);
 
       const list = this.q('List');
       list.replaceChildren(...s.items.slice(0, 40).map(x => {
