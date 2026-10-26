@@ -701,6 +701,14 @@
         case 'OPEN_TOOL':
           this.openTool(effect.tool, effect.value);
           break;
+        case 'NEW_CHAT':
+          // Se deja ver la respuesta un momento y se limpia, igual que el botón "Nueva conversación"
+          setTimeout(() => {
+            this.brain.resetConversation();
+            this.clearChat();
+            U.toast('Conversación nueva.');
+          }, 700);
+          break;
         default:
           break;
       }
