@@ -97,3 +97,56 @@ test('Gemini: herramienta de la bolsa', async () => {
   assert.ok(all.vender.every(x => /-USD$/.test(x.simbolo)));
   assert.ok(win.YarbisGemini.TOOLS.some(t => t.name === 'bolsa'));
 });
+
+test('preguntas de opinión sobre un activo: responde sobre ese activo', async () => {
+  // Sin cerebro: plantilla con la señal de ESE activo, no la lista general
+  let r = await ask('me recomiendas comprar bitcoin?');
+  assert.match(r.text, /¿Comprar Bitcoin\?/);
+  assert.match(r.text, /Señal: \*\*/);
+  assert.match(r.text, /Si decides invertir/);
+  assert.match(r.text, /parte pequeña/);
+  assert.doesNotMatch(r.text, /Para comprar:/);
+  r = await ask('¿me conviene invertir en Microsoft?');
+  assert.match(r.text, /Microsoft/);
+  assert.match(r.text, /fondos como el S&P 500/);
+
+  assert.strictEqual(B.mentioned('vale la pena comprar btc ahora').name, 'Bitcoin');
+  assert.strictEqual(B.mentioned('me conviene comprar acciones de tesla').symbol, 'TSLA');
+  assert.strictEqual(B.mentioned('me regalaron plata'), null);
+  assert.strictEqual(B.mentioned('como esta el dia'), null);
+  assert.strictEqual(brain.isAdviceQuestion('me recomiendas comprar bitcoin'), true);
+  assert.strictEqual(brain.isAdviceQuestion('debo comprar pan'), false);
+  assert.strictEqual(brain.isAdviceQuestion('como esta apple'), false);
+});
+
+test('con cerebro: las preguntas de opinión van a la IA; si falla, la plantilla', async () => {
+  const realRun = win.YarbisGemini.run;
+  const stubAsk = brain.askAI;
+  brain.geminiApiKey = 'AQ.CLAVE_DE_PRUEBA_LARGA_PARA_EL_FORMATO_NUEVO';
+  try {
+    assert.strictEqual((await ask('¿me recomiendas comprar bitcoin?')).text, '__AI__');
+    assert.strictEqual((await ask('¿me conviene ahorrar en dólares?')).text, '__AI__');
+    // Datos simples siguen siendo inmediatos
+    assert.match((await ask('¿cómo está Apple?')).text, /\*\*Apple\*\* \(AAPL\)/);
+    assert.match((await ask('¿cómo está el dólar?')).text, /Dólar BCV/);
+
+    // El cerebro falla: responde la plantilla con datos, no una IA sin herramientas
+    brain.askAI = win.YARBISBrain.prototype.askAI;
+    win.YarbisGemini.run = async () => { throw new Error('saturado'); };
+    const r = await ask('¿me recomiendas comprar bitcoin?');
+    assert.match(r.text, /¿Comprar Bitcoin\?/);
+  } finally {
+    brain.askAI = stubAsk;
+    win.YarbisGemini.run = realRun;
+    brain.geminiApiKey = '';
+  }
+});
+
+test('Gemini: la herramienta de la bolsa da el detalle del activo', async () => {
+  const out = { effects: [], actions: [], sound: null, tools: [] };
+  const x = await win.YarbisGemini.execute(brain, 'bolsa', { consulta: 'btc' }, out);
+  assert.strictEqual(x.nombre, 'Bitcoin');
+  assert.ok('promedio_50_dias' in x && 'rend_3_meses_pct' in x && 'maximo_1_ano' in x);
+  const none = await win.YarbisGemini.execute(brain, 'bolsa', { consulta: 'Pepito S.A.' }, out);
+  assert.match(none.no_encontrado, /Pepito/);
+});

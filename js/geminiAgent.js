@@ -321,15 +321,17 @@
         if (!B) return { ok: false, error: 'Bolsa no disponible.' };
         await B.load();
         out.actions.push({ label: 'Ver la bolsa', view: 'finance' });
-        const pick = (x) => ({ nombre: x.name, simbolo: x.symbol, precio: x.price, moneda: x.currency, variacion_dia_pct: x.changePct, senal: x.signal, razones: x.reasons, rsi: x.rsi, rend_1_mes_pct: x.ret1m });
+        const pick = (x) => ({ nombre: x.name, simbolo: x.symbol, mercado: x.groupTitle, precio: x.price, moneda: x.currency, variacion_dia_pct: x.changePct, senal: x.signal, razones: x.reasons, rsi: x.rsi, rend_1_mes_pct: x.ret1m });
+        const detail = (x) => ({ ...pick(x), promedio_20_dias: x.sma20, promedio_50_dias: x.sma50, rend_3_meses_pct: x.ret3m, maximo_1_ano: x.high52, minimo_1_ano: x.low52 });
         if (a.consulta) {
-          const x = B.find(a.consulta);
-          if (x) return { ok: true, ...pick(x), aviso: B.data.disclaimer };
+          const x = B.find(a.consulta) || B.mentioned(a.consulta);
+          if (x) return { ok: true, actualizado: B.data.updatedAt, ...detail(x), aviso: B.data.disclaimer };
         }
         const r = B.recommendations(4, B.data, a.mercado || null);
         const g = a.mercado ? B.data.groups[a.mercado] : null;
         return {
           ok: true,
+          ...(a.consulta ? { no_encontrado: `No sigo "${a.consulta}"; éstas son las señales generales.` } : {}),
           actualizado: B.data.updatedAt,
           indices: ((g || B.data.groups.bvc).indices || []).map(pick),
           comprar: r.buy.map(pick),
@@ -480,7 +482,11 @@
   function rules() {
     return `
 Eres el cerebro de la app: además de conversar, puedes ACTUAR con tus herramientas.
-- Para la bolsa usa la herramienta bolsa. Explica las señales con sus razones y aclara siempre que son señales técnicas, no asesoría financiera; sugiere diversificar.
+- Responde primero exactamente lo que te preguntaron, en la primera frase; después, los detalles que ayuden. No cambies de tema ni respondas con listas genéricas.
+- Bolsa, cripto, oro o dólares: usa la herramienta bolsa (o tasas_del_dia para el dólar en bolívares) y nunca inventes precios.
+  · Si preguntan por UN activo ("¿compro bitcoin?", "¿cómo ves Apple?"), llama a bolsa con consulta=<ese activo> y habla SÓLO de él: precio y variación, la señal y lo que significa en palabras sencillas (tendencia frente al promedio de 50 días, RSI alto = subió rápido / bajo = cayó mucho, rendimiento de 1 y 3 meses, si está cerca del máximo o mínimo del año), pros y riesgos, y un consejo práctico: comprar por partes y sólo con dinero que no necesite; si es cripto, que sea una parte pequeña porque es muy volátil. Si conoces su balance del mes, tenlo en cuenta.
+  · Si piden recomendaciones generales, usa bolsa sin consulta y explica las 2 o 3 mejores con su razón; sugiere diversificar (por ejemplo, fondos como el S&P 500).
+  · Termina con una sola frase corta: son señales técnicas automáticas, no asesoría financiera. No la repitas.
 - Si al usuario le dan, regalan o pagan dinero (sueldo, remesa, venta…), usa registrar_ingreso; si pregunta cuánto le queda, balance_del_mes.
 - Si el usuario pide hacer algo (alarma, temporizador, nota, compra, gasto, llamada, mensaje, abrir app, música, evento, clima, lugares), usa la herramienta adecuada en vez de explicarle cómo hacerlo. Puedes usar varias seguidas.
 - Para noticias, resultados, precios de productos, horarios o cualquier dato actual que no sepas con seguridad, usa buscar_en_internet. Para el dólar usa tasas_del_dia.
