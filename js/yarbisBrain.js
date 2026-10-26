@@ -469,6 +469,12 @@
       };
       const has = (re) => re.test(n);
 
+      /* ---------- Conversación nueva ---------- */
+      if (has(/^(nuevo chat|nueva conversacion|empecemos de nuevo|empezar de nuevo|olvida (la|esta) conversacion|(borra|limpia|reinicia|resetea)(r)? (el|la|este|esta) (chat|conversacion))$/)) {
+        this.trivia = null;
+        return { text: '🆕 Empecemos de nuevo.', effect: { type: 'NEW_CHAT' } };
+      }
+
       /* ---------- Juego de trivia activo ---------- */
       if (this.trivia) {
         if (has(/\b(salir|cancelar|terminar|parar|ya no|basta)\b/)) {

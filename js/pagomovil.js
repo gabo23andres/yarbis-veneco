@@ -78,7 +78,7 @@
       return d && d.bank && d.id && d.phone ? d : null;
     },
 
-    save(data) {
+    clean(data) {
       const clean = {
         bank: String(data.bank || ''),
         idType: ['V', 'E', 'J', 'P', 'G'].includes(data.idType) ? data.idType : 'V',
@@ -86,8 +86,12 @@
         phone: String(data.phone || '').replace(/\D/g, ''),
         name: String(data.name || '').trim().slice(0, 40)
       };
-      if (!clean.bank || !clean.id || clean.phone.length < 10) return null;
-      S.set(KEY, clean);
+      return !clean.bank || !clean.id || clean.phone.length < 10 ? null : clean;
+    },
+
+    save(data) {
+      const clean = this.clean(data);
+      if (clean) S.set(KEY, clean);
       return clean;
     },
 
@@ -102,8 +106,7 @@
     },
 
     // Texto listo para WhatsApp (con *negritas* de WhatsApp)
-    message({ amountUsd, amountBs } = {}) {
-      const d = this.get();
+    message({ amountUsd, amountBs } = {}, d = this.get()) {
       if (!d) return '';
       const lines = [
         '📲 *Pago Móvil*',
@@ -152,10 +155,14 @@
         U.toast('Datos de Pago Móvil guardados.', { type: 'ok' });
         this.renderPreview();
       });
-      $('#pmAmount').addEventListener('input', () => this.renderPreview());
-      $('#pmCurrency').addEventListener('change', () => this.renderPreview());
-      $('#btnPmShare').addEventListener('click', () => this.share(this.amounts()));
+      // La vista previa y los botones siguen lo que se escribe, sin tener que guardar antes
+      ['pmBank', 'pmIdType', 'pmId', 'pmPhone', 'pmName', 'pmAmount', 'pmCurrency'].forEach(id => {
+        $(`#${id}`).addEventListener('input', () => this.renderPreview());
+        $(`#${id}`).addEventListener('change', () => this.renderPreview());
+      });
+      $('#btnPmShare').addEventListener('click', () => { this.keepDraft(); this.share(this.amounts()); });
       $('#btnPmCopy').addEventListener('click', async () => {
+        this.keepDraft();
         const t = this.message(this.amounts()).replace(/\*/g, '');
         if (!t) return;
         U.toast(await U.copyText(t) ? 'Copiado.' : 'No se pudo copiar.', { type: 'ok' });
@@ -188,14 +195,27 @@
       if (!dlg.open) dlg.showModal();
     },
 
+    // Datos del formulario abierto (válidos o null)
+    draft() {
+      const $ = U.$;
+      return this.clean({ bank: $('#pmBank').value, idType: $('#pmIdType').value, id: $('#pmId').value, phone: $('#pmPhone').value, name: $('#pmName').value });
+    },
+
+    // Al compartir, copiar o hacer el QR se guardan los datos escritos
+    keepDraft() {
+      const d = this.draft();
+      if (d) S.set(KEY, d);
+    },
+
     renderPreview() {
       const box = U.$('#pmPreview');
-      const text = this.message(this.amounts());
-      box.textContent = text ? text.replace(/\*/g, '') : 'Guarda tus datos para ver la vista previa.';
+      const text = this.message(this.amounts(), this.draft());
+      box.textContent = text ? text.replace(/\*/g, '') : 'Escribe banco, cédula y teléfono (11 dígitos, 0414…) para ver la vista previa.';
       ['btnPmShare', 'btnPmCopy', 'btnPmQr'].forEach(id => { U.$(`#${id}`).disabled = !text; });
     },
 
     async renderQr() {
+      this.keepDraft();
       const box = U.$('#pmQr');
       const text = this.message(this.amounts()).replace(/\*/g, '');
       if (!text) return;

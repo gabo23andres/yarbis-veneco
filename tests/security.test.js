@@ -120,3 +120,19 @@ test('frases que antes se confundían', async () => {
     brain.geocode = realGeo;
   }
 });
+
+test('"nuevo chat" empieza una conversación nueva sin pasar por la IA', async () => {
+  for (const q of ['nuevo chat', 'Nueva conversación', 'borra el chat', 'empecemos de nuevo']) {
+    const r = await brain.process(q);
+    assert.strictEqual(r.effect && r.effect.type, 'NEW_CHAT', q);
+  }
+  assert.strictEqual((await brain.process('borra la nota de pan')).effect?.type === 'NEW_CHAT', false);
+});
+
+test('Pago Móvil: el mensaje sale de los datos escritos aunque no se hayan guardado', () => {
+  const PM = win.YarbisPagoMovil;
+  const d = PM.clean({ bank: '0102', idType: 'V', id: '12.345.678', phone: '0414-123-4567', name: 'Ana' });
+  assert.ok(d);
+  assert.match(PM.message({}, d), /Cédula: V-12\.345\.678/);
+  assert.strictEqual(PM.clean({ bank: '0102', id: '1', phone: '0414' }), null);
+});
