@@ -7,6 +7,9 @@
 (function (root) {
   'use strict';
 
+  // Claves de IA y a dónde se envían: nunca salen en la copia ni se aceptan al importar
+  const SECRET_KEYS = ['yarbis_gemini_api_key', 'yarbis_ai_provider', 'yarbis_ai_provider_model'];
+
   const U = root.YarbisUtils;
   const S = U.storage;
   const html = root.document.documentElement;
@@ -400,7 +403,7 @@
 
     exportData() {
       const data = {};
-      S.keys().filter(k => k && k.startsWith('yarbis_') && k !== 'yarbis_gemini_api_key' && k !== 'yarbis_ai_provider').forEach(k => {
+      S.keys().filter(k => k && k.startsWith('yarbis_') && !SECRET_KEYS.includes(k)).forEach(k => {
         data[k] = S.getRaw(k);
       });
       const blob = new Blob([JSON.stringify({ app: 'yarbis', version: 11, exportedAt: new Date().toISOString(), data }, null, 2)], { type: 'application/json' });
@@ -423,9 +426,14 @@
           const parsed = JSON.parse(reader.result);
           if (!parsed || parsed.app !== 'yarbis' || typeof parsed.data !== 'object') throw new Error('formato');
           if (!root.confirm('Esto reemplazará tus notas, alarmas, contactos y ajustes actuales. ¿Continuar?')) return;
+          // Las claves y la configuración de IA nunca se importan: una copia ajena podría
+          // mandar tus conversaciones a otro servidor o a la cuenta de otra persona.
+          let skipped = 0;
           Object.entries(parsed.data).forEach(([k, v]) => {
+            if (SECRET_KEYS.includes(k)) { skipped++; return; }
             if (k.startsWith('yarbis_') && typeof v === 'string') S.setRaw(k, v);
           });
+          if (skipped) console.warn('Copia: se ignoraron las claves de IA.');
           U.toast('Copia restaurada. Recargando…', { type: 'ok' });
           setTimeout(() => root.location.reload(), 800);
         } catch (e) {

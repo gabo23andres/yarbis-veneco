@@ -63,6 +63,16 @@
     return c && c.key && PROVIDERS[c.provider] ? c : null;
   }
 
+  // https:// siempre; http:// sólo para un servidor en este mismo equipo (localhost)
+  function isSafeBase(base) {
+    try {
+      const u = new URL(base);
+      return u.protocol === 'https:' || (u.protocol === 'http:' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname));
+    } catch (e) {
+      return false;
+    }
+  }
+
   function save(cfg) {
     const p = PROVIDERS[cfg.provider];
     if (!p) throw new Error('Proveedor desconocido.');
@@ -70,9 +80,13 @@
       provider: cfg.provider,
       key: String(cfg.key || '').trim().replace(/^Bearer\s+/i, ''),
       model: String(cfg.model || '').trim(),
-      base: String(cfg.base || '').trim().replace(/\/+$/, ''),
+      // Sólo la API "Otra" usa una dirección propia; las conocidas siempre van a su servidor oficial
+      base: cfg.provider === 'custom' ? String(cfg.base || '').trim().replace(/\/+$/, '') : '',
       primary: !!cfg.primary
     };
+    if (clean.base && !isSafeBase(clean.base)) {
+      throw new Error('La dirección de la API debe empezar por https:// (sin cifrado, tu clave viajaría a la vista de cualquiera).');
+    }
     S.set(KEY, clean);
     S.remove(MODEL_CACHE);
     return clean;
@@ -94,7 +108,7 @@
   }
 
   function baseUrl(c) {
-    return (c.provider === 'custom' ? c.base : (c.base || PROVIDERS[c.provider].base)).replace(/\/+$/, '');
+    return (c.provider === 'custom' ? c.base : PROVIDERS[c.provider].base).replace(/\/+$/, '');
   }
 
   function headers(c) {

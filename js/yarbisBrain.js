@@ -286,6 +286,9 @@
     return re.test(text);
   }
 
+  // Preguntas de conocimiento ("¿qué es…?", "¿quién fue…?", "historia de…"): las responde la IA
+  const KNOWLEDGE_RE = /^(que es|que son|que significa|quien es|quien fue|quienes fueron|cual es la historia|historia de|hablame de|hablame del|cuentame de|cuentame del|explicame que|por que se llama|de donde viene|cuando se creo|cuantos anos tiene)\b|\bes la moneda de\b/;
+
   function pick(list) {
     return list[Math.floor(Math.random() * list.length)];
   }
@@ -630,6 +633,11 @@
       if (isAlarmWord || (repeat !== 'none' && parseClock(n))) {
         const clock = parseClock(n);
         if (clock) {
+          // "Recuérdame llamar a mamá a las 3": de la tarde (despertar a las 3 sí sería de madrugada)
+          if (!clock.explicit && clock.h >= 1 && clock.h <= 7 && has(/\b(recuerdame|recordarme|avisame|alertame)\b/) && !has(/\b(despiertame|despertador|levantame)\b/)) {
+            clock.h += 12;
+            clock.explicit = true;
+          }
           const tomorrow = repeat === 'none' && /\bmanana\b/.test(n.replace(/de la manana/g, ''));
           const at = repeat !== 'none'
             ? this.reminders.ScheduleStore.nextOccurrence(clock.h, clock.m, repeat)
@@ -727,8 +735,9 @@
         };
       }
       if (has(/\b(borra|elimina|limpia|quita)\s+(todas\s+)?(mis\s+|las\s+)?notas\b/) && !has(/\bnota\s+(de|que)\b/)) {
+        if (!notes.items.length) return { text: 'No tienes notas que borrar.' };
         return {
-          text: `¿Seguro que quieres borrar tus ${notes.items.length} notas? Esto no se puede deshacer.`,
+          text: `¿Seguro que quieres borrar ${notes.items.length === 1 ? 'tu nota' : `tus ${notes.items.length} notas`}? Esto no se puede deshacer.`,
           actions: [{ label: 'Sí, borrar todas', command: 'notes-clear-all-confirmed', danger: true }]
         };
       }
@@ -878,13 +887,13 @@
         if (stocks) return stocks;
 
         /* ---------- Tasas del dólar / euro ---------- */
-        if (has(/\b(dolar|dolares|tasa|tasas|bcv|paralelo|monitor|brecha|cambio del dia|euro|euros|bolivar|bolivares)\b/) && !has(/^(abre|abrir)\b/)) {
+        if (this.isRateQuestion(n)) {
           return this.ratesIntent(n);
         }
 
         /* ---------- Criptomonedas ---------- */
         const cryptoMatch = n.match(/\b(bitcoin|btc|ethereum|eth|ether|solana|bnb|binance coin|xrp|ripple|cripto|criptos|criptomonedas?)\b/);
-        if (cryptoMatch) {
+        if (cryptoMatch && !KNOWLEDGE_RE.test(n)) {
           return this.cryptoIntent(cryptoMatch[1]);
         }
       }
@@ -896,7 +905,7 @@
       }
 
       /* ---------- Clima ---------- */
-      if (has(/\b(clima|temperatura|pronostico|va a llover|esta lloviendo|llueve|lluvia|hace calor|hace frio|el tiempo (en|de|para|hoy|manana))\b/)) {
+      if (has(/\b(clima|temperatura|pronostico|va a llover|esta lloviendo|llueve|lluvia|hace calor|hace frio|tiempo hace|hara buen tiempo|el tiempo (en|de|para|hoy|manana))\b/)) {
         return this.weatherIntent(n);
       }
 
@@ -1083,8 +1092,11 @@
       }
 
       // Debe parecer una conversión, no "tengo 3 dólares de deuda" dentro de otra cosa
-      const isQuestion = /\b(cuanto|cuantos|cuanta|convierte|convertir|pasa|pasame|equivale|equivalen|son|serian|a|en|al cambio|a bolivares|a dolares)\b/.test(s);
-      if (!isQuestion) return null;
+      const isQuestion = /\b(cuanto|cuantos|cuanta|convierte|convertir|pasa|pasame|equivale|equivalen|son|serian|al cambio)\b/.test(s) ||
+        new RegExp(`\\b(a|en|para)\\s+(cuantos?\\s+)?(${CURRENCY_ALT.slice(3, -1)})(?=\\s|$)`).test(s.slice(m.index + m[0].length)) ||
+        s.trim().split(/\s+/).length <= 3;
+      // "préstamo de 1000 dólares al 10 %", "quiero ahorrar 100 dólares", "gasté 5 dólares": no es una conversión
+      if (!isQuestion || /\b(prestamo|interes|intereses|cuota|cuotas|ahorrar|ahorro|gaste|pague|compre|me compre|vendi|me pagaron|me regalaron|debo|deuda|presupuesto)\b/.test(s)) return null;
 
       let amount = parseAmount(m[1].replace('$', ''));
       if (amount === null) return null;
@@ -1359,6 +1371,9 @@
       let amount = parseAmount(am[2]);
       if (amount === null || !(amount > 0)) return null;
       if (am[3]) amount *= 1000;
+      // "vendí 3 tortas a 5 dólares (cada una)": cantidad por precio
+      const each = /^vendi/.test(verb) && rest.match(/^(\d{1,4})\s+[a-zñ]+(?:\s+[a-zñ]+)?\s+(?:a|en)\s+(\$\s?)?(\d[\d.,]*)/);
+      if (each && am === found[1] && parseAmount(each[1]) > 1) amount *= parseAmount(each[1]);
       const hasCurrency = !!(am[1] || am[4]);
       // Sin moneda sólo si está claro que es dinero ("me dio 2 consejos" no es un ingreso)
       const moneyContext = /^(me\s+(pagaron|pago|depositaron|deposito|transfirieron|transfirio)|cobre|gane|registra|anota|apunta|agrega)/.test(verb) ||
@@ -1384,7 +1399,7 @@
       const cat = I.category(inc.category);
       const amountTxt = currency === 'USD' ? U.fmtUsd(amount) : `${U.fmtBs(amount)} (≈ ${U.fmtUsd(inc.usd)})`;
       return {
-        text: `${cat.emoji} Ingreso registrado: **${amountTxt}** · ${cat.name}${inc.note ? ` · ${inc.note}` : ''}.\n\n${this.balanceLine()}`,
+        text: `${cat.emoji} Ingreso registrado: **${amountTxt}** · ${cat.name}${inc.note && U.normalize(inc.note) !== U.normalize(cat.name) ? ` · ${inc.note}` : ''}.\n\n${this.balanceLine()}`,
         speak: `Listo, anoté ${currency === 'USD' ? `${U.fmtNumber(amount, 2)} dólares` : `${U.fmtNumber(amount, 2)} bolívares`} de ${cat.name.toLowerCase()}.`,
         actions: [{ label: 'Ver ingresos', view: 'finance' }],
         sound: 'success'
@@ -1418,7 +1433,8 @@
       }
 
       // Registro: "gasté 20 dólares en comida", "pagué 500 bs de luz", "registra un gasto de 5$ en taxi"
-      const m = /^(?:gaste|pague|me\s+gaste|(?:registra|anota|apunta|agrega)(?:r)?\s+(?:un\s+)?gasto(?:\s+de)?)\s+(.+)$/d.exec(a.trim());
+      const m = /^(?:gaste|pague|me\s+gaste|compre|me\s+compre|(?:registra|anota|apunta|agrega)(?:r)?\s+(?:un\s+)?gasto(?:\s+de)?)\s+(.+)$/d.exec(a.trim());
+      const bought = /^(?:me\s+)?compre\b/.test(a.trim());
       if (!m) return null;
       const rest = wordsToDigits(U.normalize(m[1]));
       const am = rest.match(/(\$\s?)?(\d[\d.,]*)\s*(mil\b)?\s*(dolares?|usd|\$|verdes|bolivares?|bs|bolos?|ves)?/);
@@ -1430,7 +1446,12 @@
       const original = text.slice(m.indices[1][0]);
       // Detalle: lo que va después de "en", "de", "para", "por" (con acentos originales)
       const detailM = original.match(/\b(?:en|de|para|por)\s+(?:el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.+)$/i);
-      const note = detailM ? U.capitalize(detailM[1].replace(/^(d[oó]lares?|bol[ií]vares?|bs|usd)\s+(en|de|para|por)\s+/i, '').trim()) : '';
+      let note = detailM ? U.capitalize(detailM[1].replace(/^(d[oó]lares?|bol[ií]vares?|bs|usd)\s+(en|de|para|por)\s+/i, '').trim()) : '';
+      // "me compré unos zapatos de 30 dólares": lo comprado va antes del monto
+      if (bought) {
+        const item = original.replace(/\s+(?:de|por|en|a)\s+\$?\s?\d.*$/i, '').replace(/^(?:un|una|unos|unas|el|la|los|las)\s+/i, '').trim();
+        if (item && !/^\$?\s?\d/.test(item)) note = U.capitalize(item);
+      }
       const e = E.add({ amount, currency, note, category: E.guessCategory(note || original) });
       if (!e) return null;
       const cat = E.category(e.category);
@@ -1451,9 +1472,22 @@
     /* ------------------------------------------
        BOLSA DE VALORES (señales técnicas, no asesoría)
        ------------------------------------------ */
+    // ¿Preguntan por la tasa? "¿a cómo está el dólar?", "tasa bcv", "euro", "dólar paralelo hoy".
+    // No: "¿quién fue Simón Bolívar?", "clima en Ciudad Bolívar", "quiero ahorrar 100 dólares".
+    isRateQuestion(n) {
+      if (/^(abre|abrir)\b/.test(n) || KNOWLEDGE_RE.test(n)) return false;
+      if (/\b(simon|ciudad|estado|cerro|plaza|avenida|av|universidad|aeropuerto|teatro|parque|liceo|colegio|libertador) bolivar\b/.test(n)) return false;
+      if (/\b(interes|intereses|prestamo|credito|cuota|cuotas|hipoteca)\b/.test(n)) return false;
+      if (/\b(tasa|tasas|bcv|paralelo|monitor|brecha|cambio del dia|usdt)\b/.test(n)) return true;
+      const money = /\b(dolar|dolares|euro|euros|bolivares)\b/.test(n) || /\bbolivar\b/.test(n);
+      if (!money) return false;
+      const cue = /\b(a como|a cuanto|cuanto (esta|vale|cuesta|amanecio|cerro)|como (esta|amanecio|va|cerro|abrio|anda)|precio|cotizacion|valor|hoy|ahorita|ahora)\b/.test(n);
+      return cue || n.split(' ').length <= 3;
+    }
+
     // "¿Me conviene comprar bitcoin?", "¿qué acciones me recomiendas?", "¿vale la pena ahorrar en dólares?"
     isAdviceQuestion(n) {
-      const advice = /\b(recomiendas|recomiendes|recomendarias|recomienda|recomiendame|aconsejas|aconsejarias|conviene|convendria|deberia|debo|vale la pena|que opinas|que piensas|tu opinion|crees que|(es|seria) (una )?(buena|buen|mala|mal) (idea|momento|inversion|opcion)|es seguro|es riesgoso|por que (sube|baja|subio|bajo|cayo)|analiza|analisis|explicame|compro|vendo|invierto|invertir|inversion)\b/;
+      const advice = /\b(recomiendas|recomiendes|recomendarias|recomienda|recomiendame|aconsejas|aconsejarias|conviene|convendria|deberia|debo|vale la pena|que opinas|que piensas|tu opinion|crees que|(es|seria) (una )?(buena|buen|mala|mal) (idea|momento|inversion|opcion)|es seguro|es riesgoso|por que (sube|baja|subio|bajo|cayo)|va a (subir|bajar)|seguira (subiendo|bajando)|quiero ahorrar|como ahorro|como puedo ahorrar|analiza|analisis|explicame|compro|vendo|invierto|invertir|inversion)\b/;
       if (!advice.test(n)) return false;
       const topic = /\b(bolsa|acciones?|mercado|cripto|criptos|criptomonedas?|bitcoin|btc|ethereum|eth|solana|xrp|bnb|usdt|dolar|dolares|euro|euros|bolivares|oro|petroleo|fondos?|etf|sp ?500|s p 500|ibc|invertir|inversion|invierto|ahorro|ahorrar|ahorros)\b/;
       const B = root.YarbisStocks;
@@ -1682,6 +1716,21 @@
       };
     }
 
+    // Ciudad → coordenadas. Open-Meteo; si no responde, wttr.in (que también ubica por nombre)
+    async geocode(city, n = U.normalize(city)) {
+      try {
+        const geo = await this.fetchJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=10&language=es&format=json`);
+        return this.pickPlace(geo && geo.results, n);
+      } catch (e) {
+        console.warn('Geocodificación de Open-Meteo no disponible:', e.message);
+      }
+      const w = await this.fetchJson(`https://wttr.in/${encodeURIComponent(`${city}, Venezuela`)}?format=j1`, 8000, 1);
+      const a = w && w.nearest_area && w.nearest_area[0];
+      if (!a) return null;
+      const name = (a.areaName && a.areaName[0] && a.areaName[0].value) || U.capitalize(city);
+      return { name, admin1: a.region && a.region[0] && a.region[0].value, latitude: Number(a.latitude), longitude: Number(a.longitude) };
+    }
+
     // Entre varias ciudades con el mismo nombre (Mérida, Valencia, Barcelona...)
     // prefiere la de Venezuela, salvo que se nombre otro país.
     pickPlace(results, n) {
@@ -1708,8 +1757,7 @@
       if (!city || /^(hoy|manana|ahora|momento)$/.test(city)) city = S.getRaw('yarbis_weather_city', '') || 'Caracas';
 
       try {
-        const geo = await this.fetchJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=10&language=es&format=json`);
-        const place = this.pickPlace(geo && geo.results, n);
+        const place = await this.geocode(city, n);
         if (!place) return { text: `No encontré la ciudad "${city}". Prueba con otro nombre.` };
         const w = await this.fetchForecast(place);
         S.setRaw('yarbis_weather_city', place.name);

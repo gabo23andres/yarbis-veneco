@@ -5,8 +5,13 @@ name: Datos de la bolsa
 # La app lo lee desde raw.githubusercontent.com.
 on:
   schedule:
-    # Cada 20 minutos en horario de mercado (Caracas 9:00-13:00 VET, Nueva York 9:30-16:00 ET)
-    - cron: '*/20 13-21 * * 1-5'
+    # GitHub retrasa o salta muchas ejecuciones programadas, así que no basta con una cada
+    # 20 minutos: cada ejecución se queda actualizando hasta el cierre (ver el paso "Actualizar").
+    # Varias horas de arranque por si GitHub se salta alguna (si ya hay una corriendo, espera).
+    - cron: '7 13 * * 1-5'
+    - cron: '41 14 * * 1-5'
+    - cron: '23 17 * * 1-5'
+    - cron: '53 19 * * 1-5'
     # Una vez al día para cripto y fines de semana
     - cron: '17 11 * * *'
   workflow_dispatch:
@@ -21,7 +26,7 @@ concurrency:
 jobs:
   datos:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v5
 
@@ -35,23 +40,34 @@ jobs:
           git fetch --depth 1 origin datos 2>/dev/null && git show origin/datos:bolsa.json > prev.json 2>/dev/null || echo '{}' > prev.json
           wc -c prev.json
 
-      - name: Generar bolsa.json
-        run: |
-          mkdir -p out
-          node scripts/bolsa.mjs out/bolsa.json prev.json
-
-      - name: Publicar en la rama datos
+      # Actualiza cada 20 minutos mientras el mercado esté abierto (lunes a viernes hasta las
+      # 21:30 UTC = 5:30 p. m. de Venezuela). Fuera de ese horario actualiza una vez y termina.
+      - name: Actualizar
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          cd out
-          cat > README.md <<'MD'
+          mkdir -p out
+          cat > out/README.md <<'MD'
           # Datos de la bolsa para YARBIS
           Generados por `.github/workflows/bolsa.yml` en la rama principal. No editar a mano.
           MD
-          git init -q -b datos
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bolsa.json README.md
-          git commit -q -m "Datos de la bolsa $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" datos
+          limite=$(( $(date -u +%s) + 345 * 60 ))
+          while true; do
+            if node scripts/bolsa.mjs out/bolsa.json prev.json; then
+              (
+                cd out
+                rm -rf .git
+                git init -q -b datos
+                git config user.name "github-actions[bot]"
+                git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                git add bolsa.json README.md
+                git commit -q -m "Datos de la bolsa $(date -u +%Y-%m-%dT%H:%MZ)"
+                git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" datos
+              ) && cp out/bolsa.json prev.json && echo "Publicado $(date -u +%H:%M) UTC"
+            else
+              echo "::warning::No se pudieron generar los datos a las $(date -u +%H:%M) UTC"
+            fi
+            [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H%M)" -lt 2130 ] && [ $(( $(date -u +%s) + 1200 )) -lt "$limite" ] || break
+            sleep 1200
+          done

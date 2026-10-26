@@ -2,6 +2,10 @@
 <html lang="es" data-theme="dark" data-accent="neon">
 <head>
   <meta charset="UTF-8" />
+  <!-- Seguridad: sólo corre código de la propia app (el script del tema va por su huella). Las IA y
+       APIs de datos se conectan por https; http sólo a un servidor en este mismo equipo. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-I60rhtSRjuvQr92ZyBMEmcUF7y+oLeeCuXZ/qOSrdqc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: data: blob: http://localhost:* http://127.0.0.1:*; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>YARBIS · Asistente personal</title>
   <meta name="description" content="Asistente personal por voz: tasa del dólar BCV y paralelo, conversiones, calculadora, notas, alarmas, temporizadores, escáner QR y chat con IA." />
@@ -42,7 +46,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=15.6.0" />
+  <link rel="stylesheet" href="styles.css?v=15.7.0" />
 </head>
 <body>
   <!-- Íconos (estilo Lucide) -->
@@ -875,28 +879,28 @@
     </div>
   </dialog>
 
-  <script src="js/utils.js?v=15.6.0"></script>
-  <script src="js/audioEffects.js?v=15.6.0"></script>
-  <script src="js/mathEngine.js?v=15.6.0"></script>
-  <script src="js/finance.js?v=15.6.0"></script>
-  <script src="js/reminders.js?v=15.6.0"></script>
-  <script src="js/cleaner.js?v=15.6.0"></script>
-  <script src="js/camera.js?v=15.6.0"></script>
-  <script src="js/voiceOrb.js?v=15.6.0"></script>
-  <script src="js/voiceRecorder.js?v=15.6.0"></script>
-  <script src="js/speechEngine.js?v=15.6.0"></script>
-  <script src="js/charts.js?v=15.6.0"></script>
-  <script src="js/stocks.js?v=15.6.0"></script>
-  <script src="js/expenses.js?v=15.6.0"></script>
-  <script src="js/pagomovil.js?v=15.6.0"></script>
-  <script src="js/appLauncher.js?v=15.6.0"></script>
-  <script src="js/aiProviders.js?v=15.6.0"></script>
-  <script src="js/geminiAgent.js?v=15.6.0"></script>
-  <script src="js/yarbisBrain.js?v=15.6.0"></script>
-  <script src="js/financeView.js?v=15.6.0"></script>
-  <script src="js/settings.js?v=15.6.0"></script>
-  <script src="js/home.js?v=15.6.0"></script>
-  <script src="js/voicetools.js?v=15.6.0"></script>
-  <script src="js/app.js?v=15.6.0"></script>
+  <script src="js/utils.js?v=15.7.0"></script>
+  <script src="js/audioEffects.js?v=15.7.0"></script>
+  <script src="js/mathEngine.js?v=15.7.0"></script>
+  <script src="js/finance.js?v=15.7.0"></script>
+  <script src="js/reminders.js?v=15.7.0"></script>
+  <script src="js/cleaner.js?v=15.7.0"></script>
+  <script src="js/camera.js?v=15.7.0"></script>
+  <script src="js/voiceOrb.js?v=15.7.0"></script>
+  <script src="js/voiceRecorder.js?v=15.7.0"></script>
+  <script src="js/speechEngine.js?v=15.7.0"></script>
+  <script src="js/charts.js?v=15.7.0"></script>
+  <script src="js/stocks.js?v=15.7.0"></script>
+  <script src="js/expenses.js?v=15.7.0"></script>
+  <script src="js/pagomovil.js?v=15.7.0"></script>
+  <script src="js/appLauncher.js?v=15.7.0"></script>
+  <script src="js/aiProviders.js?v=15.7.0"></script>
+  <script src="js/geminiAgent.js?v=15.7.0"></script>
+  <script src="js/yarbisBrain.js?v=15.7.0"></script>
+  <script src="js/financeView.js?v=15.7.0"></script>
+  <script src="js/settings.js?v=15.7.0"></script>
+  <script src="js/home.js?v=15.7.0"></script>
+  <script src="js/voicetools.js?v=15.7.0"></script>
+  <script src="js/app.js?v=15.7.0"></script>
 </body>
 </html>

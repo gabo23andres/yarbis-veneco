@@ -149,8 +149,7 @@
       try {
         let place = S.get('yarbis_home_place', null);
         if (!place || place.name !== cityName) {
-          const geo = await brain.fetchJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=10&language=es&format=json`);
-          const p = brain.pickPlace(geo && geo.results, U.normalize(cityName));
+          const p = await brain.geocode(cityName);
           if (!p) return;
           place = { name: p.name, latitude: p.latitude, longitude: p.longitude };
           S.set('yarbis_home_place', place);
