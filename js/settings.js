@@ -183,7 +183,8 @@
           const results = await brain.diagnoseAI();
           list.replaceChildren(...results.map(r => U.el('li', { class: `diag-item ${r.ok ? 'ok' : 'bad'}` },
             U.el('span', { class: 'diag-mark', text: r.ok ? '✅' : r.info ? 'ℹ️' : '❌' }),
-            U.el('span', null, U.el('strong', { text: r.name }), ` — ${r.detail}`))));
+            U.el('span', null, U.el('strong', { text: r.name }), ` — ${r.detail}`))),
+          U.el('li', { class: 'muted small', text: `YARBIS ${(String((document.querySelector('script[src*="yarbisBrain.js"]') || {}).src || '').match(/v=([\d.]+)/) || [])[1] || ''}` }));
         } catch (e) {
           list.replaceChildren(U.el('li', { text: `❌ ${e.message}` }));
         }

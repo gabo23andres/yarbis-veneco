@@ -2181,6 +2181,7 @@ Reglas:
       const batch = all.slice(0, 10);
       if (!batch.length) throw new Error('No encontré un modelo de Gemini que responda: tu clave no tiene modelos de Gemini disponibles.');
       const probe = async (model, retry = true) => {
+        const sentThinking = !!this.thinkingConfig(model);
         try {
           const res = await U.fetchWithTimeout(this.geminiUrl(model), {
             method: 'POST',
@@ -2189,7 +2190,8 @@ Reglas:
           }, this.geminiTimeouts.probe);
           if (res.ok) return { ok: true };
           const data = await res.json().catch(() => ({}));
-          if (retry && res.status === 400 && /thinking/i.test(JSON.stringify(data)) && !this.noThinkingConfig) {
+          // Se prueban varios a la vez: cualquiera que reciba este error reintenta sin pensamiento
+          if (retry && res.status === 400 && /thinking/i.test(JSON.stringify(data)) && sentThinking) {
             this.noThinkingConfig = true;
             return probe(model, false);
           }
@@ -2246,12 +2248,29 @@ Reglas:
         throw err;
       }
       const count = (fn) => got.filter(fn).length;
+      const text = (r) => String((r.data && r.data.error && r.data.error.message) || '');
       let why = 'ningún modelo respondió; inténtalo en unos minutos';
       if (got.length && count(r => r.timeout) === got.length) why = 'Google no contestó a tiempo. Revisa tu conexión a internet (datos o wifi) e inténtalo de nuevo';
+      else if (count(r => /location is not supported|not available in your (country|region)/i.test(text(r)))) why = 'Google dice que Gemini no está disponible desde tu ubicación. Si usas una VPN, apágala (o elige otro país) e inténtalo de nuevo';
       else if (count(r => r.status === 429) >= got.length / 2) why = 'se agotó el cupo gratis por ahora; espera un minuto';
       else if (count(r => r.status === 403) >= got.length / 2) why = 'tu clave no tiene permiso para usar los modelos de Gemini';
-      else if (count(r => r.timeout || r.status >= 500)) why = 'los modelos están saturados o tardan demasiado; inténtalo en unos minutos';
-      throw new Error(`No encontré un modelo de Gemini que responda: ${why}.`);
+      else if (count(r => r.status >= 500) >= got.length / 2) why = 'los modelos están saturados; inténtalo en unos minutos';
+      const err = new Error(`No encontré un modelo de Gemini que responda: ${why}.`);
+      err.detail = this.geminiProbeDetail(batch, results);
+      throw err;
+    }
+
+    // Resumen de lo que contestó cada modelo, para saber por qué falló
+    // ("6 no contestaron a tiempo · 4 × HTTP 400: User location is not supported")
+    geminiProbeDetail(batch, results) {
+      const groups = new Map();
+      batch.forEach((m, i) => {
+        const r = results[i];
+        if (r && r.ok) return;
+        const msg = r && !r.timeout ? `HTTP ${r.status}${r.data && r.data.error && r.data.error.message ? `: ${String(r.data.error.message).slice(0, 90)}` : ''}` : 'no contestaron a tiempo';
+        groups.set(msg, [...(groups.get(msg) || []), m.replace(/^gemini-/, '')]);
+      });
+      return [...groups].map(([msg, ms]) => `${ms.length} ${msg === 'no contestaron a tiempo' ? msg : `× ${msg}`} (${ms.join(', ')})`).join(' · ');
     }
 
     async resolveGeminiModel(key, force = false) {
@@ -2441,7 +2460,7 @@ Reglas:
         this.geminiModel = prevModel;
         if (prevModel) S.setRaw('yarbis_gemini_model', prevModel);
         else S.remove('yarbis_gemini_model');
-        return { success: false, message: `❌ ${e.name === 'AbortError' ? 'Gemini tardó demasiado en responder. Revisa tu conexión e inténtalo de nuevo.' : e.message}` };
+        return { success: false, message: `❌ ${e.name === 'AbortError' ? 'Gemini tardó demasiado en responder. Revisa tu conexión e inténtalo de nuevo.' : e.message}${e.detail ? ` Detalle: ${e.detail}` : ''}` };
       }
     }
 
@@ -2516,7 +2535,7 @@ Reglas:
             }
           }
         } catch (e) {
-          add(false, 'Gemini', e.message);
+          add(false, 'Gemini', e.detail ? `${e.message} Detalle: ${e.detail}` : e.message);
         }
       } else {
         add(false, 'Gemini', 'sin clave: pégala arriba y toca "Guardar y probar"');
