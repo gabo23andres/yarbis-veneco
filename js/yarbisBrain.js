@@ -309,7 +309,7 @@
       this.trivia = null;
       this.lastAiEngine = '';
       // Límites de espera de Gemini (ms): petición, primer dato en streaming y prueba de modelos
-      this.geminiTimeouts = { request: 15000, stream: 10000, probe: 8000, grace: 2000 };
+      this.geminiTimeouts = { request: 20000, stream: 15000, probe: 15000, grace: 2000 };
     }
 
     get name() {
@@ -2169,12 +2169,17 @@ Reglas:
       return status === 401 || /API key not valid|API_KEY_INVALID|API key expired|ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(JSON.stringify(data || {}));
     }
 
-    // Prueba en paralelo los mejores candidatos y se queda con el más
-    // preferido que responde de verdad.
+    // Prueba en paralelo los mejores candidatos (incluidos los Lite, que casi
+    // nunca se saturan) y se queda con el más preferido que responde de verdad.
     async pickWorkingGeminiModel(models, pref = S.getRaw('yarbis_gemini_pref', 'auto')) {
       const key = this.geminiApiKey;
       const bad = this.badGeminiModels();
-      const all = this.geminiCandidates(models, pref).filter(m => !bad.has(m));
+      const candidates = this.geminiCandidates(models, pref);
+      let all = candidates.filter(m => !bad.has(m));
+      // Si casi todos quedaron apartados por fallos viejos, se prueban todos de nuevo
+      if (all.length < 3) all = candidates;
+      const batch = all.slice(0, 10);
+      if (!batch.length) throw new Error('No encontré un modelo de Gemini que responda: tu clave no tiene modelos de Gemini disponibles.');
       const probe = async (model, retry = true) => {
         try {
           const res = await U.fetchWithTimeout(this.geminiUrl(model), {
@@ -2195,7 +2200,7 @@ Reglas:
       };
       // Al primer modelo que responde se le dan 2 s a los preferidos que aún
       // no contestan; los que se cuelgan no hacen esperar más.
-      const runBatch = (batch) => new Promise(resolve => {
+      const results = await new Promise(resolve => {
         const res = new Array(batch.length);
         let done = 0;
         let grace = null;
@@ -2204,13 +2209,6 @@ Reglas:
           if (finished) return;
           finished = true;
           clearTimeout(grace);
-          // Los que fallaron o siguen sin responder no se vuelven a probar por unas horas
-          const win = res.findIndex(r => r && r.ok);
-          batch.forEach((m, i) => {
-            if (i === win || (res[i] && res[i].ok)) return;
-            // Sin cupo por minuto: se vuelve a probar pronto; colgado o sin permiso: en horas
-            this.markBadGeminiModel(m, res[i] && res[i].status === 429 ? 10 * 60000 : undefined);
-          });
           resolve(res);
         };
         const check = () => {
@@ -2227,24 +2225,31 @@ Reglas:
           check();
         }));
       });
-      const results = [];
-      for (let i = 0; i < Math.min(all.length, 10); i += 5) {
-        const batch = all.slice(i, i + 5);
-        const res = await runBatch(batch);
-        const win = res.findIndex(r => r && r.ok);
-        if (win >= 0) return batch[win];
-        const invalid = res.find(r => r && this.isGeminiKeyInvalid(r.status, r.data));
-        if (invalid) {
-          const err = new Error(this.geminiErrorMessage(invalid.status || 401, invalid.data));
-          err.fatal = true;
-          throw err;
+      const win = results.findIndex(r => r && r.ok);
+      // Se apartan por un rato los que fallaron. Sin ningún ganador, un cuelgue
+      // puede ser la conexión del teléfono y no el modelo: ésos no se apartan.
+      batch.forEach((m, i) => {
+        const r = results[i];
+        if (i === win || (r && r.ok)) return;
+        if (!r || r.timeout || r.status >= 500) {
+          if (win >= 0) this.markBadGeminiModel(m, 30 * 60000);
+        } else {
+          this.markBadGeminiModel(m, r.status === 429 ? 10 * 60000 : undefined);
         }
-        results.push(...res.filter(Boolean));
+      });
+      if (win >= 0) return batch[win];
+      const got = results.filter(Boolean);
+      const invalid = got.find(r => this.isGeminiKeyInvalid(r.status, r.data));
+      if (invalid) {
+        const err = new Error(this.geminiErrorMessage(invalid.status || 401, invalid.data));
+        err.fatal = true;
+        throw err;
       }
-      const count = (fn) => results.filter(fn).length;
-      let why = 'ningún modelo respondió';
-      if (count(r => r.status === 429) >= results.length / 2) why = 'se agotó el cupo gratis por ahora; espera un minuto';
-      else if (count(r => r.status === 403) >= results.length / 2) why = 'tu clave no tiene permiso para usar los modelos de Gemini';
+      const count = (fn) => got.filter(fn).length;
+      let why = 'ningún modelo respondió; inténtalo en unos minutos';
+      if (got.length && count(r => r.timeout) === got.length) why = 'Google no contestó a tiempo. Revisa tu conexión a internet (datos o wifi) e inténtalo de nuevo';
+      else if (count(r => r.status === 429) >= got.length / 2) why = 'se agotó el cupo gratis por ahora; espera un minuto';
+      else if (count(r => r.status === 403) >= got.length / 2) why = 'tu clave no tiene permiso para usar los modelos de Gemini';
       else if (count(r => r.timeout || r.status >= 500)) why = 'los modelos están saturados o tardan demasiado; inténtalo en unos minutos';
       throw new Error(`No encontré un modelo de Gemini que responda: ${why}.`);
     }
@@ -2254,7 +2259,14 @@ Reglas:
       const models = await this.listGeminiModels(key);
       this.geminiModelList = models;
       if (force) S.remove('yarbis_gemini_bad');
-      this.geminiModel = await this.pickWorkingGeminiModel(models);
+      try {
+        this.geminiModel = await this.pickWorkingGeminiModel(models);
+      } catch (e) {
+        // Los modelos apartados por fallos anteriores pueden estar bien ahora: otra vez con todos
+        if (e.fatal || force || !this.badGeminiModels().size) throw e;
+        S.remove('yarbis_gemini_bad');
+        this.geminiModel = await this.pickWorkingGeminiModel(models);
+      }
       S.setRaw('yarbis_gemini_model', this.geminiModel);
       return this.geminiModel;
     }
@@ -2320,12 +2332,12 @@ Reglas:
       const tried = new Set();
       let persist = false;
       let lastErr = null;
-      const switchTo = async (keep, quota = false) => {
+      const switchTo = async (keep, quota = false, badFor = undefined) => {
         if (noAlternate) return false;
         const alt = await this.alternateGeminiModel(tried, quota);
         if (!alt) return false;
         if (keep) {
-          this.markBadGeminiModel(model);
+          this.markBadGeminiModel(model, badFor);
           persist = true;
         }
         model = alt;
@@ -2343,7 +2355,7 @@ Reglas:
           lastErr = new Error(e && e.name === 'AbortError' ? 'Gemini tardó demasiado en responder.' : `No se pudo conectar con Gemini (${e.message}).`);
           lastErr.status = 0;
           lastErr.timeout = true;
-          if (await switchTo(true)) continue;
+          if (await switchTo(true, false, 30 * 60000)) continue;
           throw lastErr;
         }
         if (res.ok) {
@@ -2366,7 +2378,8 @@ Reglas:
         }
         const retired = res.status === 404 || (res.status === 400 && /model/i.test(raw) && /not found|not supported|unsupported|deprecated/i.test(raw));
         if (retired || res.status === 403 || res.status >= 500) {
-          if (await switchTo(true)) continue;
+          // Saturado (5xx) suele pasar en minutos; sin permiso o retirado, no
+          if (await switchTo(true, false, res.status >= 500 ? 30 * 60000 : undefined)) continue;
         } else if (res.status === 429) {
           if (await switchTo(false, true)) continue;
         }
@@ -2479,6 +2492,8 @@ Reglas:
       const add = (ok, name, detail, info = false) => out.push({ ok, name, detail, info });
       if (this.geminiApiKey) {
         try {
+          // Vuelve a elegir, probando en paralelo, un modelo que responda ahora
+          await this.resolveGeminiModel(this.geminiApiKey, true);
           const { model } = await this.geminiFetch({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 256 } });
           add(true, 'Gemini', `responde (modelo ${model})`);
           try {
