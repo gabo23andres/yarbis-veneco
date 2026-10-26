@@ -1405,3 +1405,7 @@ html[data-platform="ios"][data-ipad] .install-hint::after { display: none; }
 }
 .money-empty b { font-size: 1.6rem; line-height: 1; }
 .money-empty strong { color: var(--text-2); font-weight: 600; }
+
+/* v15.7 · Botones fáciles de tocar (mínimo ~40 px de zona táctil) */
+.bento-link { min-height: 40px; padding: 0 10px; margin: -10px -10px -10px 0; border-radius: 10px; }
+.card-actions .btn-sm { min-width: 40px; min-height: 40px; }

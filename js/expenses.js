@@ -21,6 +21,7 @@
     { name: 'Salud', emoji: '💊', color: '#ef4444', words: ['salud', 'farmacia', 'medicina', 'medicinas', 'doctor', 'consulta', 'clinica', 'laboratorio', 'examenes', 'odontologo', 'dentista', 'seguro'] },
     { name: 'Ocio', emoji: '🎉', color: '#a855f7', words: ['ocio', 'cine', 'salida', 'fiesta', 'cerveza', 'cervezas', 'birras', 'netflix', 'spotify', 'juego', 'juegos', 'playa', 'paseo', 'rumba', 'concierto', 'regalo'] },
     { name: 'Hogar', emoji: '🏠', color: '#14b8a6', words: ['hogar', 'casa', 'limpieza', 'detergente', 'muebles', 'ferreteria', 'reparacion'] },
+    { name: 'Ropa', emoji: '👕', color: '#db2777', words: ['ropa', 'zapatos', 'zapato', 'zapatillas', 'gomas', 'tenis', 'calzado', 'camisa', 'camisas', 'franela', 'franelas', 'pantalon', 'pantalones', 'jean', 'jeans', 'blue jean', 'vestido', 'falda', 'short', 'medias', 'interiores', 'bolso', 'cartera', 'chaqueta', 'sueter', 'uniforme'] },
     { name: 'Educación', emoji: '📚', color: '#6366f1', words: ['educacion', 'colegio', 'universidad', 'curso', 'libros', 'utiles', 'mensualidad', 'inscripcion'] },
     { name: 'Otros', emoji: '🧾', color: '#64748b', words: [] }
   ];

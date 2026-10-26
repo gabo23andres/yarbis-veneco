@@ -146,6 +146,24 @@ y las notificaciones.
 Tus datos (notas, contactos, claves de IA, recuerdos) se guardan sólo en tu dispositivo.
 Las claves de IA nunca van en el código ni en las copias de seguridad.
 
+## Seguridad
+
+- **Política de contenido (CSP)** en `index.html`: sólo corre código de la propia app. Las
+  librerías de QR van en `js/vendor/` (copias verificadas por huella; ver su README), no en un CDN.
+  Si cambias el script del tema en `<head>`, actualiza su `sha256` en la CSP (la prueba
+  `tests/security.test.js` avisa).
+- **Texto de la IA y de internet**: se muestra escapado; los enlaces sólo pueden ser `https`,
+  `tel`, `sms`, `mailto` o WhatsApp.
+- **Claves de IA**: no salen en las copias de seguridad y **tampoco se aceptan al importar** una
+  copia (una copia ajena podría mandar tus conversaciones a otro servidor). La API "Otra" sólo
+  acepta direcciones `https://` (o `http://localhost`).
+- **Órdenes escondidas**: la IA no puede borrar ni cancelar nada (notas, listas, alarmas,
+  recuerdos) si tú no lo pediste con tus palabras, aunque se lo pida un texto de internet o algo
+  compartido desde otra app.
+- **Mismo dominio**: el navegador guarda los datos por dominio (`gabo23andres.github.io`), no por
+  carpeta. No publiques en GitHub Pages de esta misma cuenta páginas de terceros o sin revisar:
+  podrían leer los datos de YARBIS. Para más aislamiento, usa un dominio propio.
+
 ## Limitaciones conocidas
 
 - El reconocimiento de voz funciona en Chrome y Safari, no en Firefox.

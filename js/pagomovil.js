@@ -11,7 +11,7 @@
   const U = root.YarbisUtils;
   const S = U.storage;
   const KEY = 'yarbis_pagomovil';
-  const QR_LIB = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+  const QR_LIB = 'js/vendor/qrcode.js'; // qrcode-generator 1.4.4, copia local
 
   const BANKS = [
     ['0102', 'Banco de Venezuela'], ['0104', 'Venezolano de Crédito'], ['0105', 'Mercantil'],

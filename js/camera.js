@@ -10,7 +10,7 @@
   'use strict';
 
   const U = root.YarbisUtils;
-  const JSQR_URL = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+  const JSQR_URL = 'js/vendor/jsQR.js'; // jsQR 1.4.0, copia local (funciona sin internet)
 
   const MODES = {
     general: { label: 'Analizar con IA', hint: 'Apunta a un objeto, lugar o escena.' },
