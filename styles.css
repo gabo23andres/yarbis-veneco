@@ -1105,8 +1105,6 @@ dialog.sheet { background: color-mix(in srgb, var(--surface) 94%, transparent); 
 .exp-emoji { font-size: 1.2rem; }
 .exp-amount { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .budget-field { max-width: 240px; }
-#formExpense > input#expAmount { flex: 0 0 110px; }
-#formExpense > select { flex: 0 0 auto; width: auto; }
 
 /* Lista de precios */
 .pl-rows { display: flex; flex-direction: column; gap: 8px; }
@@ -1178,7 +1176,6 @@ dialog.sheet { background: color-mix(in srgb, var(--surface) 94%, transparent); 
   .orb-canvas { width: 140px; height: 140px; }
   .expense-grid { grid-template-columns: 1fr; }
   .pl-row { grid-template-columns: minmax(0, 1.2fr) 80px minmax(0, 1fr) auto; }
-  #formExpense > input#expNote { flex: 1 1 100%; }
 }
 @media (max-width: 420px) {
   .bento { padding: 14px; border-radius: 18px; }
@@ -1374,3 +1371,37 @@ html[data-platform="ios"][data-ipad] .install-hint::after { display: none; }
   .stock-spark { display: none; }
   .stock-recs-label { min-width: 0; width: 100%; }
 }
+
+/* ==========================================================================
+   v15.5 · FORMULARIOS DE GASTOS E INGRESOS
+   Una fila en pantallas anchas; en el teléfono: monto + moneda, tipo,
+   detalle y el botón a lo ancho. Depende del ancho de la tarjeta, no de la pantalla.
+   ========================================================================== */
+.card:has(> .money-form) { container-type: inline-size; }
+.money-form {
+  display: grid; gap: 8px; align-items: center;
+  grid-template-columns: minmax(96px, 140px) 76px minmax(130px, 200px) minmax(0, 1fr) auto;
+}
+.money-form > input, .money-form > select { width: 100%; min-width: 0; }
+.money-form > input[inputmode="decimal"] { font-weight: 600; font-variant-numeric: tabular-nums; }
+.money-form > .btn { white-space: nowrap; }
+@container (max-width: 620px) {
+  .money-form { grid-template-columns: minmax(0, 1fr) 84px; }
+  .money-form > select:nth-of-type(2), .money-form > input:not([inputmode]), .money-form > .btn { grid-column: 1 / -1; }
+  .money-form > .btn { justify-content: center; }
+}
+@supports not (container-type: inline-size) {
+  @media (max-width: 700px) {
+    .money-form { grid-template-columns: minmax(0, 1fr) 84px; }
+    .money-form > select:nth-of-type(2), .money-form > input:not([inputmode]), .money-form > .btn { grid-column: 1 / -1; }
+  }
+}
+/* Mes sin movimientos: un solo aviso a lo ancho */
+.expense-grid.is-empty { grid-template-columns: 1fr; }
+.expense-grid.is-empty > .list { display: none; }
+.money-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 12px; text-align: center;
+  border: 1px dashed var(--border); border-radius: var(--radius); color: var(--text-3);
+}
+.money-empty b { font-size: 1.6rem; line-height: 1; }
+.money-empty strong { color: var(--text-2); font-weight: 600; }
