@@ -382,6 +382,53 @@ test('elige probando: el más nuevo se cuelga, otro sin permiso, se queda con el
   }
 });
 
+test('elige probando: todos los Flash saturados, se queda con un Lite en una sola ronda', async () => {
+  const realFetch = win.fetch;
+  const prevTimeouts = brain.geminiTimeouts;
+  brain.geminiTimeouts = { request: 300, stream: 300, probe: 300, grace: 50 };
+  win.localStorage.removeItem('yarbis_gemini_bad');
+  const hang = (opts) => new Promise((_, reject) => opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+  let mode = 'flash-down';
+  const seen = [];
+  win.fetch = (url, opts = {}) => {
+    const model = String(url).match(/models\/([^:]+):/)[1];
+    seen.push(model);
+    if (mode === 'offline') return hang(opts);
+    if (/flash$|flash-latest$/.test(model)) {
+      return model.startsWith('gemini-3') ? hang(opts) : Promise.resolve(new Response(JSON.stringify({ error: { code: 503, message: 'high demand' } }), { status: 503 }));
+    }
+    return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'OK' }] } }] }), { status: 200 }));
+  };
+  try {
+    const t0 = Date.now();
+    assert.strictEqual(await brain.pickWorkingGeminiModel(REAL_MODELS, 'auto'), 'gemini-3.5-flash-lite');
+    assert.ok(Date.now() - t0 < 800, 'no espera una segunda ronda');
+    const bad = brain.badGeminiModels();
+    assert.ok(bad.has('gemini-3.8-flash') && bad.has('gemini-2.5-flash'));
+    const until = JSON.parse(win.localStorage.getItem('yarbis_gemini_bad'))['gemini-3.8-flash'];
+    assert.ok(until - Date.now() <= 30 * 60000, 'un modelo saturado se aparta sólo media hora');
+
+    // Sin conexión: todo se cuelga. Mensaje claro y nada queda apartado
+    mode = 'offline';
+    win.localStorage.removeItem('yarbis_gemini_bad');
+    await assert.rejects(brain.pickWorkingGeminiModel(REAL_MODELS, 'auto'), /conexión a internet/);
+    assert.strictEqual(brain.badGeminiModels().size, 0);
+
+    // Modelos apartados por fallos viejos: si casi no queda ninguno, se prueban todos
+    mode = 'flash-down';
+    const all = {};
+    brain.geminiCandidates(REAL_MODELS, 'auto').slice(0, -1).forEach(m => { all[m] = Date.now() + 3600000; });
+    win.localStorage.setItem('yarbis_gemini_bad', JSON.stringify(all));
+    seen.length = 0;
+    assert.strictEqual(await brain.pickWorkingGeminiModel(REAL_MODELS, 'auto'), 'gemini-3.5-flash-lite');
+    assert.ok(seen.includes('gemini-3.5-flash-lite'));
+  } finally {
+    win.fetch = realFetch;
+    brain.geminiTimeouts = prevTimeouts;
+    win.localStorage.removeItem('yarbis_gemini_bad');
+  }
+});
+
 test('geminiFetch: 403 o cuelgue pasan a otro modelo y lo guardan; clave inválida no reintenta', async () => {
   const realFetch = win.fetch;
   const prevTimeouts = brain.geminiTimeouts;
