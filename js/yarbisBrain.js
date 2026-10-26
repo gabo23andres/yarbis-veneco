@@ -416,7 +416,7 @@
         for (const part of parts) {
           let r = null;
           try { r = await this.localIntent(part); } catch (e) { console.warn(e); }
-          if (!r) r = await this.askAI(part);
+          if (!r) r = await this.askAI(part, { localFallback: () => this.localIntent(part, { noDefer: true }) });
           else {
             this.remember('user', part);
             this.remember('assistant', r.text);
@@ -441,7 +441,7 @@
       }
 
       if (!response) {
-        response = await this.askAI(original, opts);
+        response = await this.askAI(original, { ...opts, localFallback: () => this.localIntent(original, { noDefer: true }) });
       } else {
         // Los comandos locales también quedan en el historial para dar contexto a la IA
         this.remember('user', original);
@@ -450,7 +450,7 @@
       return response;
     }
 
-    async localIntent(original) {
+    async localIntent(original, opts = {}) {
       // Quitar "oye yarbis", "hey jarvis"...
       const wake = align(original).match(/^\s*(?:(?:oye|hey|ey|ok|hola)\s+)?(?:yarbis|jarvis|asistente)\b[\s,]*/);
       const text = wake ? original.slice(wake[0].length).trim() : original;
@@ -869,19 +869,24 @@
       const conversion = await this.conversionIntent(n);
       if (conversion) return conversion;
 
-      /* ---------- Bolsa de valores ---------- */
-      const stocks = await this.stocksIntent(n);
-      if (stocks) return stocks;
+      // Preguntas de opinión sobre dinero ("¿me conviene…?", "¿compro bitcoin?") van al
+      // cerebro con clave, que consulta los datos y razona; sin clave responde la plantilla.
+      const deferToBrain = !opts.noDefer && this.brainOrder().length > 0 && this.isAdviceQuestion(n);
+      if (!deferToBrain) {
+        /* ---------- Bolsa de valores ---------- */
+        const stocks = await this.stocksIntent(n);
+        if (stocks) return stocks;
 
-      /* ---------- Tasas del dólar / euro ---------- */
-      if (has(/\b(dolar|dolares|tasa|tasas|bcv|paralelo|monitor|brecha|cambio del dia|euro|euros|bolivar|bolivares)\b/) && !has(/^(abre|abrir)\b/)) {
-        return this.ratesIntent(n);
-      }
+        /* ---------- Tasas del dólar / euro ---------- */
+        if (has(/\b(dolar|dolares|tasa|tasas|bcv|paralelo|monitor|brecha|cambio del dia|euro|euros|bolivar|bolivares)\b/) && !has(/^(abre|abrir)\b/)) {
+          return this.ratesIntent(n);
+        }
 
-      /* ---------- Criptomonedas ---------- */
-      const cryptoMatch = n.match(/\b(bitcoin|btc|ethereum|eth|ether|solana|bnb|binance coin|xrp|ripple|cripto|criptos|criptomonedas?)\b/);
-      if (cryptoMatch) {
-        return this.cryptoIntent(cryptoMatch[1]);
+        /* ---------- Criptomonedas ---------- */
+        const cryptoMatch = n.match(/\b(bitcoin|btc|ethereum|eth|ether|solana|bnb|binance coin|xrp|ripple|cripto|criptos|criptomonedas?)\b/);
+        if (cryptoMatch) {
+          return this.cryptoIntent(cryptoMatch[1]);
+        }
       }
 
       /* ---------- Matemáticas ---------- */
@@ -1446,6 +1451,57 @@
     /* ------------------------------------------
        BOLSA DE VALORES (señales técnicas, no asesoría)
        ------------------------------------------ */
+    // "¿Me conviene comprar bitcoin?", "¿qué acciones me recomiendas?", "¿vale la pena ahorrar en dólares?"
+    isAdviceQuestion(n) {
+      const advice = /\b(recomiendas|recomiendes|recomendarias|recomienda|recomiendame|aconsejas|aconsejarias|conviene|convendria|deberia|debo|vale la pena|que opinas|que piensas|tu opinion|crees que|(es|seria) (una )?(buena|buen|mala|mal) (idea|momento|inversion|opcion)|es seguro|es riesgoso|por que (sube|baja|subio|bajo|cayo)|analiza|analisis|explicame|compro|vendo|invierto|invertir|inversion)\b/;
+      if (!advice.test(n)) return false;
+      const topic = /\b(bolsa|acciones?|mercado|cripto|criptos|criptomonedas?|bitcoin|btc|ethereum|eth|solana|xrp|bnb|usdt|dolar|dolares|euro|euros|bolivares|oro|petroleo|fondos?|etf|sp ?500|s p 500|ibc|invertir|inversion|invierto|ahorro|ahorrar|ahorros)\b/;
+      const B = root.YarbisStocks;
+      return topic.test(n) || !!(B && B.data && B.mentioned(n));
+    }
+
+    // Respuesta sobre un activo concreto: la señal y qué significa, sin listar otros
+    adviceAnswer(item) {
+      const B = root.YarbisStocks;
+      const s = B.signal(item.signal);
+      const crypto = item.group === 'crypto';
+      const pct = (v) => `${v >= 0 ? '+' : ''}${U.fmtNumber(v, 1)} %`;
+      const facts = [];
+      if (item.sma50 && item.price) {
+        facts.push(item.price >= item.sma50
+          ? `Está por **encima** de su promedio de 50 días (${B.fmtPrice({ ...item, price: item.sma50 })}): la tendencia es de subida.`
+          : `Está por **debajo** de su promedio de 50 días (${B.fmtPrice({ ...item, price: item.sma50 })}): la tendencia es de bajada.`);
+      }
+      if (typeof item.rsi === 'number') {
+        const rsi = U.fmtNumber(item.rsi, 0);
+        facts.push(item.rsi >= 70 ? `El RSI está en ${rsi}: subió muy rápido y puede corregir (bajar un poco).`
+          : item.rsi <= 30 ? `El RSI está en ${rsi}: cayó mucho y puede rebotar.`
+            : `El RSI está en ${rsi}: zona normal, ni caro ni barato por ahora.`);
+      }
+      const rets = [typeof item.ret1m === 'number' ? `${pct(item.ret1m)} en 1 mes` : '', typeof item.ret3m === 'number' ? `${pct(item.ret3m)} en 3 meses` : ''].filter(Boolean);
+      if (rets.length) facts.push(`Rendimiento: ${rets.join(' y ')}.`);
+      if (item.high52 && item.price >= item.high52 * 0.95) facts.push('Está cerca de su precio más alto del año.');
+      else if (item.low52 && item.price <= item.low52 * 1.05) facts.push('Está cerca de su precio más bajo del año.');
+      if (!facts.length) facts.push(...(item.reasons || []));
+      const verdict = {
+        comprar: 'Las señales técnicas están **a favor de comprar**.',
+        vender: 'Las señales técnicas dicen que **podría seguir bajando**: no es buen momento para comprar; si ya tienes, piensa si te conviene vender una parte.',
+        mantener: '**No hay una señal clara** ni de compra ni de venta: si te interesa, compra poco a poco en vez de todo de una vez.'
+      }[item.signal] || '';
+      const tips = [
+        'Compra por partes (un poco cada semana o cada mes) en vez de todo de golpe.',
+        'Usa sólo dinero que no vayas a necesitar pronto.',
+        crypto ? 'En cripto, que sea una parte pequeña de tus ahorros: puede subir o bajar 20 % en pocos días.' : 'No pongas todo en una sola inversión; los fondos como el S&P 500 reparten el riesgo.'
+      ];
+      const bal = this.balanceLine ? this.balanceLine() : '';
+      const icon = crypto ? '🪙' : item.group === 'commodities' ? '🥇' : '📈';
+      return {
+        text: `${icon} **¿${item.signal === 'vender' ? 'Comprar o vender' : 'Comprar'} ${item.name}?**\n\nHoy está en **${B.fmtPrice(item)}** ${B.fmtChange(item)} · ${s.emoji} Señal: **${s.label}**\n\n${verdict}\n\n**Por qué:**\n${facts.map(f => `- ${f}`).join('\n')}\n\n**Si decides invertir:**\n${tips.map(t => `- ${t}`).join('\n')}${bal ? `\n\n${bal}` : ''}\n\n_Señales técnicas automáticas; no son asesoría financiera._`,
+        speak: `${item.name} está en ${B.fmtPrice(item)}. ${verdict.replace(/\*\*/g, '')} Recuerda comprar por partes y sólo con dinero que no necesites.`,
+        actions: [{ label: 'Ver la bolsa', view: 'finance' }]
+      };
+    }
+
     async stocksIntent(n) {
       const B = root.YarbisStocks;
       if (!B) return null;
@@ -1467,6 +1523,11 @@
         try { await B.load(); } catch (e) { return null; }
         item = B.find(itemM[1]);
       }
+      const advice = this.isAdviceQuestion(n);
+      if (!item && advice) {
+        try { await B.load(); } catch (e) { return null; }
+        item = B.mentioned(n);
+      }
       if (!wantsRecs && !wantsMarket && !item) return null;
 
       try {
@@ -1477,6 +1538,7 @@
       const sig = (x) => B.signal(x.signal);
       const line = (x) => `- ${sig(x).emoji} **${x.name}** ${B.fmtPrice(x)} ${B.fmtChange(x)} · ${sig(x).label}`;
 
+      if (item && advice) return this.adviceAnswer(item);
       if (item) {
         const s = sig(item);
         return {
@@ -1912,6 +1974,18 @@ Reglas:
           lastError = lastError ? `${lastError} · ${who}: ${e.message}` : `${who}: ${e.message}`;
           console.warn(`${who} (cerebro) falló:`, e.message);
         }
+      }
+
+      // El cerebro falló en una pregunta que la app sabe responder con sus datos
+      if (opts.localFallback && this.brainOrder().length) {
+        try {
+          const local = await opts.localFallback();
+          if (local) {
+            this.remember('user', userText);
+            this.remember('assistant', local.text);
+            return local;
+          }
+        } catch (e) { console.warn('Respuesta local falló:', e.message); }
       }
 
       // Gemini sin herramientas: por si el fallo fue de las herramientas, no de Gemini

@@ -78,6 +78,30 @@
         (q.length >= 4 ? items.find(x => U.normalize(x.name).includes(q)) : null) || null;
     },
 
+    // Instrumento nombrado en cualquier parte de una frase ("¿me conviene comprar bitcoin ya?").
+    // Sólo nombres completos y símbolos de 3+ letras; "plata", "euro" y "dia" son palabras comunes.
+    mentioned(text, data = this.data) {
+      const t = ` ${U.normalize(text).replace(/[^a-z0-9&]+/g, ' ').trim()} `;
+      const COMMON = new Set(['plata', 'euro', 'dia', 'env', 'oro y divisas']);
+      const ALIAS = { btc: 'bitcoin', eth: 'ethereum', ether: 'ethereum', sol: 'solana', ripple: 'xrp', petroleo: 'petroleo wti', sp500: 's&p 500 (spy)', 's p 500': 's&p 500 (spy)', 'sp 500': 's&p 500 (spy)', nasdaq: 'nasdaq 100 (qqq)' };
+      const items = this.all(data);
+      for (const [alias, name] of Object.entries(ALIAS)) {
+        if (t.includes(` ${alias} `)) {
+          const x = items.find(i => U.normalize(i.name) === name);
+          if (x) return x;
+        }
+      }
+      let best = null;
+      for (const x of items) {
+        const names = [U.normalize(x.name).replace(/\s*\(.*?\)\s*/g, ' ').replace(/[^a-z0-9&]+/g, ' ').trim(), U.normalize(x.symbol.replace(/[-=.].*$/, ''))];
+        for (const k of names) {
+          if (!k || k.length < 3 || COMMON.has(k)) continue;
+          if (t.includes(` ${k} `) && (!best || k.length > best.k.length)) best = { x, k };
+        }
+      }
+      return best ? best.x : null;
+    },
+
     // Las mejores señales de compra y de venta (sin índices)
     recommendations(n = 3, data = this.data, group = null) {
       const items = this.all(data).filter(x => !x.isIndex && !x.stale && (!group || x.group === group));
