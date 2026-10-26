@@ -429,6 +429,42 @@ test('elige probando: todos los Flash saturados, se queda con un Lite en una sol
   }
 });
 
+test('elegir modelo: el error dice qué contestó cada modelo; ubicación y pensamiento', async () => {
+  const realFetch = win.fetch;
+  const prevTimeouts = brain.geminiTimeouts;
+  brain.geminiTimeouts = { request: 300, stream: 300, probe: 300, grace: 50 };
+  win.localStorage.removeItem('yarbis_gemini_bad');
+  let mode = 'location';
+  win.fetch = (url, opts = {}) => {
+    const model = String(url).match(/models\/([^:]+):/)[1];
+    const body = JSON.parse(opts.body);
+    if (mode === 'location') {
+      if (model.startsWith('gemini-3.8')) return Promise.resolve(new Response(JSON.stringify({ error: { code: 503, message: 'high demand' } }), { status: 503 }));
+      return Promise.resolve(new Response(JSON.stringify({ error: { code: 400, message: 'User location is not supported for the API use.', status: 'FAILED_PRECONDITION' } }), { status: 400 }));
+    }
+    // Todos rechazan el ajuste de pensamiento; sin él, responden
+    if (body.generationConfig.thinkingConfig) return Promise.resolve(new Response(JSON.stringify({ error: { code: 400, message: 'thinking_level is not supported' } }), { status: 400 }));
+    return Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'OK' }] } }] }), { status: 200 }));
+  };
+  try {
+    const err = await brain.pickWorkingGeminiModel(REAL_MODELS, 'auto').then(() => null, e => e);
+    assert.ok(err, 'debe fallar');
+    assert.match(err.message, /ubicación/);
+    assert.match(err.detail, /1 × HTTP 503: high demand \(3\.8-flash\)/);
+    assert.match(err.detail, /9 × HTTP 400: User location is not supported/);
+
+    mode = 'thinking';
+    brain.noThinkingConfig = false;
+    win.localStorage.removeItem('yarbis_gemini_bad');
+    assert.strictEqual(await brain.pickWorkingGeminiModel(REAL_MODELS, 'auto'), 'gemini-3.8-flash', 'el preferido reintenta aunque otro ya apagó el pensamiento');
+  } finally {
+    win.fetch = realFetch;
+    brain.geminiTimeouts = prevTimeouts;
+    brain.noThinkingConfig = false;
+    win.localStorage.removeItem('yarbis_gemini_bad');
+  }
+});
+
 test('geminiFetch: 403 o cuelgue pasan a otro modelo y lo guardan; clave inválida no reintenta', async () => {
   const realFetch = win.fetch;
   const prevTimeouts = brain.geminiTimeouts;
